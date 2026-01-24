@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.dll
+*.pdb
+*.log
+.vs/
+appsettings.Development.json
+appsettings.*.json
+!appsettings.json
+
+# Angular
+node_modules/
+dist/
+.angular/
+.sass-cache/
+*.map
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tmp
+*.temp
