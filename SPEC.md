@@ -2,16 +2,21 @@
 
 ## Project Overview
 
-A web-based dashboard for orchestrating and monitoring AI coding agents powered by the Claude Agent SDK. The system implements a Kanban-style pipeline where tasks flow through stages, each handled by specialized AI agents working in a controlled queue with budget management.
+A web-based dashboard for orchestrating and monitoring AI coding agents powered by Claude Code CLI. The system implements a Kanban-style pipeline where tasks flow through stages, with agents executed via stdin/stdout communication with the Claude Code process.
 
 ## Goals
 
-1. Visual Kanban board to manage coding tasks from inception to PR
-2. Orchestrate Claude Code instances with configurable concurrency and budget limits
-3. Real-time visibility into agent activity, logs, and progress
-4. Automatic delegation to specialized agents (UI, API, Review, Test, Simplifier)
-5. Human-in-the-loop controls for approvals and manual state transitions
-6. Repository-specific knowledge base that evolves with merged PRs
+### MVP Goals
+1. Visual Kanban board to manage coding tasks through pipeline stages
+2. Run one Claude Code agent at a time via stdin/stdout
+3. Real-time visibility into agent activity and logs
+4. Manual state transitions for task progression
+
+### Future Goals
+5. Budget tracking and cost management
+6. Concurrent agent execution with queue management
+7. Automatic delegation to specialized agents
+8. Repository-specific knowledge base (CLAUDE.md)
 
 ---
 
@@ -27,46 +32,36 @@ A web-based dashboard for orchestrating and monitoring AI coding agents powered 
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │                    Agent Activity Monitor                        │    │
-│  │  [ui-agent: implementing - 450 tokens] [idle] [idle]            │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │               Budget Widget                                      │    │
-│  │  Daily: 45k/100k tokens | Monthly: 1.2M/5M                      │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │               Notifications Panel                                │    │
-│  │  • Task #12 → REVIEWING | • Task #8 → PR_READY                  │    │
+│  │  [agent: implementing task #12]                                  │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
                                    │
                             EventSource/SSE
                                    │
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          NestJS Backend                                  │
+│                          .NET 10 Backend                                 │
 │                                                                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │   Tasks     │  │   Agents    │  │     SSE     │  │    Git      │    │
-│  │   Module    │  │   Module    │  │  Gateway    │  │   Module    │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
+│  │   Tasks     │  │   Agent     │  │     SSE     │                      │
+│  │   API       │  │   Runner    │  │  Endpoint   │                      │
+│  └─────────────┘  └─────────────┘  └─────────────┘                      │
 │         │                │                                               │
 │         └────────────────┼───────────────────────────────────────┐      │
 │                          ▼                                       │      │
 │  ┌───────────────────────────────────────────────────────────┐   │      │
-│  │                  Agent Pool Manager                        │   │      │
-│  │  - Single orchestrator for all planning (sequential)      │   │      │
-│  │  - Priority queue for task execution (no preemption)      │   │      │
-│  │  - Global budget enforcement with auto-extend + notify    │   │      │
-│  │  - Max 2-level subtask nesting                            │   │      │
-│  │  - One active implementation task at a time (MVP)         │   │      │
+│  │                  Agent Runner Service                      │   │      │
+│  │  - Spawns Claude Code CLI as child process                │   │      │
+│  │  - Communicates via stdin/stdout                          │   │      │
+│  │  - One agent at a time (MVP)                              │   │      │
+│  │  - Streams output to SSE clients                          │   │      │
 │  └───────────────────────────────────────────────────────────┘   │      │
 │                          │                                       │      │
+│                    stdin/stdout                                  │      │
 │                          ▼                                       │      │
 │  ┌───────────────────────────────────────────────────────────┐   │      │
-│  │              Claude Agent SDK Instances                    │   │      │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │   │      │
-│  │  │Orchestr.│ │UI Agent │ │API Agent│ │Simplif. │  ...    │   │      │
-│  │  │ (Opus)  │ │(Sonnet) │ │(Sonnet) │ │(Haiku)  │         │   │      │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │   │      │
+│  │                   Claude Code CLI                          │   │      │
+│  │  - Executes prompts with tool access                      │   │      │
+│  │  - Works in repository directory                          │   │      │
 │  └───────────────────────────────────────────────────────────┘   │      │
 │                                                                   │      │
 └───────────────────────────────────────────────────────────────────┼──────┘
@@ -87,635 +82,389 @@ A web-based dashboard for orchestrating and monitoring AI coding agents powered 
 |-----------|------------|---------|
 | Frontend | Angular | 21.x |
 | State Management | Angular Signals | Built-in |
-| UI Components | Angular CDK (drag-drop) | Latest |
+| UI Components | Angular CDK | Latest |
 | Styling | Tailwind CSS | 4.x |
-| Backend | NestJS | 11.x |
+| Backend | .NET | 10.x |
+| Backend Framework | ASP.NET Core Minimal APIs | 10.x |
 | Real-time | EventSource/SSE | Native |
 | Database | SQLite (dev) / PostgreSQL (prod) | - |
-| ORM | Prisma | 7.x |
-| Agent SDK | @anthropic-ai/claude-agent-sdk | Latest |
-| Git Operations | simple-git | Latest |
-| Monorepo | Nx | 22.x |
+| ORM | Entity Framework Core | 10.x |
+| Agent Execution | Claude Code CLI | Latest |
 
 ---
 
 ## Data Models
 
-### Task
+### Task (MVP)
 
-```typescript
-interface Task {
-  id: string;                    // UUID
-  title: string;                 // Short description
+```csharp
+public class Task
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public PipelineState State { get; set; } = PipelineState.Backlog;
+    public Priority Priority { get; set; } = Priority.Medium;
 
-  // Structured fields
-  description: string;           // Detailed requirements
-  acceptanceCriteria: string[];  // What defines done
-  edgeCases: string[];           // Scenarios to consider
-  technicalConstraints: string[];// Requirements (e.g., "Must use React Hooks")
-  relatedDocLinks: string[];     // URLs to relevant docs/specs
-  expectedOutcome: string;       // For UI tasks, describe visual result
+    // Agent tracking
+    public string? AssignedAgentId { get; set; }
 
-  state: PipelineState;          // Current pipeline stage
-  priority: Priority;            // Inherited by subtasks
+    // Error tracking
+    public bool HasError { get; set; }
+    public string? ErrorMessage { get; set; }
 
-  // Relationships
-  parentTaskId?: string;         // For subtasks created by orchestrator
-  childTaskIds: string[];        // Subtasks (max 2 levels deep)
-  blockedBy: string[];           // Task IDs that must complete first
-
-  // Agent tracking
-  assignedAgentId?: string;      // Currently assigned agent instance
-  agentType?: AgentType;         // Type of agent working on it
-
-  // Git integration (MVP: simple branches, one task at a time)
-  branch?: string;               // Feature branch name
-  prUrl?: string;                // Created PR URL
-
-  // Budget tracking
-  tokensUsed: number;            // Cumulative for this task
-
-  // Metadata
-  logs: TaskLog[];               // Agent output logs (30-day retention)
-  hasError: boolean;             // For red border indication
-  errorMessage?: string;         // Latest error for display
-  createdAt: Date;
-  updatedAt: Date;
-  completedAt?: Date;
+    // Timestamps
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
-enum PipelineState {
-  BACKLOG = 'backlog',           // Not started
-  PLANNING = 'planning',         // Orchestrator analyzing
-  IMPLEMENTING = 'implementing', // Code being written
-  REVIEWING = 'reviewing',       // Code review in progress (may block for revisions)
-  TESTING = 'testing',           // Tests being written/run
-  PR_READY = 'pr_ready',         // PR created, awaiting human review
-  DONE = 'done',                 // PR merged (auto-transitioned via webhook)
-  BLOCKED = 'blocked'            // Manual state for external dependencies
+public enum PipelineState
+{
+    Backlog,
+    Planning,
+    Implementing,
+    Reviewing,
+    Testing,
+    PrReady,
+    Done
 }
 
-enum Priority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical'
-}
-
-interface TaskLog {
-  id: string;
-  taskId: string;
-  agentId: string;
-  agentType: AgentType;
-  timestamp: Date;
-  type: LogType;                 // For filtering
-  content: string;
-  metadata?: Record<string, unknown>;
-
-  @@index([taskId])
-  @@retention(30 days)           // Auto-delete after 30 days
-}
-
-enum LogType {
-  INFO = 'info',
-  TOOL_USE = 'tool_use',
-  TOOL_RESULT = 'tool_result',
-  ERROR = 'error',
-  THINKING = 'thinking'          // Streamed in real-time
+public enum Priority
+{
+    Low,
+    Medium,
+    High,
+    Critical
 }
 ```
 
-### Agent
+### Task (Phase 2 - Extended)
 
-```typescript
-interface AgentInstance {
-  id: string;                    // UUID
-  type: AgentType;
-  status: AgentStatus;
+```csharp
+public class Task
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
 
-  // Current work
-  taskId?: string;
-  currentAction?: string;        // e.g., "Reading file X", "Running tests"
-  startedAt?: Date;
+    // Structured fields (Phase 2)
+    public string Description { get; set; } = string.Empty;
+    public List<string> AcceptanceCriteria { get; set; } = new();
+    public List<string> EdgeCases { get; set; } = new();
+    public List<string> TechnicalConstraints { get; set; } = new();
+    public List<string> RelatedDocLinks { get; set; } = new();
+    public string? ExpectedOutcome { get; set; }
 
-  // Stats (simple tracking)
-  totalTasksCompleted: number;
-  totalTokensUsed: number;
-  tokensThisTask: number;        // For real-time display
-}
+    public PipelineState State { get; set; } = PipelineState.Backlog;
+    public Priority Priority { get; set; } = Priority.Medium;
 
-enum AgentType {
-  ORCHESTRATOR = 'orchestrator',     // Single instance, Opus
-  UI_AGENT = 'ui-agent',             // Sonnet
-  API_AGENT = 'api-agent',           // Sonnet
-  SIMPLIFIER = 'simplifier',         // Haiku, formatting/linting
-  CODE_REVIEWER = 'code-reviewer',   // Sonnet
-  TEST_AGENT = 'test-agent',         // Sonnet
-  PR_AGENT = 'pr-agent',             // Haiku
-  COST_ESTIMATOR = 'cost-estimator'  // Haiku, estimates task complexity
-}
+    // Relationships (Phase 2)
+    public Guid? ParentTaskId { get; set; }
+    public List<Guid> ChildTaskIds { get; set; } = new();
+    public List<Guid> BlockedBy { get; set; } = new();
 
-enum AgentStatus {
-  IDLE = 'idle',
-  RUNNING = 'running',
-  PAUSED = 'paused',
-  ERROR = 'error'
-}
-```
+    // Agent tracking
+    public string? AssignedAgentId { get; set; }
+    public AgentType? AgentType { get; set; }
 
-### Configuration
+    // Git integration (Phase 2)
+    public string? Branch { get; set; }
+    public string? PrUrl { get; set; }
 
-```typescript
-interface DashboardConfig {
-  // Concurrency (requires restart to change)
-  maxConcurrentAgents: number;   // Default: 3
+    // Budget tracking (Phase 2)
+    public int TokensUsed { get; set; }
 
-  // Budget limits (global daily/monthly)
-  dailyTokenBudget: number;      // Default: 100k
-  monthlyTokenBudget: number;    // Default: 5M
-  currentDailyUsage: number;
-  currentMonthlyUsage: number;
-  budgetExceeded: boolean;       // Pauses new agent spawns
+    // Error tracking
+    public bool HasError { get; set; }
+    public string? ErrorMessage { get; set; }
 
-  // Repository settings (single repo for MVP)
-  repositoryPath: string;
-  defaultBranch: string;         // e.g., 'main'
-  branchPrefix: string;          // e.g., 'feature/agent-'
-
-  // Protected paths (read-only for agents)
-  protectedPaths: string[];      // Default: ['.git/', '.env', 'node_modules/']
-
-  // Automation settings
-  autoAdvance: boolean;          // Auto-move tasks to next stage
-  requireHumanApproval: PipelineState[]; // Stages requiring manual approval
-
-  // Pattern learning
-  patternsFile: string;          // Path to CLAUDE.md (per-repo)
+    // Timestamps
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
 }
 ```
 
-### Notification
+### TaskLog
 
-```typescript
-interface Notification {
-  id: string;
-  type: NotificationType;
-  taskId?: string;               // If task-related
-  message: string;
-  timestamp: Date;
-  read: boolean;
+```csharp
+public class TaskLog
+{
+    public Guid Id { get; set; }
+    public Guid TaskId { get; set; }
+    public string AgentId { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public LogType Type { get; set; }
+    public string Content { get; set; } = string.Empty;
 }
 
-enum NotificationType {
-  TASK_STATE_CHANGE = 'task_state_change',
-  PR_CREATED = 'pr_created',
-  PR_MERGED = 'pr_merged',
-  BUDGET_WARNING = 'budget_warning',   // 80% of limit
-  BUDGET_EXCEEDED = 'budget_exceeded'
+public enum LogType
+{
+    Info,
+    ToolUse,
+    ToolResult,
+    Error,
+    Thinking
+}
+```
+
+### Agent (Phase 2)
+
+```csharp
+public class AgentInstance
+{
+    public string Id { get; set; } = string.Empty;
+    public AgentType Type { get; set; }
+    public AgentStatus Status { get; set; }
+
+    // Current work
+    public Guid? TaskId { get; set; }
+    public string? CurrentAction { get; set; }
+    public DateTime? StartedAt { get; set; }
+
+    // Stats
+    public int TotalTasksCompleted { get; set; }
+    public int TotalTokensUsed { get; set; }
+    public int TokensThisTask { get; set; }
+}
+
+public enum AgentType
+{
+    Orchestrator,
+    UiAgent,
+    ApiAgent,
+    Simplifier,
+    CodeReviewer,
+    TestAgent,
+    PrAgent,
+    CostEstimator
+}
+
+public enum AgentStatus
+{
+    Idle,
+    Running,
+    Paused,
+    Error
+}
+```
+
+### Configuration (Phase 2)
+
+```csharp
+public class DashboardConfig
+{
+    // Concurrency
+    public int MaxConcurrentAgents { get; set; } = 3;
+
+    // Budget limits
+    public int DailyTokenBudget { get; set; } = 100000;
+    public int MonthlyTokenBudget { get; set; } = 5000000;
+    public int CurrentDailyUsage { get; set; }
+    public int CurrentMonthlyUsage { get; set; }
+    public bool BudgetExceeded { get; set; }
+
+    // Repository settings
+    public string RepositoryPath { get; set; } = string.Empty;
+    public string DefaultBranch { get; set; } = "main";
+    public string BranchPrefix { get; set; } = "feature/agent-";
+
+    // Protected paths
+    public List<string> ProtectedPaths { get; set; } = new() { ".git/", ".env", "node_modules/" };
+
+    // Automation settings
+    public bool AutoAdvance { get; set; } = true;
+    public List<PipelineState> RequireHumanApproval { get; set; } = new();
+
+    // Pattern learning
+    public string PatternsFile { get; set; } = "CLAUDE.md";
+}
+```
+
+### Notification (Phase 2)
+
+```csharp
+public class Notification
+{
+    public Guid Id { get; set; }
+    public NotificationType Type { get; set; }
+    public Guid? TaskId { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    public bool Read { get; set; }
+}
+
+public enum NotificationType
+{
+    TaskStateChange,
+    PrCreated,
+    PrMerged,
+    BudgetWarning,
+    BudgetExceeded
 }
 ```
 
 ---
 
-## Agent Definitions
+## Agent Execution
 
-### Orchestrator Agent
+### Claude Code CLI Integration
 
-**Purpose**: Analyzes incoming tasks, creates work plan with subtasks, handles dynamic replanning on failures.
+The backend spawns Claude Code as a child process and communicates via stdin/stdout. This approach:
+- Leverages Claude Code's existing tool implementations
+- Provides consistent behavior with CLI usage
+- Simplifies the backend to process orchestration
 
-**Key Behaviors**:
-- Single instance for all planning (sequential planning ensures consistency)
-- Uses Opus for highest quality planning
-- Creates explicit dependency graph (max 2 levels deep)
-- Only queues tasks that can be completed end-to-end
-- Can dynamically replan if subtasks fail
-- Quality-first approach (doesn't optimize for budget)
+### MVP: Single Agent Model
 
-```typescript
-const orchestratorAgent: AgentDefinition = {
-  description: 'Senior software architect that analyzes requirements and creates optimal execution plans.',
-  prompt: `You are a senior software architect and task orchestrator.
+For MVP, only one agent runs at a time. The agent receives a prompt based on the task and executes it via Claude Code CLI.
 
-When given a task:
-1. Analyze the structured fields:
-   - Description and acceptance criteria
-   - Edge cases to handle
-   - Technical constraints to respect
-   - Related documentation to reference
-   - Expected outcomes (especially for UI work)
-
-2. Check repository patterns (CLAUDE.md) for:
-   - Established coding conventions
-   - Common architectural patterns
-   - Known gotchas and solutions
-
-3. Identify work type and dependencies:
-   - UI/Frontend work (Angular components, styling, routing)
-   - API/Backend work (endpoints, services, database)
-   - Mixed UI + API work
-   - Infrastructure/DevOps
-   - Identify hard dependencies (A must complete before B)
-
-4. Create optimal execution plan:
-   - Break into concrete subtasks (max 2 levels deep)
-   - Assign appropriate agent types
-   - Define explicit dependency graph
-   - Ensure tasks are completable end-to-end (no external blockers)
-
-5. Output structured plan as JSON:
+```csharp
+public class AgentRunnerService
 {
-  "analysis": "Brief analysis of the task and approach",
-  "strategy": "Overall implementation strategy",
-  "subtasks": [
+    private Process? _activeProcess;
+    private readonly string _claudeCodePath;
+    private readonly string _repositoryPath;
+    private readonly ILogger<AgentRunnerService> _logger;
+
+    public AgentRunnerService(
+        IConfiguration configuration,
+        ILogger<AgentRunnerService> logger)
     {
-      "title": "Clear, actionable subtask title",
-      "description": "Detailed description with context",
-      "acceptanceCriteria": ["Criterion 1", "Criterion 2"],
-      "agentType": "ui-agent|api-agent",
-      "dependencies": ["subtask-id-1", "subtask-id-2"],
-      "estimatedComplexity": "low|medium|high"
+        _claudeCodePath = configuration["ClaudeCode:Path"] ?? "claude";
+        _repositoryPath = configuration["Repository:Path"] ?? ".";
+        _logger = logger;
     }
-  ],
-  "criticalPath": ["subtask-id-1", "subtask-id-3"],
-  "notes": "Important considerations or risks"
+
+    public async Task<AgentResult> RunAgentAsync(
+        AgentTask task,
+        Action<string> onOutput,
+        CancellationToken cancellationToken)
+    {
+        if (_activeProcess != null)
+            throw new InvalidOperationException("Another agent is already running");
+
+        var prompt = BuildPromptForTask(task);
+
+        _activeProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = _claudeCodePath,
+                Arguments = "--print --output-format stream-json",
+                WorkingDirectory = _repositoryPath,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+
+        _activeProcess.Start();
+
+        // Send prompt via stdin
+        await _activeProcess.StandardInput.WriteLineAsync(prompt);
+        _activeProcess.StandardInput.Close();
+
+        // Stream output
+        while (!_activeProcess.StandardOutput.EndOfStream)
+        {
+            var line = await _activeProcess.StandardOutput.ReadLineAsync(cancellationToken);
+            if (line != null)
+            {
+                onOutput(line);
+            }
+        }
+
+        await _activeProcess.WaitForExitAsync(cancellationToken);
+
+        var result = new AgentResult
+        {
+            ExitCode = _activeProcess.ExitCode,
+            Success = _activeProcess.ExitCode == 0
+        };
+
+        _activeProcess = null;
+        return result;
+    }
+
+    public void AbortAgent()
+    {
+        _activeProcess?.Kill();
+        _activeProcess = null;
+    }
+
+    private string BuildPromptForTask(AgentTask task)
+    {
+        return $"""
+            You are working on the following task:
+
+            Title: {task.Title}
+            Description: {task.Description}
+
+            Please implement this task. When done, commit your changes with a clear message.
+            """;
+    }
 }
 
-REPLANNING MODE (triggered on subtask failure):
-- When a subtask fails, you'll receive:
-  - Original plan
-  - Failed subtask details
-  - Error information
-  - Current state
-- Analyze the failure and create updated plan
-- May add new subtasks, modify existing, or change approach
-- Maintain consistency with completed work
-
-CONSTRAINTS:
-- Maximum 2 levels of subtask nesting
-- Each subtask must be independently completable
-- No external dependencies (if needed, mark parent task as BLOCKED)
-- Prefer smaller, focused subtasks over large monolithic ones
-- One implementation task active at a time (MVP limitation)
-
-Remember: Quality planning prevents execution issues. Be thorough.`,
-  tools: ['Read', 'Glob', 'Grep'],
-  model: 'opus'
-};
-```
-
-### UI Agent (Angular Specialist)
-
-```typescript
-const uiAgent: AgentDefinition = {
-  description: 'Angular 21 frontend specialist. Use for UI components, styling, routing, and frontend logic.',
-  prompt: `You are an expert Angular 21 developer.
-
-CONTEXT SOURCES:
-1. Task structured fields (description, criteria, constraints, expected outcome)
-2. Repository patterns from CLAUDE.md
-3. Related documentation links provided in task
-
-Technology requirements:
-- Angular 21 with standalone components (NO NgModules)
-- Signals for state management (signal(), computed(), effect())
-- Modern control flow (@if, @for, @switch - NOT *ngIf/*ngFor)
-- Tailwind CSS for styling
-- Angular CDK for complex UI patterns
-- Strict TypeScript with proper typing
-
-Code standards:
-- One component per file
-- Use inject() function, not constructor injection
-- Prefer OnPush change detection
-- Write self-documenting code with minimal comments
-- Follow Angular style guide naming conventions
-- Respect technical constraints from task
-
-When implementing:
-1. Review CLAUDE.md for repo-specific patterns
-2. Explore existing code structure with Glob/Grep
-3. Check related documentation links
-4. Identify related components and services
-5. Implement following existing patterns
-6. Ensure proper error handling
-7. Match expected outcome if provided
-8. Add basic unit test structure
-
-FILE ACCESS:
-- Read/write access to most files
-- PROTECTED (read-only): .git/, .env, node_modules/
-- If you need to modify protected paths, explain why and request approval
-
-COMPLETION:
-- Commit changes with clear message
-- Report completion with summary of changes`,
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-  model: 'sonnet'
-};
-```
-
-### API Agent (Backend Specialist)
-
-```typescript
-const apiAgent: AgentDefinition = {
-  description: 'NestJS backend specialist. Use for API endpoints, services, database operations.',
-  prompt: `You are an expert NestJS backend developer.
-
-CONTEXT SOURCES:
-1. Task structured fields (description, criteria, constraints)
-2. Repository patterns from CLAUDE.md
-3. Related documentation links provided in task
-
-Technology requirements:
-- NestJS 10 with TypeScript
-- Prisma ORM for database operations
-- Class-validator for DTO validation
-- Proper dependency injection
-- RESTful API design principles
-
-Code standards:
-- Controllers handle HTTP, Services handle business logic
-- Use DTOs for all request/response shapes
-- Proper error handling with NestJS exceptions
-- Follow NestJS module organization
-- Write integration-ready code
-- Respect technical constraints from task
-
-When implementing:
-1. Review CLAUDE.md for repo-specific patterns
-2. Explore existing module structure
-3. Check related documentation links
-4. Review existing services and patterns
-5. Implement following established conventions
-6. Add proper validation and error handling
-7. Consider database migrations if schema changes needed
-
-FILE ACCESS:
-- Read/write access to most files
-- PROTECTED (read-only): .git/, .env, node_modules/
-- If you need to modify protected paths, explain why and request approval
-
-COMPLETION:
-- Commit changes with clear message
-- Report completion with summary of changes`,
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-  model: 'sonnet'
-};
-```
-
-### Simplifier Agent
-
-**Purpose**: Runs formatting and linting before code review to reduce noise.
-
-```typescript
-const simplifierAgent: AgentDefinition = {
-  description: 'Code formatting and linting specialist. Runs before review to clean up style issues.',
-  prompt: `You are a code quality automation specialist.
-
-Your job is to run automated formatting and linting tools to ensure code follows style standards before human review.
-
-Tasks:
-1. Identify the project type (Angular, NestJS, etc.)
-2. Run appropriate formatters:
-   - Prettier for TypeScript/JavaScript
-   - ESLint with --fix for auto-fixable issues
-   - Any other repo-specific formatters (check package.json scripts)
-3. Amend changes to the last commit (implementation commit)
-   - Use: git commit --amend --no-edit
-4. Report what was fixed
-
-DO NOT:
-- Make logic changes
-- Refactor code structure
-- Fix non-auto-fixable lint errors (report these instead)
-- Modify protected paths (.git/, .env, node_modules/)
-
-Commands to run:
-- npm run format (or equivalent)
-- npm run lint:fix (or equivalent)
-- git add .
-- git commit --amend --no-edit
-
-OUTPUT:
-Report summary of what was formatted/fixed.`,
-  tools: ['Bash', 'Read'],
-  model: 'haiku'
-};
-```
-
-### Code Review Agent
-
-```typescript
-const codeReviewerAgent: AgentDefinition = {
-  description: 'Code review specialist. Reviews code quality and creates revision subtasks if issues found.',
-  prompt: `You are a senior code reviewer.
-
-Review code for:
-1. **Correctness**: Does it solve the stated problem? Meet acceptance criteria?
-2. **Security**: SQL injection, XSS, auth issues, secrets exposure
-3. **Performance**: N+1 queries, unnecessary re-renders, memory leaks
-4. **Maintainability**: Clear naming, proper abstractions, DRY
-5. **Type Safety**: Proper TypeScript usage, no 'any' types
-6. **Error Handling**: Edge cases covered, proper error messages
-7. **Testing**: Are critical paths testable?
-8. **Edge Cases**: Are specified edge cases handled?
-9. **Technical Constraints**: Are task constraints respected?
-
-Output format:
+public class AgentTask
 {
-  "summary": "Overall assessment of the changes",
-  "issues": [
-    {
-      "severity": "critical|major|minor",
-      "file": "path/to/file.ts",
-      "line": 42,
-      "category": "security|performance|correctness|style",
-      "description": "Clear description of the issue",
-      "suggestion": "Specific fix recommendation"
-    }
-  ],
-  "approved": true|false,
-  "revisionSubtasks": [
-    {
-      "title": "Fix SQL injection in user search",
-      "description": "Use parameterized queries instead of string concatenation",
-      "severity": "critical",
-      "files": ["src/users/users.service.ts"]
-    }
-  ]
+    public Guid Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 }
 
-REVISION WORKFLOW:
-- If critical or major issues found: approved = false, create revision subtasks
-- Revision subtasks should be specific, actionable, and focused
-- Parent task will BLOCK in REVIEWING state until revisions complete
-- Revision subtasks inherit parent priority
-- Revision subtasks are assigned to original implementation agent type
-
-Be constructive. Focus on significant issues, not style nitpicks (simplifier handles those).`,
-  tools: ['Read', 'Grep', 'Glob'],
-  model: 'sonnet'
-};
-```
-
-### Test Agent
-
-```typescript
-const testAgent: AgentDefinition = {
-  description: 'Test writing and execution specialist.',
-  prompt: `You are a test automation specialist.
-
-Testing stack:
-- Frontend: Jest + Angular Testing Library
-- Backend: Jest + Supertest for e2e
-- Use describe/it/expect patterns
-
-Testing priorities:
-1. Acceptance criteria coverage
-2. Edge cases from task definition
-3. Critical business logic
-4. Error paths
-5. Integration points
-6. Happy path scenarios
-
-Guidelines:
-- Write focused, single-assertion tests when possible
-- Use descriptive test names that explain the scenario
-- Mock external dependencies appropriately
-- Aim for meaningful coverage, not 100% coverage
-- Test edge cases specified in task
-
-Execution:
-1. Run clean build (npm ci or equivalent)
-2. Write tests in same worktree
-3. Run test suite
-4. If tests fail:
-   - Analyze failures
-   - DO NOT fix tests yourself
-   - Create revision subtasks for test failures
-   - Revision subtasks go back to implementation agent type
-5. Report test results
-
-REVISION SUBTASKS FORMAT:
+public class AgentResult
 {
-  "title": "Fix failing test: User authentication",
-  "description": "Test expects 200 status but getting 401. Implementation may not be handling token correctly.",
-  "testFailures": ["describe > it block name"],
-  "files": ["path/to/failing/file.ts"]
-}`,
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
-  model: 'sonnet'
-};
-```
-
-### PR Agent
-
-```typescript
-const prAgent: AgentDefinition = {
-  description: 'Pull request creation specialist. Creates well-documented PRs.',
-  prompt: `You are a PR creation specialist.
-
-Create pull requests with:
-1. Clear, descriptive title following conventional commits
-2. Comprehensive description including:
-   - What changes were made and why
-   - How to test the changes
-   - Link to related task
-   - Screenshots for UI changes (if expected outcome provided)
-   - Breaking changes if any
-
-Use git commands to:
-1. Ensure all changes are committed
-2. Push the feature branch
-3. Create PR using gh CLI or provide manual instructions
-
-PR title format: type(scope): description
-Types: feat, fix, refactor, test, docs, chore
-
-PR description template:
-## Summary
-[Brief overview]
-
-## Changes
-- Change 1
-- Change 2
-
-## Testing
-- [ ] How to verify the changes
-
-## Related
-- Task: #[task-id]
-- Closes: #[issue] (if applicable)
-
-Auto-create immediately when task reaches PR_READY state.`,
-  tools: ['Bash', 'Read', 'Glob'],
-  model: 'haiku'
-};
-```
-
-### Cost Estimator Agent
-
-```typescript
-const costEstimatorAgent: AgentDefinition = {
-  description: 'Estimates token usage for tasks before execution.',
-  prompt: `You are a cost estimation specialist.
-
-Given a task, estimate how many tokens will be required to complete it.
-
-Consider:
-1. Task complexity (description length, acceptance criteria count)
-2. Agent types needed (orchestrator + implementation + review + test)
-3. Code exploration needed (large codebase vs small change)
-4. Similar historical tasks (if available)
-
-Output format:
-{
-  "estimatedTokens": 15000,
-  "breakdown": {
-    "orchestrator": 3000,
-    "implementation": 8000,
-    "simplifier": 500,
-    "review": 2000,
-    "testing": 1500
-  },
-  "confidence": "low|medium|high",
-  "reasoning": "Brief explanation of estimate"
+    public int ExitCode { get; set; }
+    public bool Success { get; set; }
 }
-
-Be conservative (slightly over-estimate). Better to be safe than exceed budget.`,
-  tools: ['Read', 'Grep'],
-  model: 'haiku'
-};
 ```
+
+### Future: Specialized Agents (Phase 2)
+
+In future phases, the system will support specialized agent prompts:
+- **Orchestrator**: Plans and breaks down complex tasks (Opus model)
+- **UI Agent**: Angular/frontend specialist (Sonnet model)
+- **API Agent**: Backend specialist (Sonnet model)
+- **Reviewer**: Code review specialist (Sonnet model)
+- **Simplifier**: Formatting and linting (Haiku model)
 
 ---
 
 ## API Specification
 
-### REST Endpoints
+### REST Endpoints (MVP)
 
 #### Tasks
 
 ```
 GET    /api/tasks                 # List all tasks
-GET    /api/tasks/:id             # Get task details
-POST   /api/tasks                 # Create new task (runs cost estimate first)
-PATCH  /api/tasks/:id             # Update task
-DELETE /api/tasks/:id             # Delete task (only if no active agent)
-POST   /api/tasks/:id/transition  # Transition to new state (via buttons in detail view)
-GET    /api/tasks/:id/logs        # Get task logs (with filters)
-POST   /api/tasks/:id/abort       # Abort assigned agent
+GET    /api/tasks/{id}            # Get task details
+POST   /api/tasks                 # Create new task
+PATCH  /api/tasks/{id}            # Update task
+DELETE /api/tasks/{id}            # Delete task (only if no active agent)
+POST   /api/tasks/{id}/transition # Transition to new state
+GET    /api/tasks/{id}/logs       # Get task logs
+POST   /api/tasks/{id}/abort      # Abort assigned agent
 ```
+
+#### Agent
+
+```
+GET    /api/agent/status          # Get current agent status
+```
+
+### REST Endpoints (Phase 2)
 
 #### Agents
 
 ```
 GET    /api/agents                # List agent instances and status
-GET    /api/agents/:id            # Get agent details
+GET    /api/agents/{id}           # Get agent details
 POST   /api/agents/pause-all      # Pause entire pipeline
 POST   /api/agents/resume-all     # Resume entire pipeline
-POST   /api/tasks/:id/pause       # Pause specific task and subtasks
-POST   /api/tasks/:id/resume      # Resume specific task
+POST   /api/tasks/{id}/pause      # Pause specific task and subtasks
+POST   /api/tasks/{id}/resume     # Resume specific task
 ```
 
 #### Configuration
@@ -735,7 +484,7 @@ POST   /api/patterns/update       # Manual trigger to update CLAUDE.md from rece
 
 ```
 GET    /api/notifications         # Get recent notifications
-PATCH  /api/notifications/:id/read # Mark as read
+PATCH  /api/notifications/{id}/read # Mark as read
 ```
 
 ### Server-Sent Events (SSE)
@@ -746,42 +495,51 @@ PATCH  /api/notifications/:id/read # Mark as read
 GET    /api/events                # EventSource connection
 ```
 
-#### Event Types
+#### Event Types (MVP)
 
-```typescript
-interface ServerEvents {
-  // Full task state (sent every time)
-  'task:updated': Task;
-  'task:created': Task;
-  'task:deleted': { taskId: string };
+```csharp
+public interface IServerEvents
+{
+    // Task updates
+    void TaskUpdated(Task task);
+    void TaskCreated(Task task);
+    void TaskDeleted(Guid taskId);
 
-  // Log streaming (hybrid: stream thinking, batch tool results)
-  'task:log': TaskLog;
+    // Log streaming
+    void TaskLog(TaskLog log);
 
-  // Agent updates
-  'agent:statusChanged': AgentInstance;
-  'agent:assigned': { agentId: string; taskId: string };
-  'agent:completed': { agentId: string; taskId: string; result: unknown };
-  'agent:error': { agentId: string; taskId: string; error: string };
+    // Agent updates
+    void AgentStatusChanged(string agentId, string status, string? currentAction);
+}
+```
 
-  // Pool status
-  'pool:status': {
-    active: number;
-    queued: TaskQueueItem[];
-    paused: boolean;
-  };
+#### Event Types (Phase 2)
 
-  // Budget updates
-  'budget:updated': {
-    dailyUsage: number;
-    dailyLimit: number;
-    monthlyUsage: number;
-    monthlyLimit: number;
-    exceeded: boolean;
-  };
+```csharp
+public interface IServerEventsPhase2
+{
+    // Task updates
+    void TaskUpdated(Task task);
+    void TaskCreated(Task task);
+    void TaskDeleted(Guid taskId);
 
-  // Notifications
-  'notification:new': Notification;
+    // Log streaming
+    void TaskLog(TaskLog log);
+
+    // Agent updates
+    void AgentStatusChanged(AgentInstance agent);
+    void AgentAssigned(string agentId, Guid taskId);
+    void AgentCompleted(string agentId, Guid taskId, object result);
+    void AgentError(string agentId, Guid taskId, string error);
+
+    // Pool status
+    void PoolStatus(PoolStatusDto status);
+
+    // Budget updates
+    void BudgetUpdated(BudgetStatusDto status);
+
+    // Notifications
+    void NotificationNew(Notification notification);
 }
 ```
 
@@ -789,33 +547,34 @@ interface ServerEvents {
 
 ## Frontend Components
 
-### Page Structure
+### Page Structure (MVP)
+
+```
+/                           → Dashboard (Kanban board)
+/tasks/{id}                 → Task detail view with logs and transition buttons
+```
+
+### Page Structure (Phase 2)
 
 ```
 /                           → Dashboard (Kanban board + budget widget + notifications)
-/tasks/:id                  → Task detail view with logs and transition buttons
+/tasks/{id}                 → Task detail view with logs and transition buttons
 /settings                   → Configuration page (changes require restart)
 ```
 
-### Core Components
+### Core Components (MVP)
 
 #### TaskBoardComponent
 
-Main Kanban board. Fixed 7-state pipeline. No drag-and-drop, no filtering.
+Main Kanban board. Fixed 7-state pipeline. No drag-and-drop.
 
 ```typescript
 @Component({
   selector: 'app-task-board',
   standalone: true,
-  imports: [TaskColumnComponent, BudgetWidgetComponent, NotificationsPanelComponent],
+  imports: [TaskColumnComponent],
   template: `
     <div class="dashboard-layout">
-      <!-- Budget Widget -->
-      <app-budget-widget />
-
-      <!-- Notifications Panel -->
-      <app-notifications-panel />
-
       <!-- Kanban Board -->
       <div class="flex gap-4 p-4 h-full overflow-x-auto">
         @for (column of columns; track column.state) {
@@ -835,13 +594,13 @@ export class TaskBoardComponent {
   private router = inject(Router);
 
   columns = [
-    { state: PipelineState.BACKLOG, title: 'Backlog' },
-    { state: PipelineState.PLANNING, title: 'Planning' },
-    { state: PipelineState.IMPLEMENTING, title: 'Implementing' },
-    { state: PipelineState.REVIEWING, title: 'Reviewing' },
-    { state: PipelineState.TESTING, title: 'Testing' },
-    { state: PipelineState.PR_READY, title: 'PR Ready' },
-    { state: PipelineState.DONE, title: 'Done' }
+    { state: 'backlog', title: 'Backlog' },
+    { state: 'planning', title: 'Planning' },
+    { state: 'implementing', title: 'Implementing' },
+    { state: 'reviewing', title: 'Reviewing' },
+    { state: 'testing', title: 'Testing' },
+    { state: 'prReady', title: 'PR Ready' },
+    { state: 'done', title: 'Done' }
   ];
 
   tasksByState = this.taskStore.tasksByState;
@@ -849,6 +608,40 @@ export class TaskBoardComponent {
   navigateToDetail(taskId: string) {
     this.router.navigate(['/tasks', taskId]);
   }
+}
+```
+
+#### TaskColumnComponent
+
+Column of task cards for a given state.
+
+```typescript
+@Component({
+  selector: 'app-task-column',
+  standalone: true,
+  imports: [TaskCardComponent],
+  template: `
+    <div class="w-72 flex-shrink-0 bg-gray-100 rounded-lg p-2">
+      <h3 class="font-semibold text-gray-700 mb-2 px-2">
+        {{ title() }}
+        <span class="text-gray-400 text-sm">({{ tasks().length }})</span>
+      </h3>
+      <div class="space-y-2">
+        @for (task of tasks(); track task.id) {
+          <app-task-card
+            [task]="task"
+            (click)="taskClicked.emit(task.id)"
+          />
+        }
+      </div>
+    </div>
+  `
+})
+export class TaskColumnComponent {
+  state = input.required<string>();
+  title = input.required<string>();
+  tasks = input.required<Task[]>();
+  taskClicked = output<string>();
 }
 ```
 
@@ -863,14 +656,12 @@ Individual task card with error indication.
   template: `
     <div class="bg-white rounded-lg shadow p-3 cursor-pointer hover:shadow-md transition-shadow"
          [class.border-l-4]="task().assignedAgentId"
-         [class.border-blue-500]="task().agentType === 'ui-agent'"
-         [class.border-green-500]="task().agentType === 'api-agent'"
+         [class.border-blue-500]="task().assignedAgentId && !task().hasError"
          [class.border-red-500]="task().hasError"
          [class.bg-red-50]="task().hasError">
 
       @if (task().hasError) {
         <div class="flex items-center gap-1 text-red-600 text-xs mb-2">
-          <svg class="w-4 h-4"><!-- error icon --></svg>
           <span>Error</span>
         </div>
       }
@@ -881,20 +672,15 @@ Individual task card with error indication.
       @if (task().assignedAgentId) {
         <div class="mt-2 flex items-center gap-1 text-xs">
           <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          <span>{{ task().agentType }}</span>
+          <span>Agent running</span>
         </div>
       }
 
-      <div class="mt-2 flex justify-between items-center">
+      <div class="mt-2">
         <span class="text-xs px-2 py-0.5 rounded-full"
               [class]="priorityClass()">
           {{ task().priority }}
         </span>
-        @if (task().childTaskIds.length) {
-          <span class="text-xs text-gray-400">
-            {{ completedSubtasks() }}/{{ task().childTaskIds.length }}
-          </span>
-        }
       </div>
     </div>
   `
@@ -903,7 +689,7 @@ export class TaskCardComponent {
   task = input.required<Task>();
 
   priorityClass = computed(() => {
-    const classes = {
+    const classes: Record<string, string> = {
       critical: 'bg-red-100 text-red-800',
       high: 'bg-orange-100 text-orange-800',
       medium: 'bg-yellow-100 text-yellow-800',
@@ -913,6 +699,124 @@ export class TaskCardComponent {
   });
 }
 ```
+
+#### TaskDetailComponent
+
+Full task view with logs and transition buttons.
+
+```typescript
+@Component({
+  selector: 'app-task-detail',
+  standalone: true,
+  imports: [AgentOutputComponent],
+  template: `
+    <div class="h-full flex flex-col">
+      <!-- Header -->
+      <header class="p-4 border-b">
+        <h1 class="text-xl font-bold">{{ task()?.title }}</h1>
+        <div class="flex gap-2 mt-2">
+          <span class="badge">{{ task()?.state }}</span>
+          <span class="badge">{{ task()?.priority }}</span>
+          @if (task()?.hasError) {
+            <span class="badge bg-red-100 text-red-800">Error</span>
+          }
+        </div>
+      </header>
+
+      <!-- Content -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Details panel -->
+        <div class="w-1/2 p-4 overflow-y-auto border-r">
+          <h2 class="font-semibold mb-2">Description</h2>
+          <p class="text-gray-600">{{ task()?.description }}</p>
+
+          @if (task()?.errorMessage) {
+            <h2 class="font-semibold mt-4 mb-2 text-red-600">Error</h2>
+            <p class="text-red-600">{{ task()?.errorMessage }}</p>
+          }
+        </div>
+
+        <!-- Logs panel -->
+        <app-agent-output
+          [taskId]="taskId()"
+          class="w-1/2"
+        />
+      </div>
+
+      <!-- Actions -->
+      <footer class="p-4 border-t flex gap-2">
+        @if (canAdvance()) {
+          <button (click)="advanceState()" class="btn-primary">
+            {{ nextStateLabel() }}
+          </button>
+        }
+        @if (canRevert()) {
+          <button (click)="revertState()" class="btn-secondary">
+            {{ previousStateLabel() }}
+          </button>
+        }
+        @if (task()?.assignedAgentId) {
+          <button (click)="abortAgent()" class="btn-danger">
+            Abort Agent
+          </button>
+        }
+      </footer>
+    </div>
+  `
+})
+export class TaskDetailComponent {
+  taskId = input.required<string>();
+  // ... implementation
+}
+```
+
+#### AgentOutputComponent
+
+Simple streaming log viewer (no virtual scrolling, no filters for MVP).
+
+```typescript
+@Component({
+  selector: 'app-agent-output',
+  standalone: true,
+  template: `
+    <div class="flex flex-col h-full bg-gray-900 text-white p-4">
+      <h2 class="font-semibold text-gray-300 mb-2">Agent Output</h2>
+
+      <div class="flex-1 overflow-y-auto font-mono text-xs space-y-1">
+        @for (log of logs(); track log.id) {
+          <div [class]="logClass(log.type)">
+            <span class="text-gray-500">{{ log.timestamp | date:'HH:mm:ss' }}</span>
+            <span class="ml-2">{{ log.content }}</span>
+          </div>
+        }
+
+        @if (logs().length === 0) {
+          <div class="text-gray-500">No logs yet</div>
+        }
+      </div>
+    </div>
+  `
+})
+export class AgentOutputComponent {
+  taskId = input.required<string>();
+
+  private logStore = inject(LogStore);
+  logs = computed(() => this.logStore.getLogsForTask(this.taskId()));
+
+  logClass(type: string): string {
+    const classes: Record<string, string> = {
+      info: 'text-gray-300',
+      tool_use: 'text-blue-400',
+      tool_result: 'text-green-400',
+      error: 'text-red-400',
+      thinking: 'text-yellow-400'
+    };
+    return classes[type] ?? 'text-gray-300';
+  }
+}
+```
+
+### Phase 2 Components
 
 #### BudgetWidgetComponent
 
@@ -978,7 +882,7 @@ export class BudgetWidgetComponent {
 
 #### NotificationsPanelComponent
 
-Shows recent notifications filtered by type.
+Shows recent notifications.
 
 ```typescript
 @Component({
@@ -1018,176 +922,7 @@ export class NotificationsPanelComponent {
 }
 ```
 
-#### AgentMonitorComponent
-
-Shows agent pool status with basic status + current action + token usage.
-
-```typescript
-@Component({
-  selector: 'app-agent-monitor',
-  standalone: true,
-  template: `
-    <div class="bg-gray-900 text-white p-4 rounded-lg">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-semibold">Agent Pool</h3>
-        <span class="text-sm">
-          {{ activeCount() }}/{{ maxAgents() }} active
-        </span>
-      </div>
-
-      @if (paused()) {
-        <div class="bg-yellow-900 text-yellow-200 p-2 rounded mb-3 text-sm">
-          Pipeline paused
-        </div>
-      }
-
-      <div class="space-y-2">
-        @for (agent of agents(); track agent.id) {
-          <div class="flex items-center gap-3 p-2 bg-gray-800 rounded">
-            <span class="w-2 h-2 rounded-full"
-                  [class.bg-green-500]="agent.status === 'running'"
-                  [class.bg-gray-500]="agent.status === 'idle'"
-                  [class.bg-red-500]="agent.status === 'error'">
-            </span>
-            <div class="flex-1">
-              <div class="text-sm">{{ agent.type }}</div>
-              @if (agent.currentAction) {
-                <div class="text-xs text-gray-400">{{ agent.currentAction }}</div>
-              }
-            </div>
-            @if (agent.tokensThisTask > 0) {
-              <span class="text-xs text-gray-400">
-                {{ agent.tokensThisTask }} tokens
-              </span>
-            }
-          </div>
-        }
-      </div>
-
-      @if (queuedCount() > 0) {
-        <div class="mt-3 text-sm text-yellow-400">
-          {{ queuedCount() }} tasks queued (priority order)
-        </div>
-      }
-    </div>
-  `
-})
-export class AgentMonitorComponent {
-  private agentStore = inject(AgentStore);
-
-  agents = this.agentStore.agents;
-  activeCount = this.agentStore.activeCount;
-  maxAgents = this.agentStore.maxAgents;
-  queuedCount = this.agentStore.queuedCount;
-  paused = this.agentStore.paused;
-}
-```
-
-#### TaskDetailComponent
-
-Full task view with logs, dependency indicators, and transition buttons.
-
-```typescript
-@Component({
-  selector: 'app-task-detail',
-  standalone: true,
-  template: `
-    <div class="h-full flex flex-col">
-      <!-- Header -->
-      <header class="p-4 border-b">
-        <h1 class="text-xl font-bold">{{ task()?.title }}</h1>
-        <div class="flex gap-2 mt-2">
-          <span class="badge">{{ task()?.state }}</span>
-          <span class="badge">{{ task()?.priority }}</span>
-          @if (task()?.hasError) {
-            <span class="badge bg-red-100 text-red-800">Error</span>
-          }
-        </div>
-      </header>
-
-      <!-- Content -->
-      <div class="flex-1 flex overflow-hidden">
-        <!-- Details panel -->
-        <div class="w-1/2 p-4 overflow-y-auto border-r">
-          <h2 class="font-semibold mb-2">Description</h2>
-          <p class="text-gray-600">{{ task()?.description }}</p>
-
-          @if (task()?.acceptanceCriteria?.length) {
-            <h2 class="font-semibold mt-4 mb-2">Acceptance Criteria</h2>
-            <ul class="list-disc list-inside space-y-1">
-              @for (criterion of task()?.acceptanceCriteria; track criterion) {
-                <li class="text-sm">{{ criterion }}</li>
-              }
-            </ul>
-          }
-
-          @if (task()?.edgeCases?.length) {
-            <h2 class="font-semibold mt-4 mb-2">Edge Cases</h2>
-            <ul class="list-disc list-inside space-y-1">
-              @for (edgeCase of task()?.edgeCases; track edgeCase) {
-                <li class="text-sm">{{ edgeCase }}</li>
-              }
-            </ul>
-          }
-
-          @if (task()?.childTaskIds?.length) {
-            <h2 class="font-semibold mt-4 mb-2">Subtasks</h2>
-            <ul class="space-y-1">
-              @for (subtaskId of task()?.childTaskIds; track subtaskId) {
-                <li class="flex items-center gap-2 text-sm">
-                  <input type="checkbox" [checked]="isSubtaskDone(subtaskId)" disabled>
-                  <span>{{ getSubtaskTitle(subtaskId) }}</span>
-                  @if (getSubtaskBlockers(subtaskId).length > 0) {
-                    <span class="text-xs text-gray-400">
-                      (Blocked by: {{ getSubtaskBlockers(subtaskId).join(', ') }})
-                    </span>
-                  }
-                </li>
-              }
-            </ul>
-          }
-        </div>
-
-        <!-- Logs panel with virtual scrolling -->
-        <app-task-logs
-          [taskId]="taskId()"
-          class="w-1/2"
-        />
-      </div>
-
-      <!-- Actions (buttons in detail view only) -->
-      <footer class="p-4 border-t flex gap-2">
-        @if (canAdvance()) {
-          <button (click)="advanceState()" class="btn-primary">
-            {{ nextStateLabel() }}
-          </button>
-        }
-        @if (canRevert()) {
-          <button (click)="revertState()" class="btn-secondary">
-            {{ previousStateLabel() }}
-          </button>
-        }
-        @if (task()?.assignedAgentId) {
-          <button (click)="abortAgent()" class="btn-danger">
-            Abort Agent
-          </button>
-        }
-        @if (canPauseTask()) {
-          <button (click)="pauseTask()" class="btn-secondary">
-            Pause Task & Subtasks
-          </button>
-        }
-      </footer>
-    </div>
-  `
-})
-export class TaskDetailComponent {
-  taskId = input.required<string>();
-  // ... implementation
-}
-```
-
-#### TaskLogsComponent
+#### TaskLogsComponent (Phase 2)
 
 Virtual scrolling log viewer with search and filters.
 
@@ -1212,23 +947,14 @@ Virtual scrolling log viewer with search and filters.
 
         <!-- Filters -->
         <div class="flex gap-2 flex-wrap">
-          <button
-            *ngFor="let type of logTypes"
-            (click)="toggleLogTypeFilter(type)"
-            [class.bg-blue-600]="logTypeFilters().includes(type)"
-            class="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700">
-            {{ type }}
-          </button>
-        </div>
-
-        <div class="flex gap-2 flex-wrap">
-          <button
-            *ngFor="let agentType of agentTypes()"
-            (click)="toggleAgentTypeFilter(agentType)"
-            [class.bg-green-600]="agentTypeFilters().includes(agentType)"
-            class="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700">
-            {{ agentType }}
-          </button>
+          @for (type of logTypes; track type) {
+            <button
+              (click)="toggleLogTypeFilter(type)"
+              [class.bg-blue-600]="logTypeFilters().includes(type)"
+              class="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700">
+              {{ type }}
+            </button>
+          }
         </div>
       </div>
 
@@ -1240,7 +966,6 @@ Virtual scrolling log viewer with search and filters.
              class="mb-1"
              [class]="logClass(log.type)">
           <span class="text-gray-500">{{ log.timestamp | date:'HH:mm:ss' }}</span>
-          <span class="ml-2 text-gray-400">[{{ log.agentType }}]</span>
           <span class="ml-2" [innerHTML]="highlightSearch(log.content)"></span>
         </div>
       </cdk-virtual-scroll-viewport>
@@ -1251,29 +976,19 @@ export class TaskLogsComponent {
   taskId = input.required<string>();
 
   searchQuery = '';
-  logTypeFilters = signal<LogType[]>([]);
-  agentTypeFilters = signal<AgentType[]>([]);
+  logTypeFilters = signal<string[]>([]);
 
   logs = computed(() => this.logStore.getLogsForTask(this.taskId()));
 
   filteredLogs = computed(() => {
     let filtered = this.logs();
 
-    // Filter by log type
     if (this.logTypeFilters().length > 0) {
       filtered = filtered.filter(log =>
         this.logTypeFilters().includes(log.type)
       );
     }
 
-    // Filter by agent type
-    if (this.agentTypeFilters().length > 0) {
-      filtered = filtered.filter(log =>
-        this.agentTypeFilters().includes(log.agentType)
-      );
-    }
-
-    // Search filter
     if (this.searchQuery) {
       const query = this.searchQuery.toLowerCase();
       filtered = filtered.filter(log =>
@@ -1296,987 +1011,768 @@ export class TaskLogsComponent {
 
 ## Backend Services
 
-### AgentPoolService
+### TaskService (MVP)
 
-Manages concurrent agent execution with budget enforcement, priority queue, and error retry.
+Manages task CRUD operations.
 
-```typescript
-@Injectable()
-export class AgentPoolService {
-  private readonly maxConcurrent = this.configService.get('maxConcurrentAgents');
-  private activeAgents = new Map<string, AgentInstance>();
-  private taskQueue: PriorityQueue<QueuedTask> = new PriorityQueue();
-  private paused = false;
-  private singleOrchestratorLock = false;  // Only one orchestrator at a time
+```csharp
+public class TaskService
+{
+    private readonly AppDbContext _context;
+    private readonly ISseService _sseService;
+    private readonly ILogger<TaskService> _logger;
 
-  constructor(
-    private configService: ConfigService,
-    private prisma: PrismaService,
-    private sseGateway: EventsGateway,
-    private agentRunner: AgentRunnerService,
-    private budgetService: BudgetService,
-    private errorClassifier: ErrorClassifierService
-  ) {}
-
-  async spawnAgent(taskId: string, agentType: AgentType): Promise<string | null> {
-    // Check budget
-    if (this.budgetService.isExceeded()) {
-      this.taskQueue.enqueue({ taskId, agentType, priority: task.priority });
-      this.sseGateway.emitPoolStatus(this.getPoolStatus());
-      return null;
+    public TaskService(
+        AppDbContext context,
+        ISseService sseService,
+        ILogger<TaskService> logger)
+    {
+        _context = context;
+        _sseService = sseService;
+        _logger = logger;
     }
 
-    // Single orchestrator check
-    if (agentType === AgentType.ORCHESTRATOR && this.singleOrchestratorLock) {
-      this.taskQueue.enqueue({ taskId, agentType, priority: task.priority });
-      return null;
+    public async Task<List<AgentTask>> GetAllAsync()
+    {
+        return await _context.Tasks.OrderBy(t => t.CreatedAt).ToListAsync();
     }
 
-    // Concurrency limit check
-    if (this.activeAgents.size >= this.maxConcurrent) {
-      this.taskQueue.enqueue({ taskId, agentType, priority: task.priority });
-      this.sseGateway.emitPoolStatus(this.getPoolStatus());
-      return null;
+    public async Task<AgentTask?> GetByIdAsync(Guid id)
+    {
+        return await _context.Tasks.FindAsync(id);
     }
 
-    const agentId = randomUUID();
-    const agent: AgentInstance = {
-      id: agentId,
-      type: agentType,
-      status: AgentStatus.RUNNING,
-      taskId,
-      startedAt: new Date(),
-      currentAction: 'Initializing...',
-      totalTasksCompleted: 0,
-      totalTokensUsed: 0,
-      tokensThisTask: 0
-    };
+    public async Task<AgentTask> CreateAsync(CreateTaskDto dto)
+    {
+        var task = new AgentTask
+        {
+            Id = Guid.NewGuid(),
+            Title = dto.Title,
+            Description = dto.Description,
+            Priority = dto.Priority,
+            State = PipelineState.Backlog,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
-    if (agentType === AgentType.ORCHESTRATOR) {
-      this.singleOrchestratorLock = true;
+        _context.Tasks.Add(task);
+        await _context.SaveChangesAsync();
+
+        await _sseService.EmitTaskCreatedAsync(task);
+        return task;
     }
 
-    this.activeAgents.set(agentId, agent);
-    this.sseGateway.emitAgentStatusChanged(agent);
+    public async Task<AgentTask> UpdateAsync(Guid id, UpdateTaskDto dto)
+    {
+        var task = await _context.Tasks.FindAsync(id)
+            ?? throw new NotFoundException($"Task {id} not found");
 
-    // Run agent in background
-    this.runAgent(agent).catch(err => {
-      this.handleAgentError(agent, err);
-    });
+        if (dto.Title != null) task.Title = dto.Title;
+        if (dto.Description != null) task.Description = dto.Description;
+        if (dto.Priority.HasValue) task.Priority = dto.Priority.Value;
 
-    return agentId;
-  }
+        task.UpdatedAt = DateTime.UtcNow;
 
-  private async runAgent(agent: AgentInstance): Promise<void> {
-    const task = await this.prisma.task.findUnique({
-      where: { id: agent.taskId }
-    });
+        await _context.SaveChangesAsync();
+        await _sseService.EmitTaskUpdatedAsync(task);
 
-    const agentDef = this.getAgentDefinition(agent.type);
-    const abortController = new AbortController();
-    agent.abortController = abortController;
-
-    try {
-      for await (const message of query({
-        prompt: this.buildPrompt(task, agent.type),
-        options: {
-          agents: { [agent.type]: agentDef },
-          allowedTools: agentDef.tools,
-          workingDirectory: this.configService.get('repositoryPath'),
-          permissionMode: 'promptOnDemand',  // Prompt for tools not in allowed list
-          signal: abortController.signal
-        }
-      })) {
-        // Check budget mid-execution
-        if (this.budgetService.wouldExceed(message.usage?.tokens || 0)) {
-          // Auto-extend with notification
-          await this.budgetService.extendBudget(message.usage.tokens);
-          this.sseGateway.emitNotification({
-            type: NotificationType.BUDGET_WARNING,
-            message: `Budget extended for task ${task.title}`,
-            taskId: task.id
-          });
-        }
-
-        // Update token tracking
-        if (message.usage?.tokens) {
-          agent.tokensThisTask += message.usage.tokens;
-          await this.budgetService.recordUsage(message.usage.tokens);
-          this.sseGateway.emitAgentStatusChanged(agent);
-          this.sseGateway.emitBudgetUpdate(this.budgetService.getStatus());
-        }
-
-        // Stream to frontend (hybrid: stream thinking, batch tool results)
-        await this.processMessage(agent, task, message);
-      }
-
-      await this.completeAgent(agent.id, 'success');
-
-    } catch (error) {
-      await this.handleAgentError(agent, error);
-    }
-  }
-
-  private async processMessage(
-    agent: AgentInstance,
-    task: Task,
-    message: SDKMessage
-  ): Promise<void> {
-    // Update current action
-    agent.currentAction = this.extractAction(message);
-    this.sseGateway.emitAgentStatusChanged(agent);
-
-    // Create log entry
-    const logType = this.getLogType(message);
-    const shouldStream = logType === LogType.THINKING;  // Hybrid: stream thinking
-
-    const log = await this.prisma.taskLog.create({
-      data: {
-        taskId: task.id,
-        agentId: agent.id,
-        agentType: agent.type,
-        type: logType,
-        content: this.formatMessage(message),
-        metadata: message
-      }
-    });
-
-    // Emit to subscribed clients
-    if (shouldStream) {
-      this.sseGateway.emitTaskLog(task.id, log);  // Real-time
-    } else {
-      // Batch tool results (send when complete)
-      this.sseGateway.emitTaskLog(task.id, log);
-    }
-  }
-
-  private async handleAgentError(agent: AgentInstance, error: Error): Promise<void> {
-    const errorType = this.errorClassifier.classify(error);
-
-    // Update task with error
-    await this.prisma.task.update({
-      where: { id: agent.taskId },
-      data: {
-        hasError: true,
-        errorMessage: error.message
-      }
-    });
-
-    // Determine retry strategy based on error type
-    const shouldRetry = await this.shouldRetryError(errorType, agent.taskId);
-
-    if (shouldRetry) {
-      // Re-queue task
-      const task = await this.prisma.task.findUnique({ where: { id: agent.taskId } });
-      this.taskQueue.enqueue({
-        taskId: agent.taskId,
-        agentType: agent.type,
-        priority: task.priority,
-        retryCount: (task.retryCount || 0) + 1
-      });
-    } else {
-      // Mark task for human intervention
-      await this.prisma.task.update({
-        where: { id: agent.taskId },
-        data: { state: PipelineState.BLOCKED }
-      });
-
-      this.sseGateway.emitNotification({
-        type: NotificationType.AGENT_ERROR,
-        message: `Agent failed on task: ${error.message}`,
-        taskId: agent.taskId
-      });
+        return task;
     }
 
-    await this.completeAgent(agent.id, 'error');
-  }
+    public async Task DeleteAsync(Guid id)
+    {
+        var task = await _context.Tasks.FindAsync(id)
+            ?? throw new NotFoundException($"Task {id} not found");
 
-  private async shouldRetryError(errorType: ErrorType, taskId: string): Promise<boolean> {
-    // Configurable per error type
-    const retryConfig = {
-      [ErrorType.NETWORK]: { maxRetries: 3, shouldRetry: true },
-      [ErrorType.TIMEOUT]: { maxRetries: 2, shouldRetry: true },
-      [ErrorType.RATE_LIMIT]: { maxRetries: 5, shouldRetry: true },
-      [ErrorType.LOGIC_ERROR]: { maxRetries: 0, shouldRetry: false },
-      [ErrorType.TOOL_ERROR]: { maxRetries: 1, shouldRetry: true },
-      [ErrorType.UNKNOWN]: { maxRetries: 1, shouldRetry: true }
-    };
+        if (task.AssignedAgentId != null)
+            throw new InvalidOperationException("Cannot delete task with active agent");
 
-    const config = retryConfig[errorType];
-    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
-    const retryCount = task.retryCount || 0;
+        _context.Tasks.Remove(task);
+        await _context.SaveChangesAsync();
 
-    return config.shouldRetry && retryCount < config.maxRetries;
-  }
-
-  private async completeAgent(agentId: string, status: 'success' | 'error'): Promise<void> {
-    const agent = this.activeAgents.get(agentId);
-    if (!agent) return;
-
-    // Update stats
-    if (status === 'success') {
-      agent.totalTasksCompleted++;
+        await _sseService.EmitTaskDeletedAsync(id);
     }
 
-    // Release orchestrator lock
-    if (agent.type === AgentType.ORCHESTRATOR) {
-      this.singleOrchestratorLock = false;
+    public async Task<AgentTask> TransitionAsync(Guid id, PipelineState newState)
+    {
+        var task = await _context.Tasks.FindAsync(id)
+            ?? throw new NotFoundException($"Task {id} not found");
+
+        if (!IsValidTransition(task.State, newState))
+            throw new InvalidOperationException($"Cannot transition from {task.State} to {newState}");
+
+        task.State = newState;
+        task.HasError = false;
+        task.ErrorMessage = null;
+        task.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        await _sseService.EmitTaskUpdatedAsync(task);
+
+        return task;
     }
 
-    this.activeAgents.delete(agentId);
+    private bool IsValidTransition(PipelineState from, PipelineState to)
+    {
+        // Allow moving forward or backward by one state
+        var states = Enum.GetValues<PipelineState>();
+        var fromIndex = Array.IndexOf(states, from);
+        var toIndex = Array.IndexOf(states, to);
 
-    // Process queue (priority order, no preemption)
-    if (!this.paused && this.taskQueue.length > 0) {
-      const next = this.taskQueue.dequeue();  // Gets highest priority
-      await this.spawnAgent(next.taskId, next.agentType);
+        return Math.Abs(toIndex - fromIndex) <= 1;
     }
-
-    this.sseGateway.emitAgentCompleted(agentId, agent.taskId);
-    this.sseGateway.emitPoolStatus(this.getPoolStatus());
-  }
-
-  async pauseAll(): Promise<void> {
-    this.paused = true;
-    // Let running agents finish current message
-    this.sseGateway.emitPoolStatus(this.getPoolStatus());
-  }
-
-  async resumeAll(): Promise<void> {
-    this.paused = false;
-    // Process queue
-    while (this.taskQueue.length > 0 && this.activeAgents.size < this.maxConcurrent) {
-      const next = this.taskQueue.dequeue();
-      await this.spawnAgent(next.taskId, next.agentType);
-    }
-  }
-
-  async pauseTask(taskId: string): Promise<void> {
-    // Pause task and all its subtasks
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { childTasks: true }
-    });
-
-    // Abort agent if running
-    const agent = Array.from(this.activeAgents.values())
-      .find(a => a.taskId === taskId);
-    if (agent?.abortController) {
-      agent.abortController.abort();
-    }
-
-    // Abort subtask agents
-    for (const subtask of task.childTasks) {
-      const subtaskAgent = Array.from(this.activeAgents.values())
-        .find(a => a.taskId === subtask.id);
-      if (subtaskAgent?.abortController) {
-        subtaskAgent.abortController.abort();
-      }
-    }
-  }
-
-  async abortAgent(agentId: string): Promise<void> {
-    const agent = this.activeAgents.get(agentId);
-    if (agent?.abortController) {
-      agent.abortController.abort();
-    }
-    await this.completeAgent(agentId, 'error');
-  }
-
-  getPoolStatus(): PoolStatus {
-    return {
-      active: this.activeAgents.size,
-      queued: this.taskQueue.items.map(item => ({
-        taskId: item.taskId,
-        agentType: item.agentType,
-        priority: item.priority
-      })),
-      max: this.maxConcurrent,
-      paused: this.paused,
-      agents: Array.from(this.activeAgents.values())
-    };
-  }
 }
 ```
 
-### TaskOrchestrationService
+### SseService (MVP)
 
-Handles pipeline state transitions, agent coordination, and subtask management.
+Manages Server-Sent Events connections and broadcasts.
 
-```typescript
-@Injectable()
-export class TaskOrchestrationService {
-  constructor(
-    private prisma: PrismaService,
-    private agentPool: AgentPoolService,
-    private sseGateway: EventsGateway,
-    private gitService: GitService,
-    private costEstimator: CostEstimatorService,
-    private notificationService: NotificationService
-  ) {}
+```csharp
+public interface ISseService
+{
+    Task EmitTaskCreatedAsync(AgentTask task);
+    Task EmitTaskUpdatedAsync(AgentTask task);
+    Task EmitTaskDeletedAsync(Guid taskId);
+    Task EmitTaskLogAsync(TaskLog log);
+    Task EmitAgentStatusAsync(string agentId, string status, string? currentAction);
+    IAsyncEnumerable<string> GetEventsAsync(CancellationToken cancellationToken);
+}
 
-  async createTask(dto: CreateTaskDto): Promise<Task> {
-    // Run cost estimate first
-    const estimate = await this.costEstimator.estimate(dto);
+public class SseService : ISseService
+{
+    private readonly Channel<string> _eventChannel;
+    private readonly ILogger<SseService> _logger;
 
-    const task = await this.prisma.task.create({
-      data: {
-        title: dto.title,
-        description: dto.description,
-        acceptanceCriteria: dto.acceptanceCriteria,
-        edgeCases: dto.edgeCases,
-        technicalConstraints: dto.technicalConstraints,
-        relatedDocLinks: dto.relatedDocLinks,
-        expectedOutcome: dto.expectedOutcome,
-        state: PipelineState.BACKLOG,
-        priority: dto.priority,
-        estimatedTokens: estimate.estimatedTokens,
-        tokensUsed: 0
-      }
-    });
-
-    this.sseGateway.emitTaskCreated(task);
-    return task;
-  }
-
-  async transitionTask(taskId: string, newState: PipelineState): Promise<Task> {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { childTasks: true }
-    });
-
-    // Validate transition
-    if (!this.isValidTransition(task.state, newState)) {
-      throw new BadRequestException(`Cannot transition from ${task.state} to ${newState}`);
-    }
-
-    // For IMPLEMENTING state, check if another task is already implementing (MVP)
-    if (newState === PipelineState.IMPLEMENTING) {
-      const activeImplementation = await this.prisma.task.findFirst({
-        where: {
-          state: PipelineState.IMPLEMENTING,
-          assignedAgentId: { not: null }
-        }
-      });
-
-      if (activeImplementation) {
-        throw new BadRequestException('Another task is already in implementation. Please wait.');
-      }
-    }
-
-    // Update task
-    const updated = await this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        state: newState,
-        updatedAt: new Date(),
-        hasError: false,  // Clear error on manual transition
-        errorMessage: null
-      }
-    });
-
-    this.sseGateway.emitTaskUpdated(updated);
-
-    // Send notification
-    await this.notificationService.create({
-      type: NotificationType.TASK_STATE_CHANGE,
-      message: `${updated.title} → ${newState}`,
-      taskId: updated.id
-    });
-
-    // Trigger agent for new state
-    await this.triggerAgentForState(updated);
-
-    return updated;
-  }
-
-  private async triggerAgentForState(task: Task): Promise<void> {
-    const agentMapping: Record<PipelineState, AgentType | null> = {
-      [PipelineState.BACKLOG]: null,
-      [PipelineState.PLANNING]: AgentType.ORCHESTRATOR,
-      [PipelineState.IMPLEMENTING]: null,  // Orchestrator creates subtasks
-      [PipelineState.REVIEWING]: AgentType.SIMPLIFIER,  // Simplifier then reviewer
-      [PipelineState.TESTING]: AgentType.TEST_AGENT,
-      [PipelineState.PR_READY]: AgentType.PR_AGENT,  // Auto-create PR
-      [PipelineState.DONE]: null,
-      [PipelineState.BLOCKED]: null
-    };
-
-    const agentType = agentMapping[task.state];
-    if (agentType) {
-      await this.agentPool.spawnAgent(task.id, agentType);
-    }
-  }
-
-  async handleOrchestratorResult(taskId: string, plan: OrchestratorPlan): Promise<void> {
-    // Validate max 2 levels of nesting
-    const parentTask = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { parentTask: true }
-    });
-
-    if (parentTask.parentTask) {
-      throw new BadRequestException('Maximum subtask nesting depth (2) exceeded');
-    }
-
-    // Create subtasks from orchestrator output
-    const subtaskIds: string[] = [];
-
-    for (const subtask of plan.subtasks) {
-      const created = await this.prisma.task.create({
-        data: {
-          title: subtask.title,
-          description: subtask.description,
-          acceptanceCriteria: subtask.acceptanceCriteria || [],
-          edgeCases: [],
-          technicalConstraints: parentTask.technicalConstraints,  // Inherit
-          relatedDocLinks: parentTask.relatedDocLinks,  // Inherit
-          state: PipelineState.IMPLEMENTING,
-          priority: parentTask.priority,  // Always inherit
-          parentTaskId: taskId,
-          blockedBy: subtask.dependencies || [],
-          tokensUsed: 0
-        }
-      });
-
-      subtaskIds.push(created.id);
-      this.sseGateway.emitTaskCreated(created);
-    }
-
-    // Update parent task
-    await this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        state: PipelineState.IMPLEMENTING,
-        childTaskIds: subtaskIds
-      }
-    });
-
-    // Spawn agents for unblocked subtasks only
-    for (const subtaskId of subtaskIds) {
-      const subtask = await this.prisma.task.findUnique({ where: { id: subtaskId } });
-
-      if (subtask.blockedBy.length === 0) {
-        // Determine agent type
-        const agentType = this.determineAgentType(subtask);
-        await this.agentPool.spawnAgent(subtask.id, agentType);
-      }
-    }
-  }
-
-  async handleReviewerResult(taskId: string, review: ReviewResult): Promise<void> {
-    if (review.approved) {
-      // Advance to testing
-      await this.transitionTask(taskId, PipelineState.TESTING);
-    } else {
-      // Create revision subtasks (blocks parent in REVIEWING)
-      for (const revisionSpec of review.revisionSubtasks) {
-        const revision = await this.prisma.task.create({
-          data: {
-            title: revisionSpec.title,
-            description: revisionSpec.description,
-            acceptanceCriteria: ['Fix the issues described'],
-            state: PipelineState.IMPLEMENTING,
-            priority: parentTask.priority,  // Inherit
-            parentTaskId: taskId
-          }
+    public SseService(ILogger<SseService> logger)
+    {
+        _eventChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(100)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
         });
-
-        // Assign to original agent type
-        const originalAgentType = await this.getOriginalImplementationAgentType(taskId);
-        await this.agentPool.spawnAgent(revision.id, originalAgentType);
-      }
-
-      // Parent stays in REVIEWING until revisions complete
+        _logger = logger;
     }
-  }
 
-  async handleTestResult(taskId: string, result: TestResult): Promise<void> {
-    if (result.allPassed) {
-      // Advance to PR_READY
-      await this.transitionTask(taskId, PipelineState.PR_READY);
-    } else {
-      // Create revision subtasks for test failures
-      for (const failure of result.failures) {
-        const revision = await this.prisma.task.create({
-          data: {
-            title: `Fix failing test: ${failure.testName}`,
-            description: failure.description,
-            state: PipelineState.IMPLEMENTING,
-            priority: parentTask.priority,
-            parentTaskId: taskId
-          }
+    public async Task EmitTaskCreatedAsync(AgentTask task)
+    {
+        var data = JsonSerializer.Serialize(new { type = "task:created", data = task });
+        await _eventChannel.Writer.WriteAsync($"data: {data}\n\n");
+    }
+
+    public async Task EmitTaskUpdatedAsync(AgentTask task)
+    {
+        var data = JsonSerializer.Serialize(new { type = "task:updated", data = task });
+        await _eventChannel.Writer.WriteAsync($"data: {data}\n\n");
+    }
+
+    public async Task EmitTaskDeletedAsync(Guid taskId)
+    {
+        var data = JsonSerializer.Serialize(new { type = "task:deleted", data = new { taskId } });
+        await _eventChannel.Writer.WriteAsync($"data: {data}\n\n");
+    }
+
+    public async Task EmitTaskLogAsync(TaskLog log)
+    {
+        var data = JsonSerializer.Serialize(new { type = "task:log", data = log });
+        await _eventChannel.Writer.WriteAsync($"data: {data}\n\n");
+    }
+
+    public async Task EmitAgentStatusAsync(string agentId, string status, string? currentAction)
+    {
+        var data = JsonSerializer.Serialize(new
+        {
+            type = "agent:statusChanged",
+            data = new { agentId, status, currentAction }
         });
-
-        const originalAgentType = await this.getOriginalImplementationAgentType(taskId);
-        await this.agentPool.spawnAgent(revision.id, originalAgentType);
-      }
+        await _eventChannel.Writer.WriteAsync($"data: {data}\n\n");
     }
-  }
 
-  async handleSubtaskCompletion(subtaskId: string): Promise<void> {
-    const subtask = await this.prisma.task.findUnique({
-      where: { id: subtaskId },
-      include: { parentTask: { include: { childTasks: true } } }
-    });
-
-    if (!subtask.parentTask) return;
-
-    // Check if all sibling subtasks are done (strict)
-    const allDone = subtask.parentTask.childTasks.every(
-      child => child.state === PipelineState.DONE
-    );
-
-    if (allDone) {
-      // Advance parent to next stage
-      const nextState = this.getNextState(subtask.parentTask.state);
-      await this.transitionTask(subtask.parentTask.id, nextState);
-    } else {
-      // Check if this subtask was blocking others
-      const nowUnblocked = await this.prisma.task.findMany({
-        where: {
-          parentTaskId: subtask.parentTaskId,
-          blockedBy: { has: subtaskId }
+    public async IAsyncEnumerable<string> GetEventsAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var evt in _eventChannel.Reader.ReadAllAsync(cancellationToken))
+        {
+            yield return evt;
         }
-      });
-
-      for (const task of nowUnblocked) {
-        // Remove this subtask from blockedBy
-        const updatedBlockers = task.blockedBy.filter(id => id !== subtaskId);
-        await this.prisma.task.update({
-          where: { id: task.id },
-          data: { blockedBy: updatedBlockers }
-        });
-
-        // If no longer blocked, spawn agent
-        if (updatedBlockers.length === 0) {
-          const agentType = this.determineAgentType(task);
-          await this.agentPool.spawnAgent(task.id, agentType);
-        }
-      }
     }
-  }
+}
+```
 
-  async handleDynamicReplan(taskId: string, failedSubtaskId: string, error: Error): Promise<void> {
-    // Trigger orchestrator replanning
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { childTasks: true }
-    });
+### Phase 2 Services
 
-    const replanContext = {
-      originalPlan: task.metadata.originalPlan,
-      failedSubtask: await this.prisma.task.findUnique({ where: { id: failedSubtaskId } }),
-      error: error.message,
-      completedSubtasks: task.childTasks.filter(t => t.state === PipelineState.DONE),
-      inProgressSubtasks: task.childTasks.filter(t => t.state !== PipelineState.DONE)
+#### AgentPoolService
+
+Manages concurrent agent execution with budget enforcement and priority queue.
+
+```csharp
+public class AgentPoolService
+{
+    private readonly int _maxConcurrent;
+    private readonly ConcurrentDictionary<string, AgentInstance> _activeAgents = new();
+    private readonly PriorityQueue<QueuedTask, int> _taskQueue = new();
+    private readonly object _queueLock = new();
+    private bool _paused;
+    private bool _singleOrchestratorLock;
+
+    private readonly IConfiguration _configuration;
+    private readonly AppDbContext _context;
+    private readonly ISseService _sseService;
+    private readonly AgentRunnerService _agentRunner;
+    private readonly BudgetService _budgetService;
+    private readonly ILogger<AgentPoolService> _logger;
+
+    public AgentPoolService(
+        IConfiguration configuration,
+        AppDbContext context,
+        ISseService sseService,
+        AgentRunnerService agentRunner,
+        BudgetService budgetService,
+        ILogger<AgentPoolService> logger)
+    {
+        _configuration = configuration;
+        _context = context;
+        _sseService = sseService;
+        _agentRunner = agentRunner;
+        _budgetService = budgetService;
+        _logger = logger;
+        _maxConcurrent = configuration.GetValue<int>("AgentPool:MaxConcurrent", 3);
+    }
+
+    public async Task<string?> SpawnAgentAsync(Guid taskId, AgentType agentType)
+    {
+        var task = await _context.Tasks.FindAsync(taskId);
+        if (task == null) return null;
+
+        // Check budget
+        if (_budgetService.IsExceeded())
+        {
+            EnqueueTask(taskId, agentType, task.Priority);
+            return null;
+        }
+
+        // Single orchestrator check
+        if (agentType == AgentType.Orchestrator && _singleOrchestratorLock)
+        {
+            EnqueueTask(taskId, agentType, task.Priority);
+            return null;
+        }
+
+        // Concurrency limit check
+        if (_activeAgents.Count >= _maxConcurrent)
+        {
+            EnqueueTask(taskId, agentType, task.Priority);
+            return null;
+        }
+
+        var agentId = Guid.NewGuid().ToString();
+        var agent = new AgentInstance
+        {
+            Id = agentId,
+            Type = agentType,
+            Status = AgentStatus.Running,
+            TaskId = taskId,
+            StartedAt = DateTime.UtcNow,
+            CurrentAction = "Initializing..."
+        };
+
+        if (agentType == AgentType.Orchestrator)
+        {
+            _singleOrchestratorLock = true;
+        }
+
+        _activeAgents[agentId] = agent;
+        await _sseService.EmitAgentStatusAsync(agentId, "running", "Initializing...");
+
+        // Run agent in background
+        _ = RunAgentAsync(agent);
+
+        return agentId;
+    }
+
+    private void EnqueueTask(Guid taskId, AgentType agentType, Priority priority)
+    {
+        lock (_queueLock)
+        {
+            _taskQueue.Enqueue(new QueuedTask(taskId, agentType), GetPriorityValue(priority));
+        }
+    }
+
+    private int GetPriorityValue(Priority priority) => priority switch
+    {
+        Priority.Critical => 0,
+        Priority.High => 1,
+        Priority.Medium => 2,
+        Priority.Low => 3,
+        _ => 2
     };
 
-    // Spawn orchestrator in replan mode
-    await this.agentPool.spawnAgent(taskId, AgentType.ORCHESTRATOR, {
-      mode: 'replan',
-      context: replanContext
-    });
-  }
-}
-```
+    private async Task RunAgentAsync(AgentInstance agent)
+    {
+        try
+        {
+            var task = await _context.Tasks.FindAsync(agent.TaskId);
+            if (task == null) return;
 
-### GitService
+            var agentTask = new AgentTask
+            {
+                Id = task.Id,
+                Title = task.Title,
+                Description = task.Description
+            };
 
-Manages git operations for feature branches (MVP: simple branches, one task at a time).
+            var result = await _agentRunner.RunAgentAsync(
+                agentTask,
+                async output =>
+                {
+                    var log = new TaskLog
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = task.Id,
+                        AgentId = agent.Id,
+                        Timestamp = DateTime.UtcNow,
+                        Type = LogType.Info,
+                        Content = output
+                    };
 
-```typescript
-@Injectable()
-export class GitService {
-  private git: SimpleGit;
-  private activeImplementationBranch: string | null = null;
+                    _context.TaskLogs.Add(log);
+                    await _context.SaveChangesAsync();
+                    await _sseService.EmitTaskLogAsync(log);
+                },
+                CancellationToken.None
+            );
 
-  constructor(private configService: ConfigService) {
-    this.git = simpleGit(configService.get('repositoryPath'));
-  }
-
-  async createFeatureBranch(taskId: string, title: string): Promise<string> {
-    const branchName = `${this.configService.get('branchPrefix')}${taskId}-${slugify(title)}`;
-    const defaultBranch = this.configService.get('defaultBranch');
-
-    // MVP: Only one implementation branch at a time
-    if (this.activeImplementationBranch) {
-      throw new Error('Another task is currently in implementation. Please wait.');
-    }
-
-    await this.git.checkout(defaultBranch);
-    await this.git.pull();
-    await this.git.checkoutLocalBranch(branchName);
-
-    this.activeImplementationBranch = branchName;
-
-    return branchName;
-  }
-
-  async commitChanges(message: string): Promise<void> {
-    await this.git.add('.');
-    await this.git.commit(message);
-  }
-
-  async pushBranch(branch: string): Promise<void> {
-    await this.git.push('origin', branch, ['--set-upstream']);
-  }
-
-  async releaseBranch(): Promise<void> {
-    this.activeImplementationBranch = null;
-  }
-
-  // Startup: Scan for orphaned branches and clean up
-  async cleanupOrphanedBranches(): Promise<void> {
-    const branches = await this.git.branchLocal();
-    const prefix = this.configService.get('branchPrefix');
-
-    for (const branch of branches.all) {
-      if (branch.startsWith(prefix)) {
-        // Check if task exists in database
-        const taskId = this.extractTaskIdFromBranch(branch);
-        const task = await this.prisma.task.findUnique({ where: { id: taskId } });
-
-        if (!task) {
-          // Orphaned branch, delete it
-          await this.git.deleteLocalBranch(branch, true);
+            await CompleteAgentAsync(agent.Id, result.Success ? "success" : "error");
         }
-      }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Agent {AgentId} failed", agent.Id);
+            await HandleAgentErrorAsync(agent, ex);
+        }
     }
-  }
+
+    private async Task HandleAgentErrorAsync(AgentInstance agent, Exception error)
+    {
+        var task = await _context.Tasks.FindAsync(agent.TaskId);
+        if (task != null)
+        {
+            task.HasError = true;
+            task.ErrorMessage = error.Message;
+            await _context.SaveChangesAsync();
+            await _sseService.EmitTaskUpdatedAsync(task);
+        }
+
+        await CompleteAgentAsync(agent.Id, "error");
+    }
+
+    private async Task CompleteAgentAsync(string agentId, string status)
+    {
+        if (_activeAgents.TryRemove(agentId, out var agent))
+        {
+            if (agent.Type == AgentType.Orchestrator)
+            {
+                _singleOrchestratorLock = false;
+            }
+
+            await _sseService.EmitAgentStatusAsync(agentId, status, null);
+
+            // Process queue
+            if (!_paused)
+            {
+                await ProcessQueueAsync();
+            }
+        }
+    }
+
+    private async Task ProcessQueueAsync()
+    {
+        QueuedTask? next = null;
+        lock (_queueLock)
+        {
+            if (_taskQueue.Count > 0 && _activeAgents.Count < _maxConcurrent)
+            {
+                next = _taskQueue.Dequeue();
+            }
+        }
+
+        if (next != null)
+        {
+            await SpawnAgentAsync(next.TaskId, next.AgentType);
+        }
+    }
+
+    public async Task PauseAllAsync()
+    {
+        _paused = true;
+        await _sseService.EmitAgentStatusAsync("pool", "paused", null);
+    }
+
+    public async Task ResumeAllAsync()
+    {
+        _paused = false;
+        await ProcessQueueAsync();
+    }
+
+    public async Task AbortAgentAsync(string agentId)
+    {
+        if (_activeAgents.TryGetValue(agentId, out _))
+        {
+            _agentRunner.AbortAgent();
+            await CompleteAgentAsync(agentId, "aborted");
+        }
+    }
+
+    public PoolStatus GetStatus()
+    {
+        return new PoolStatus
+        {
+            Active = _activeAgents.Count,
+            Max = _maxConcurrent,
+            Paused = _paused,
+            QueuedCount = _taskQueue.Count
+        };
+    }
+}
+
+public record QueuedTask(Guid TaskId, AgentType AgentType);
+
+public class PoolStatus
+{
+    public int Active { get; set; }
+    public int Max { get; set; }
+    public bool Paused { get; set; }
+    public int QueuedCount { get; set; }
 }
 ```
 
-### BudgetService
+#### BudgetService
 
-Manages global daily/monthly token budgets with auto-extend and notifications.
+Manages global daily/monthly token budgets.
 
-```typescript
-@Injectable()
-export class BudgetService {
-  constructor(
-    private configService: ConfigService,
-    private prisma: PrismaService,
-    private notificationService: NotificationService
-  ) {}
+```csharp
+public class BudgetService
+{
+    private readonly AppDbContext _context;
+    private readonly ISseService _sseService;
+    private readonly ILogger<BudgetService> _logger;
 
-  async recordUsage(tokens: number): Promise<void> {
-    const config = await this.getConfig();
-
-    config.currentDailyUsage += tokens;
-    config.currentMonthlyUsage += tokens;
-
-    // Check thresholds
-    const dailyPercent = (config.currentDailyUsage / config.dailyTokenBudget) * 100;
-    const monthlyPercent = (config.currentMonthlyUsage / config.monthlyTokenBudget) * 100;
-
-    if (dailyPercent >= 80 && !config.dailyWarningShown) {
-      await this.notificationService.create({
-        type: NotificationType.BUDGET_WARNING,
-        message: `Daily budget 80% used (${config.currentDailyUsage}/${config.dailyTokenBudget})`
-      });
-      config.dailyWarningShown = true;
+    public BudgetService(
+        AppDbContext context,
+        ISseService sseService,
+        ILogger<BudgetService> logger)
+    {
+        _context = context;
+        _sseService = sseService;
+        _logger = logger;
     }
 
-    if (monthlyPercent >= 80 && !config.monthlyWarningShown) {
-      await this.notificationService.create({
-        type: NotificationType.BUDGET_WARNING,
-        message: `Monthly budget 80% used (${config.currentMonthlyUsage}/${config.monthlyTokenBudget})`
-      });
-      config.monthlyWarningShown = true;
+    public async Task RecordUsageAsync(int tokens)
+    {
+        var config = await GetConfigAsync();
+
+        config.CurrentDailyUsage += tokens;
+        config.CurrentMonthlyUsage += tokens;
+
+        var dailyPercent = (double)config.CurrentDailyUsage / config.DailyTokenBudget * 100;
+        var monthlyPercent = (double)config.CurrentMonthlyUsage / config.MonthlyTokenBudget * 100;
+
+        if (dailyPercent >= 80 && !config.DailyWarningShown)
+        {
+            _logger.LogWarning("Daily budget 80% used");
+            config.DailyWarningShown = true;
+        }
+
+        if (config.CurrentDailyUsage >= config.DailyTokenBudget)
+        {
+            config.BudgetExceeded = true;
+            _logger.LogWarning("Daily budget exceeded - agents paused");
+        }
+
+        await _context.SaveChangesAsync();
+        await EmitBudgetUpdateAsync(config);
     }
 
-    // Hard limit reached
-    if (config.currentDailyUsage >= config.dailyTokenBudget) {
-      config.budgetExceeded = true;
-      await this.notificationService.create({
-        type: NotificationType.BUDGET_EXCEEDED,
-        message: 'Daily budget exceeded - agents paused'
-      });
+    public bool IsExceeded()
+    {
+        var config = _context.Configs.FirstOrDefault();
+        return config?.BudgetExceeded ?? false;
     }
 
-    await this.saveConfig(config);
-  }
+    public bool WouldExceed(int tokens)
+    {
+        var config = _context.Configs.FirstOrDefault();
+        if (config == null) return false;
+        return (config.CurrentDailyUsage + tokens) > config.DailyTokenBudget;
+    }
 
-  async extendBudget(additionalTokens: number): Promise<void> {
-    // Auto-extend logic
-    const config = await this.getConfig();
-    config.currentDailyUsage += additionalTokens;
-    config.currentMonthlyUsage += additionalTokens;
-    await this.saveConfig(config);
-  }
+    public async Task ResetDailyAsync()
+    {
+        var config = await GetConfigAsync();
+        config.CurrentDailyUsage = 0;
+        config.DailyWarningShown = false;
+        config.BudgetExceeded = false;
+        await _context.SaveChangesAsync();
+    }
 
-  isExceeded(): boolean {
-    // Check if budget is exceeded (pauses new spawns)
-    return this.config.budgetExceeded;
-  }
+    public async Task ResetMonthlyAsync()
+    {
+        var config = await GetConfigAsync();
+        config.CurrentMonthlyUsage = 0;
+        config.MonthlyWarningShown = false;
+        await _context.SaveChangesAsync();
+    }
 
-  wouldExceed(tokens: number): boolean {
-    const config = this.config;
-    return (config.currentDailyUsage + tokens) > config.dailyTokenBudget;
-  }
+    public BudgetStatus GetStatus()
+    {
+        var config = _context.Configs.FirstOrDefault() ?? new DashboardConfig();
+        return new BudgetStatus
+        {
+            DailyUsage = config.CurrentDailyUsage,
+            DailyLimit = config.DailyTokenBudget,
+            MonthlyUsage = config.CurrentMonthlyUsage,
+            MonthlyLimit = config.MonthlyTokenBudget,
+            Exceeded = config.BudgetExceeded
+        };
+    }
 
-  // Daily reset job (cron)
-  async resetDaily(): Promise<void> {
-    const config = await this.getConfig();
-    config.currentDailyUsage = 0;
-    config.dailyWarningShown = false;
-    config.budgetExceeded = false;
-    await this.saveConfig(config);
-  }
+    private async Task<DashboardConfig> GetConfigAsync()
+    {
+        var config = await _context.Configs.FirstOrDefaultAsync();
+        if (config == null)
+        {
+            config = new DashboardConfig();
+            _context.Configs.Add(config);
+            await _context.SaveChangesAsync();
+        }
+        return config;
+    }
 
-  // Monthly reset job (cron)
-  async resetMonthly(): Promise<void> {
-    const config = await this.getConfig();
-    config.currentMonthlyUsage = 0;
-    config.monthlyWarningShown = false;
-    await this.saveConfig(config);
-  }
+    private async Task EmitBudgetUpdateAsync(DashboardConfig config)
+    {
+        // Implementation would emit budget update via SSE
+    }
+}
 
-  getStatus(): BudgetStatus {
-    return {
-      dailyUsage: this.config.currentDailyUsage,
-      dailyLimit: this.config.dailyTokenBudget,
-      monthlyUsage: this.config.currentMonthlyUsage,
-      monthlyLimit: this.config.monthlyTokenBudget,
-      exceeded: this.config.budgetExceeded
-    };
-  }
+public class BudgetStatus
+{
+    public int DailyUsage { get; set; }
+    public int DailyLimit { get; set; }
+    public int MonthlyUsage { get; set; }
+    public int MonthlyLimit { get; set; }
+    public bool Exceeded { get; set; }
 }
 ```
 
-### PatternsService
+#### GitService
+
+Manages git operations for feature branches.
+
+```csharp
+public class GitService
+{
+    private readonly string _repositoryPath;
+    private readonly string _defaultBranch;
+    private readonly string _branchPrefix;
+    private string? _activeImplementationBranch;
+    private readonly ILogger<GitService> _logger;
+
+    public GitService(IConfiguration configuration, ILogger<GitService> logger)
+    {
+        _repositoryPath = configuration["Repository:Path"] ?? ".";
+        _defaultBranch = configuration["Repository:DefaultBranch"] ?? "main";
+        _branchPrefix = configuration["Repository:BranchPrefix"] ?? "feature/agent-";
+        _logger = logger;
+    }
+
+    public async Task<string> CreateFeatureBranchAsync(Guid taskId, string title)
+    {
+        if (_activeImplementationBranch != null)
+        {
+            throw new InvalidOperationException(
+                "Another task is currently in implementation. Please wait.");
+        }
+
+        var branchName = $"{_branchPrefix}{taskId:N}-{Slugify(title)}";
+
+        await RunGitAsync($"checkout {_defaultBranch}");
+        await RunGitAsync("pull");
+        await RunGitAsync($"checkout -b {branchName}");
+
+        _activeImplementationBranch = branchName;
+        return branchName;
+    }
+
+    public async Task CommitChangesAsync(string message)
+    {
+        await RunGitAsync("add .");
+        await RunGitAsync($"commit -m \"{message}\"");
+    }
+
+    public async Task PushBranchAsync(string branch)
+    {
+        await RunGitAsync($"push -u origin {branch}");
+    }
+
+    public void ReleaseBranch()
+    {
+        _activeImplementationBranch = null;
+    }
+
+    private async Task RunGitAsync(string arguments)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = arguments,
+                WorkingDirectory = _repositoryPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.Start();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+        {
+            var error = await process.StandardError.ReadToEndAsync();
+            throw new InvalidOperationException($"Git command failed: {error}");
+        }
+    }
+
+    private static string Slugify(string text)
+    {
+        return System.Text.RegularExpressions.Regex
+            .Replace(text.ToLower(), @"[^a-z0-9]+", "-")
+            .Trim('-');
+    }
+}
+```
+
+#### PatternsService
 
 Manages repository-specific knowledge base (CLAUDE.md).
 
-```typescript
-@Injectable()
-export class PatternsService {
-  constructor(
-    private configService: ConfigService,
-    private gitService: GitService
-  ) {}
-
-  async updatePatterns(): Promise<void> {
-    // Manual trigger only
-    // Analyzes recent merged PRs and updates CLAUDE.md
-
-    const repoPath = this.configService.get('repositoryPath');
-    const claudePath = path.join(repoPath, 'CLAUDE.md');
-
-    // Get recent merged PRs (last 30 days)
-    const mergedPRs = await this.getRecentMergedPRs();
-
-    // Extract patterns using cost estimator (cheap model)
-    const patterns = await this.extractPatterns(mergedPRs);
-
-    // Update CLAUDE.md
-    const existingContent = await fs.readFile(claudePath, 'utf-8').catch(() => '');
-    const updatedContent = this.mergePatterns(existingContent, patterns);
-
-    await fs.writeFile(claudePath, updatedContent);
-
-    // Commit the update
-    await this.gitService.commitChanges('Update CLAUDE.md with learned patterns');
-  }
-
-  private async extractPatterns(prs: PR[]): Promise<Pattern[]> {
-    // Use Haiku to analyze PRs and extract patterns
-    const prompt = `Analyze these merged PRs and extract coding patterns, conventions, and gotchas:
-
-${prs.map(pr => `PR: ${pr.title}\n${pr.description}\nFiles: ${pr.files.join(', ')}`).join('\n\n')}
-
-Output format:
+```csharp
+public class PatternsService
 {
-  "patterns": [
+    private readonly string _repositoryPath;
+    private readonly GitService _gitService;
+    private readonly ILogger<PatternsService> _logger;
+
+    public PatternsService(
+        IConfiguration configuration,
+        GitService gitService,
+        ILogger<PatternsService> logger)
     {
-      "category": "architecture|conventions|gotchas|best-practices",
-      "title": "Clear pattern title",
-      "description": "Detailed description with examples",
-      "files": ["relevant/file/patterns"]
+        _repositoryPath = configuration["Repository:Path"] ?? ".";
+        _gitService = gitService;
+        _logger = logger;
     }
-  ]
-}`;
 
-    // Query with Haiku
-    const result = await query({ prompt, model: 'haiku' });
-    return JSON.parse(result);
-  }
+    public async Task UpdatePatternsAsync()
+    {
+        var claudePath = Path.Combine(_repositoryPath, "CLAUDE.md");
 
-  private mergePatterns(existing: string, newPatterns: Pattern[]): string {
-    // Intelligent merge of new patterns into existing CLAUDE.md
-    // Deduplicates, organizes by category, maintains structure
-    // ... implementation
-  }
+        // Get recent merged PRs (implementation would use GitHub API)
+        var mergedPRs = await GetRecentMergedPRsAsync();
+
+        // Extract patterns (would use AI to analyze)
+        var patterns = await ExtractPatternsAsync(mergedPRs);
+
+        // Update CLAUDE.md
+        var existingContent = File.Exists(claudePath)
+            ? await File.ReadAllTextAsync(claudePath)
+            : "";
+        var updatedContent = MergePatterns(existingContent, patterns);
+
+        await File.WriteAllTextAsync(claudePath, updatedContent);
+
+        // Commit the update
+        await _gitService.CommitChangesAsync("Update CLAUDE.md with learned patterns");
+    }
+
+    private Task<List<PullRequest>> GetRecentMergedPRsAsync()
+    {
+        // Implementation would fetch from GitHub API
+        return Task.FromResult(new List<PullRequest>());
+    }
+
+    private Task<List<Pattern>> ExtractPatternsAsync(List<PullRequest> prs)
+    {
+        // Implementation would use AI to analyze PRs
+        return Task.FromResult(new List<Pattern>());
+    }
+
+    private string MergePatterns(string existing, List<Pattern> patterns)
+    {
+        // Implementation would merge new patterns into existing content
+        return existing;
+    }
+}
+
+public class PullRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> Files { get; set; } = new();
+}
+
+public class Pattern
+{
+    public string Category { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> Files { get; set; } = new();
 }
 ```
 
 ---
 
-## Database Schema (Prisma)
+## Database Schema (Entity Framework Core)
 
-```prisma
-// prisma/schema.prisma
+```csharp
+public class AppDbContext : DbContext
+{
+    public DbSet<AgentTask> Tasks { get; set; }
+    public DbSet<TaskLog> TaskLogs { get; set; }
+    public DbSet<DashboardConfig> Configs { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AgentTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(4000);
+            entity.Property(e => e.State).HasConversion<string>();
+            entity.Property(e => e.Priority).HasConversion<string>();
+        });
 
-generator client {
-  provider = "prisma-client-js"
-}
+        modelBuilder.Entity<TaskLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TaskId);
+            entity.HasIndex(e => e.Timestamp);
+            entity.Property(e => e.Type).HasConversion<string>();
+        });
 
-model Task {
-  id                    String        @id @default(uuid())
-  title                 String
+        modelBuilder.Entity<DashboardConfig>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValue("default");
+        });
 
-  // Structured fields
-  description           String
-  acceptanceCriteria    String[]
-  edgeCases             String[]
-  technicalConstraints  String[]
-  relatedDocLinks       String[]
-  expectedOutcome       String?
-
-  state                 PipelineState @default(BACKLOG)
-  priority              Priority      @default(MEDIUM)
-
-  // Relationships
-  parentTaskId          String?
-  parentTask            Task?         @relation("TaskSubtasks", fields: [parentTaskId], references: [id])
-  childTasks            Task[]        @relation("TaskSubtasks")
-  childTaskIds          String[]      @default([])
-  blockedBy             String[]      @default([])
-
-  // Agent tracking
-  assignedAgentId       String?
-  agentType             AgentType?
-
-  // Git integration
-  branch                String?
-  prUrl                 String?
-
-  // Budget
-  estimatedTokens       Int?
-  tokensUsed            Int           @default(0)
-
-  // Error tracking
-  hasError              Boolean       @default(false)
-  errorMessage          String?
-  retryCount            Int           @default(0)
-
-  // Logs
-  logs                  TaskLog[]
-
-  // Metadata
-  metadata              Json?         // For storing orchestrator plans, etc.
-
-  // Timestamps
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  completedAt           DateTime?
-}
-
-model TaskLog {
-  id        String    @id @default(uuid())
-  taskId    String
-  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  agentId   String
-  agentType AgentType
-  timestamp DateTime  @default(now())
-  type      LogType
-  content   String    @db.Text
-  metadata  Json?
-
-  @@index([taskId])
-  @@index([timestamp])
-}
-
-model Config {
-  id                   String          @id @default("default")
-
-  // Concurrency
-  maxConcurrentAgents  Int             @default(3)
-
-  // Budget
-  dailyTokenBudget     Int             @default(100000)
-  monthlyTokenBudget   Int             @default(5000000)
-  currentDailyUsage    Int             @default(0)
-  currentMonthlyUsage  Int             @default(0)
-  budgetExceeded       Boolean         @default(false)
-  dailyWarningShown    Boolean         @default(false)
-  monthlyWarningShown  Boolean         @default(false)
-
-  // Repository
-  repositoryPath       String
-  defaultBranch        String          @default("main")
-  branchPrefix         String          @default("feature/agent-")
-
-  // Protected paths
-  protectedPaths       String[]        @default([".git/", ".env", "node_modules/"])
-
-  // Automation
-  autoAdvance          Boolean         @default(true)
-  requireApproval      PipelineState[]
-
-  // Patterns
-  patternsFile         String          @default("CLAUDE.md")
-}
-
-model Notification {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  taskId    String?
-  message   String
-  timestamp DateTime         @default(now())
-  read      Boolean          @default(false)
-
-  @@index([timestamp])
-}
-
-enum PipelineState {
-  BACKLOG
-  PLANNING
-  IMPLEMENTING
-  REVIEWING
-  TESTING
-  PR_READY
-  DONE
-  BLOCKED
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum AgentType {
-  ORCHESTRATOR
-  UI_AGENT
-  API_AGENT
-  SIMPLIFIER
-  CODE_REVIEWER
-  TEST_AGENT
-  PR_AGENT
-  COST_ESTIMATOR
-}
-
-enum LogType {
-  INFO
-  TOOL_USE
-  TOOL_RESULT
-  ERROR
-  THINKING
-}
-
-enum NotificationType {
-  TASK_STATE_CHANGE
-  PR_CREATED
-  PR_MERGED
-  BUDGET_WARNING
-  BUDGET_EXCEEDED
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Timestamp);
+            entity.Property(e => e.Type).HasConversion<string>();
+        });
+    }
 }
 ```
 
@@ -2286,35 +1782,30 @@ enum NotificationType {
 
 ### Phase 1: Foundation (MVP)
 
-**Goal**: Basic working pipeline with manual state transitions and simple git integration.
+**Goal**: Basic working pipeline with manual state transitions and single agent.
 
 **Scope**:
-1. Set up Nx monorepo with Angular + NestJS
-2. Implement Prisma schema and database
-3. Create basic REST API for tasks CRUD with structured fields
-4. Build Kanban board UI (no drag-and-drop, click to view details)
-5. Add EventSource/SSE for real-time updates (full state)
-6. Implement single orchestrator agent execution
-7. Basic git integration (branches only, one task at a time)
-8. Budget widget on dashboard
-9. Notifications panel
-10. Task detail view with transition buttons
-11. Virtual scrolling log viewer with search/filters
-12. Cost estimation before task creation (Haiku)
+1. Set up .NET 10 backend with Minimal APIs
+2. Set up Angular 21 frontend
+3. Implement Entity Framework Core with SQLite
+4. Create basic REST API for tasks CRUD
+5. Build Kanban board UI (no drag-and-drop, click to view details)
+6. Add EventSource/SSE for real-time updates
+7. Implement single agent execution via stdin/stdout
+8. Task detail view with transition buttons
+9. Simple log viewer (no virtual scrolling, no filters)
 
 **Deliverables**:
 - Working Kanban board with fixed 7 states
-- Create/edit/delete tasks with structured fields
+- Create/edit/delete tasks (title, description, state, priority)
 - Manual state transitions via buttons in detail view
-- Single orchestrator can execute (Opus)
-- Real-time log streaming (hybrid: stream thinking, batch tools)
-- Simple git branches, one active implementation at a time
-- Global budget tracking with auto-extend
-- Notifications for state changes, budget warnings
+- Single agent can execute via Claude Code CLI
+- Real-time log streaming
+- Error display on task cards
 
-### Phase 2: Full Agent Orchestration
+### Phase 2: Extended Features
 
-**Goal**: Multi-agent coordination with all specialist agents.
+**Goal**: Multi-agent coordination, budget tracking, and advanced task management.
 
 **Scope**:
 1. Implement AgentPoolService with concurrency control (max N)
@@ -2322,20 +1813,25 @@ enum NotificationType {
 3. Build TaskOrchestrationService for automatic transitions
 4. Implement subtask creation from orchestrator (max 2 levels)
 5. Dependency graph tracking with blocking
-6. Agent monitoring UI with status + action + tokens
-7. Priority queue without preemption
-8. Error retry with configurable per-type logic
-9. Dynamic replanning on failures
-10. Revision subtask workflow
+6. Priority queue without preemption
+7. Error retry with configurable per-type logic
+8. Budget tracking widget
+9. Notifications panel
+10. Cost estimation before task creation (Haiku)
+11. Extended task fields (acceptanceCriteria, edgeCases, etc.)
+12. Log filters and search
+13. Virtual scrolling for logs
+14. Git branch integration
 
 **Deliverables**:
 - Concurrent agent execution (configurable max, default 3)
 - Priority-based task queue
 - All specialist agents working
 - Automatic flow: orchestrator → specialists → review → test → PR
-- Real-time agent status monitoring
-- Revision cycles for review/test failures
-- Error handling with smart retries
+- Budget widget with daily/monthly tracking
+- Notifications for state changes, budget warnings
+- Complex task fields
+- Log search and filtering
 
 ### Phase 3: Advanced Features
 
@@ -2386,27 +1882,28 @@ enum NotificationType {
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/agent_dashboard"
+DATABASE_URL="Data Source=app.db"  # SQLite for dev
+# DATABASE_URL="Host=localhost;Database=agent_dashboard;Username=user;Password=pass"  # PostgreSQL for prod
 
-# Claude API
-ANTHROPIC_API_KEY="sk-ant-..."
+# Claude Code
+CLAUDE_CODE_PATH="claude"
 
 # Git
 REPOSITORY_PATH="/path/to/your/repo"
-GITHUB_TOKEN="ghp_..."  # For PR creation
+GITHUB_TOKEN="ghp_..."  # For PR creation (Phase 2)
 
 # Server
-PORT=3000
-NODE_ENV="development"
+ASPNETCORE_URLS="http://localhost:5000"
+ASPNETCORE_ENVIRONMENT="Development"
 
-# Budget
+# Budget (Phase 2)
 DAILY_TOKEN_BUDGET=100000
 MONTHLY_TOKEN_BUDGET=5000000
 
-# Agent Pool
+# Agent Pool (Phase 2)
 MAX_CONCURRENT_AGENTS=3
 
-# Protected Paths (comma-separated)
+# Protected Paths (Phase 2)
 PROTECTED_PATHS=".git/,.env,node_modules/"
 ```
 
@@ -2415,36 +1912,32 @@ PROTECTED_PATHS=".git/,.env,node_modules/"
 ## Getting Started Commands
 
 ```bash
-# Create workspace
-npx create-nx-workspace@latest agent-dashboard --preset=angular-monorepo --appName=frontend
+# Create backend
+dotnet new webapi -n AgentDashboard.Api -o backend
+cd backend
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+dotnet add package Microsoft.EntityFrameworkCore.Design
 
-# Add NestJS
-nx add @nx/nest
-nx g @nx/nest:app backend
-
-# Add shared library
-nx g @nx/js:lib shared
-
-# Install dependencies
-npm install @anthropic-ai/claude-agent-sdk
-npm install @nestjs/platform-socket.io
-npm install @prisma/client prisma
-npm install simple-git
+# Create frontend
+cd ..
+ng new frontend --style=scss --routing=true --ssr=false
+cd frontend
 npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init
 
-# Frontend deps
-npm install @angular/cdk
-
-# Initialize Prisma
-npx prisma init
-npx prisma generate
-npx prisma migrate dev
+# Initialize database
+cd ../backend
+dotnet ef migrations add InitialCreate
+dotnet ef database update
 
 # Start development
-nx run-many -t serve -p frontend,backend
+# Terminal 1: Backend
+cd backend
+dotnet run
 
-# Run pattern update manually
-curl -X POST http://localhost:3000/api/patterns/update
+# Terminal 2: Frontend
+cd frontend
+ng serve
 ```
 
 ---
@@ -2452,77 +1945,56 @@ curl -X POST http://localhost:3000/api/patterns/update
 ## Success Criteria
 
 1. **Functional**: Tasks flow from Backlog to Done with agent automation
-2. **Concurrent**: Multiple agents work in parallel up to configured limit
-3. **Observable**: All agent activity visible in real-time with detailed logs
-4. **Controllable**: Manual overrides and pause controls at all levels
-5. **Reliable**: Graceful error handling with smart retries
-6. **Budget-aware**: Hard limits prevent runaway costs
-7. **Integrated**: PRs created automatically, tasks auto-complete on merge
-8. **Learning**: Pattern database improves agent performance over time
+2. **Observable**: All agent activity visible in real-time with logs
+3. **Controllable**: Manual overrides at all levels
+4. **Reliable**: Graceful error handling
+5. **Simple (MVP)**: Single agent, basic CRUD, manual transitions
 
 ---
 
 ## Design Decisions Summary
 
 ### Error Handling
-- **Retry strategy**: Configurable per error type using Agent SDK error classification
-- Network/timeout errors: Auto-retry with backoff
-- Logic errors: Human intervention required
-- Max retry counts prevent infinite loops
+- **MVP**: Display error on task card, manual retry via transition
+- **Phase 2**: Retry strategy configurable per error type
 
 ### State Management
 - **Pipeline**: Fixed 7-state workflow, no customization
 - **Transitions**: Buttons in task detail view only (no drag-and-drop)
-- **Completion**: Auto-DONE when PR merged (GitHub webhook)
+- **Completion**: Manual (MVP) / Auto-DONE when PR merged (Phase 2)
 
 ### Concurrency
-- **Orchestrator**: Single instance only (sequential planning)
-- **Other agents**: Configurable pool (default 3)
-- **Queue**: Priority-based without preemption
-- **MVP**: One implementation task at a time
+- **MVP**: One agent at a time
+- **Phase 2**: Configurable pool (default 3), single orchestrator
 
 ### Budget
-- **Global limits**: Daily and monthly budgets
-- **Enforcement**: Hard limits pause new agents
-- **Overflow**: Auto-extend with notification
-- **Warnings**: At 80% threshold
+- **MVP**: Not tracked
+- **Phase 2**: Global limits with daily/monthly budgets
 
 ### Git Workflow
-- **MVP**: Simple branches, one active at a time
+- **MVP**: Not integrated
+- **Phase 2**: Simple branches, one active at a time
 - **Future**: Worktrees for true parallelism
-- **Protected paths**: .git/, .env, node_modules/ (read-only)
-- **Cleanup**: Startup scan for orphaned branches
 
 ### Real-time Updates
 - **Protocol**: EventSource/SSE (not WebSocket)
 - **Payload**: Full state every time (not deltas)
-- **Streaming**: Hybrid - stream thinking, batch tool results
-- **Slow clients**: Buffer with limit
-
-### Agent Coordination
-- **Communication**: Orchestrator only (no direct agent-to-agent)
-- **Dependencies**: Explicit graph with blocking (max 2 levels)
-- **Replanning**: Dynamic on failures only
-- **Reviews**: Create revision subtasks that block parent
 
 ### Knowledge Base
 - **Scope**: Per-repository (CLAUDE.md)
-- **Updates**: Manual trigger only
-- **Learning**: Extract from merged PRs
+- **Updates**: Manual trigger only (Phase 3)
 
 ### UI/UX
-- **Board**: Fixed states, no filtering, no persistence
-- **Logs**: Virtual scrolling with search and type/agent filters
+- **Board**: Fixed states, no filtering
+- **Logs**: Simple scrolling (MVP) / Virtual scrolling with filters (Phase 2)
 - **Errors**: Red border on task card
-- **Notifications**: Dedicated panel for state changes, budget
-- **Budget**: Dashboard widget always visible
 
 ---
 
 ## Open Questions / Future Considerations
 
 1. **Multi-repo support**: Workspace concept for managing multiple repositories
-2. **Worktrees**: Replace MVP branch strategy for true parallel implementation
+2. **Worktrees**: Replace branch strategy for true parallel implementation
 3. **Authentication**: OAuth/SSO for multi-user deployments
 4. **Agent metrics**: Performance analytics and prompt tuning insights
 5. **Custom agents**: UI for creating new agent definitions
@@ -2538,14 +2010,16 @@ curl -X POST http://localhost:3000/api/patterns/update
 
 ### Risk: Git merge conflicts and data loss
 **Mitigation**:
-- MVP uses simple branches with one task at a time
+- MVP: No git integration
+- Phase 2: Simple branches with one task at a time
 - Protected paths prevent critical file modification
 - All changes reviewed before PR
 - Future: Worktrees provide isolation
 
 ### Risk: Runaway agent costs
 **Mitigation**:
-- Hard budget limits pause agents
+- MVP: Single agent limits exposure
+- Phase 2: Hard budget limits pause agents
 - Cost estimation before task creation
 - Token tracking per task and globally
 - Warnings at 80% threshold
@@ -2555,7 +2029,6 @@ curl -X POST http://localhost:3000/api/patterns/update
 - Graceful shutdown for migrations
 - Error retry with exponential backoff
 - Human intervention for unrecoverable errors
-- Startup cleanup of orphaned state
 
 ### Risk: Agent infinite loops
 **Mitigation**:
@@ -2573,6 +2046,6 @@ curl -X POST http://localhost:3000/api/patterns/update
 
 ---
 
-**Specification Version**: 2.0
+**Specification Version**: 3.0
 **Last Updated**: 2026-01-24
 **Status**: Ready for Implementation
