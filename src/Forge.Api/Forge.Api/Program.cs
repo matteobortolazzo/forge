@@ -1,41 +1,65 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Forge.Api.Data;
+using Forge.Api.Features.Agent;
+using Forge.Api.Features.Events;
+using Forge.Api.Features.Tasks;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+// Configure JSON serialization
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+// Add OpenAPI
 builder.Services.AddOpenApi();
+
+// Database
+var connectionString = builder.Configuration["DATABASE_URL"] ?? "Data Source=forge.db";
+builder.Services.AddDbContext<ForgeDbContext>(options =>
+    options.UseSqlite(connectionString));
+
+// Services
+builder.Services.AddSingleton<ISseService, SseService>();
+builder.Services.AddSingleton<AgentRunnerService>();
+builder.Services.AddScoped<TaskService>();
+
+// CORS for Angular dev server
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Ensure database is created
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
+
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+app.UseCors();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+// Map endpoints
+app.MapTaskEndpoints();
+app.MapAgentEndpoints();
+app.MapEventEndpoints();
 
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
-
-app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+await app.RunAsync();
