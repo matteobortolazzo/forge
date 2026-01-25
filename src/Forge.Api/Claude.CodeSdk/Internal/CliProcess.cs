@@ -11,6 +11,7 @@ namespace Claude.CodeSdk.Internal;
 internal sealed class CliProcess : IAsyncDisposable
 {
     private readonly Process _process;
+    private CancellationTokenRegistration _ctRegistration;
     private readonly StringBuilder _stderrBuilder = new();
     private readonly TaskCompletionSource<bool> _stderrCompleted = new();
     private bool _disposed;
@@ -78,17 +79,22 @@ internal sealed class CliProcess : IAsyncDisposable
                 throw new CliConnectionException("Failed to start Claude Code CLI process.");
             }
 
+            // Close stdin immediately since we pass the prompt via command line
+            process.StandardInput.Close();
+
             var wrapper = new CliProcess(process);
             wrapper.StartStderrCapture();
 
             // Register cancellation to kill the process
-            ct.Register(() =>
+            // Captures 'wrapper' instead of 'process' to avoid AccessToDisposedClosure
+            wrapper._ctRegistration = ct.Register(() =>
             {
                 try
                 {
-                    if (!process.HasExited)
+                    // Check _disposed to avoid accessing disposed process
+                    if (wrapper is { _disposed: false, _process.HasExited: false })
                     {
-                        process.Kill(entireProcessTree: true);
+                        wrapper._process.Kill(entireProcessTree: true);
                     }
                 }
                 catch
@@ -220,6 +226,9 @@ internal sealed class CliProcess : IAsyncDisposable
         }
 
         _disposed = true;
+
+        // Dispose the cancellation registration first to prevent callback from firing
+        await _ctRegistration.DisposeAsync();
 
         try
         {

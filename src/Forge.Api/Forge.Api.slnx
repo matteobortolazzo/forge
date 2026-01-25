@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Claude.CodeSdk/Claude.CodeSdk.csproj" />
   <Project Path="Forge.Api/Forge.Api.csproj" />
+  <Project Path="tests/Claude.CodeSdk.Tests.Console/Claude.CodeSdk.Tests.Console.csproj" />
 </Solution>

@@ -10,7 +10,7 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 
 ```
 forge/
-├── backend/                    # .NET 10 Minimal API
+├── Force.Api/                    # .NET 10 Minimal API
 │   ├── Forge.Api/              # Main API entry point
 │   │   ├── Features/           # Feature folders
 │   │   │   ├── Tasks/          # Task CRUD, transitions, logs
@@ -21,7 +21,7 @@ forge/
 │   │   └── Program.cs          # Entry point
 │   ├── Claude.CodeSdk/         # C# Implementation of Claude Code SDK package
 │   └── tests/                  # Unit and integration tests
-└── frontend/                   # Angular 21 SPA
+└── Forge.Ui/                   # Angular 21 SPA
     └── src/app/
         ├── features/           # Feature folders
         │   ├── board/          # Kanban board components
@@ -36,33 +36,33 @@ forge/
 
 ## Tech Stack
 
-| Component | Technology | Version |
-|-----------|------------|---------|
-| Frontend | Angular | 21.x |
-| State Management | Angular Signals | Built-in |
-| UI Components | Angular CDK | Latest |
-| Styling | Tailwind CSS | 4.x |
-| Backend | .NET | 10.x |
-| Backend Framework | ASP.NET Core Minimal APIs | 10.x |
-| Real-time | EventSource/SSE | Native |
-| Database | SQLite (dev) / PostgreSQL (prod) | - |
-| ORM | Entity Framework Core | 10.x |
-| Agent Execution | Claude Code CLI | Latest |
+| Component         | Technology                       | Version  |
+|-------------------|----------------------------------|----------|
+| Frontend          | Angular                          | 21.x     |
+| State Management  | Angular Signals                  | Built-in |
+| UI Components     | Angular CDK                      | Latest   |
+| Styling           | Tailwind CSS                     | 4.x      |
+| Backend           | .NET                             | 10.x     |
+| Backend Framework | ASP.NET Core Minimal APIs        | 10.x     |
+| Real-time         | EventSource/SSE                  | Native   |
+| Database          | SQLite (dev) / PostgreSQL (prod) | -        |
+| ORM               | Entity Framework Core            | 10.x     |
+| Agent Execution   | Claude Code CLI                  | Latest   |
 
 ## Documentation Sources (Context7)
 
 When querying documentation via Context7 MCP, use these library IDs:
 
-| Technology | Context7 Library ID |
-|------------|---------------------|
+| Technology          | Context7 Library ID                      |
+|---------------------|------------------------------------------|
 | .NET / ASP.NET Core | `/websites/learn_microsoft_en-us_dotnet` |
 
 ## Internal Library Documentation
 
 When working with internal libraries, read their documentation files:
 
-| Library | Documentation Path |
-|---------|-------------------|
+| Library        | Documentation Path                       |
+|----------------|------------------------------------------|
 | Claude.CodeSdk | `src/Forge.Api/Claude.CodeSdk/README.md` |
 
 **Claude.CodeSdk**: C# SDK for programmatic interaction with Claude Code CLI. Provides `ClaudeAgentClient` for spawning CLI processes, streaming NDJSON responses, and parsing messages into strongly-typed objects. Read the documentation before implementing agent execution features.

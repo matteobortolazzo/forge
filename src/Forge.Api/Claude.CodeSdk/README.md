@@ -597,6 +597,8 @@ public enum OutputFormat
 }
 ```
 
+> **Note:** When using `StreamJson` with `--print` (non-interactive mode), the CLI also requires `--verbose` to produce the streaming JSON output. The SDK handles this automatically.
+
 ## Internal Components
 
 These classes are internal but documented for maintenance purposes.
@@ -621,7 +623,7 @@ Builds CLI arguments from `ClaudeAgentOptions`.
 2. `--output-format` (if not Text)
 3. Permission flags
 4. Other options
-5. `--prompt <prompt>` (always last)
+5. `<prompt>` (positional argument, always last)
 
 ### MessageParser
 
@@ -636,7 +638,7 @@ Parses NDJSON lines into `IMessage` objects.
 - `output_tokens` → `OutputTokens`
 - `cache_read_input_tokens` → `CacheReadInputTokens`
 - `cache_creation_input_tokens` → `CacheCreationInputTokens`
-- `cost_usd` → `CostUsd`
+- `total_cost_usd` → `CostUsd`
 - `duration_ms` → `DurationMs`
 - `num_turns` → `NumTurns`
 - `mcp_servers` → `McpServers`

@@ -34,6 +34,12 @@ internal static class CommandBuilder
                 OutputFormat.StreamJson => "stream-json",
                 _ => "text"
             });
+
+            // stream-json requires --verbose when using --print
+            if (options.OutputFormat == OutputFormat.StreamJson)
+            {
+                args.Add("--verbose");
+            }
         }
 
         // Permission handling
@@ -113,8 +119,7 @@ internal static class CommandBuilder
             args.AddRange(options.AdditionalArgs);
         }
 
-        // The prompt must be the last argument
-        args.Add("--prompt");
+        // The prompt is a positional argument at the end (no --prompt flag)
         args.Add(prompt);
 
         return args;

@@ -101,7 +101,8 @@ internal static class MessageParser
     {
         var usage = ParseUsage(root);
         var sessionId = GetStringProperty(root, "session_id");
-        var costUsd = GetDecimalProperty(root, "cost_usd");
+        // Try both "total_cost_usd" (actual CLI output) and "cost_usd" (for compatibility)
+        var costUsd = GetDecimalProperty(root, "total_cost_usd") ?? GetDecimalProperty(root, "cost_usd");
         var durationMs = GetLongProperty(root, "duration_ms");
         var numTurns = GetIntProperty(root, "num_turns");
 
