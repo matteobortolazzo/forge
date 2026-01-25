@@ -19,6 +19,7 @@ forge/
 │   │   ├── Data/               # DbContext, migrations
 │   │   ├── Services/           # Cross-cutting services
 │   │   └── Program.cs          # Entry point
+│   ├── Claude.CodeSdk/         # C# Implementation of Claude Code SDK package
 │   └── tests/                  # Unit and integration tests
 └── frontend/                   # Angular 21 SPA
     └── src/app/
@@ -55,6 +56,16 @@ When querying documentation via Context7 MCP, use these library IDs:
 | Technology | Context7 Library ID |
 |------------|---------------------|
 | .NET / ASP.NET Core | `/websites/learn_microsoft_en-us_dotnet` |
+
+## Internal Library Documentation
+
+When working with internal libraries, read their documentation files:
+
+| Library | Documentation Path |
+|---------|-------------------|
+| Claude.CodeSdk | `src/Forge.Api/Claude.CodeSdk/README.md` |
+
+**Claude.CodeSdk**: C# SDK for programmatic interaction with Claude Code CLI. Provides `ClaudeAgentClient` for spawning CLI processes, streaming NDJSON responses, and parsing messages into strongly-typed objects. Read the documentation before implementing agent execution features.
 
 ## Backend Patterns
 
