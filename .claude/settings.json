@@ -3,8 +3,13 @@
     "allow": [
       "Bash(dotnet:*)",
       "Bash(git:*)",
-      "Bash(ng *)",
+      "Bash(ng:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run:*)",
       "Bash(tree:*)",
+      "mcp__angular-cli__get_best_practices",
+      "mcp__angular-cli__find_examples",
       "mcp__context7__query-docs"
     ]
   },
