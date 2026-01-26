@@ -3,7 +3,7 @@ import { TaskStore } from '../../core/stores/task.store';
 import { LogStore } from '../../core/stores/log.store';
 import { NotificationStore } from '../../core/stores/notification.store';
 import { SseService } from '../../core/services/sse.service';
-import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task } from '../../shared/models';
+import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task, Notification } from '../../shared/models';
 import { TaskColumnComponent } from './task-column.component';
 import { CreateTaskDialogComponent } from './create-task-dialog.component';
 import { NotificationPanelComponent } from '../notifications/notification-panel.component';
@@ -114,7 +114,12 @@ export class BoardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadTasks();
+    this.loadNotifications();
     this.connectToSse();
+  }
+
+  loadNotifications(): void {
+    this.notificationStore.loadNotifications();
   }
 
   ngOnDestroy(): void {
@@ -137,7 +142,6 @@ export class BoardComponent implements OnInit, OnDestroy {
   async onCreateTask(dto: CreateTaskDto): Promise<void> {
     const task = await this.taskStore.createTask(dto);
     if (task) {
-      this.notificationStore.notifyTaskCreated(task.title, task.id);
       this.closeCreateDialog();
     }
   }
@@ -163,6 +167,9 @@ export class BoardComponent implements OnInit, OnDestroy {
         break;
       case 'agent:statusChanged':
         // Handle agent status changes if needed
+        break;
+      case 'notification:new':
+        this.notificationStore.addNotificationFromEvent(event.payload as Notification);
         break;
     }
   }

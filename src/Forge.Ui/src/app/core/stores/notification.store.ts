@@ -1,14 +1,21 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { Notification } from '../../shared/models';
-import { MOCK_NOTIFICATIONS } from '../mocks/mock-data';
+import { NotificationService } from '../services/notification.service';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
+  private readonly notificationService = inject(NotificationService);
+
   // State
-  private readonly notifications = signal<Notification[]>([...MOCK_NOTIFICATIONS]);
+  private readonly notifications = signal<Notification[]>([]);
+  private readonly loading = signal(false);
+  private readonly error = signal<string | null>(null);
 
   // Public readonly signals
   readonly allNotifications = this.notifications.asReadonly();
+  readonly isLoading = this.loading.asReadonly();
+  readonly errorMessage = this.error.asReadonly();
 
   // Computed: unread notifications
   readonly unreadNotifications = computed(() =>
@@ -21,31 +28,78 @@ export class NotificationStore {
   // Computed: recent notifications (last 10)
   readonly recentNotifications = computed(() =>
     [...this.notifications()]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 10)
   );
 
-  // Actions
-  addNotification(notification: Omit<Notification, 'id' | 'createdAt' | 'read'>): void {
-    const newNotification: Notification = {
-      ...notification,
-      id: `notif-${Date.now()}`,
-      read: false,
-      createdAt: new Date(),
-    };
-    this.notifications.update(list => [newNotification, ...list]);
+  // Load notifications from API
+  async loadNotifications(limit = 50): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      const notifications = await firstValueFrom(
+        this.notificationService.getNotifications(limit)
+      );
+      // Convert date strings to Date objects
+      const parsed = notifications.map(n => ({
+        ...n,
+        createdAt: new Date(n.createdAt),
+      }));
+      this.notifications.set(parsed);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to load notifications');
+    } finally {
+      this.loading.set(false);
+    }
   }
 
+  // Add notification from SSE event
+  addNotificationFromEvent(notification: Notification): void {
+    const parsed: Notification = {
+      ...notification,
+      createdAt: new Date(notification.createdAt),
+    };
+    this.notifications.update(list => [parsed, ...list]);
+  }
+
+  // Mark notification as read (optimistic update + API call)
   markAsRead(id: string): void {
+    // Optimistic update
     this.notifications.update(list =>
       list.map(n => (n.id === id ? { ...n, read: true } : n))
     );
+
+    // Call API in background
+    this.notificationService.markAsRead(id).subscribe({
+      error: (err) => {
+        console.error('Failed to mark notification as read:', err);
+        // Revert optimistic update on error
+        this.notifications.update(list =>
+          list.map(n => (n.id === id ? { ...n, read: false } : n))
+        );
+      },
+    });
   }
 
+  // Mark all notifications as read (optimistic update + API call)
   markAllAsRead(): void {
+    // Store previous state for potential revert
+    const previousState = this.notifications();
+
+    // Optimistic update
     this.notifications.update(list =>
       list.map(n => ({ ...n, read: true }))
     );
+
+    // Call API in background
+    this.notificationService.markAllAsRead().subscribe({
+      error: (err) => {
+        console.error('Failed to mark all notifications as read:', err);
+        // Revert optimistic update on error
+        this.notifications.set(previousState);
+      },
+    });
   }
 
   removeNotification(id: string): void {
@@ -54,42 +108,5 @@ export class NotificationStore {
 
   clearAll(): void {
     this.notifications.set([]);
-  }
-
-  // Create notification helpers
-  notifyTaskCreated(taskTitle: string, taskId: string): void {
-    this.addNotification({
-      title: 'Task Created',
-      message: `"${taskTitle}" has been added to the backlog.`,
-      type: 'info',
-      taskId,
-    });
-  }
-
-  notifyTaskCompleted(taskTitle: string, taskId: string): void {
-    this.addNotification({
-      title: 'Task Completed',
-      message: `"${taskTitle}" has been completed.`,
-      type: 'success',
-      taskId,
-    });
-  }
-
-  notifyAgentStarted(taskTitle: string, taskId: string): void {
-    this.addNotification({
-      title: 'Agent Started',
-      message: `Agent assigned to "${taskTitle}"`,
-      type: 'info',
-      taskId,
-    });
-  }
-
-  notifyAgentError(taskTitle: string, taskId: string, errorMessage: string): void {
-    this.addNotification({
-      title: 'Agent Error',
-      message: `Error on "${taskTitle}": ${errorMessage}`,
-      type: 'error',
-      taskId,
-    });
   }
 }
