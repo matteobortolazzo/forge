@@ -129,6 +129,23 @@ export class TaskService {
     return this.http.post<Task>(`${this.apiUrl}/${taskId}/abort`, {});
   }
 
+  startAgent(taskId: string): Observable<Task> {
+    if (this.useMocks) {
+      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      if (index === -1) {
+        return throwError(() => new Error('Task not found'));
+      }
+      const updatedTask: Task = {
+        ...this.mockTasks[index],
+        assignedAgentId: `agent-${Date.now()}`,
+        updatedAt: new Date(),
+      };
+      this.mockTasks[index] = updatedTask;
+      return of({ ...updatedTask }).pipe(delay(500));
+    }
+    return this.http.post<Task>(`${this.apiUrl}/${taskId}/start-agent`, {});
+  }
+
   // Helper methods
   getNextState(currentState: PipelineState): PipelineState | null {
     const currentIndex = PIPELINE_STATES.indexOf(currentState);

@@ -142,6 +142,21 @@ export class TaskStore {
     }
   }
 
+  async startAgent(taskId: string): Promise<Task | null> {
+    this.error.set(null);
+
+    try {
+      const updatedTask = await firstValueFrom(this.taskService.startAgent(taskId));
+      this.tasks.update(tasks =>
+        tasks.map(t => (t.id === taskId ? updatedTask : t))
+      );
+      return updatedTask;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to start agent');
+      return null;
+    }
+  }
+
   // Get a single task by ID
   getTaskById(id: string): Task | undefined {
     return this.tasks().find(t => t.id === id);
