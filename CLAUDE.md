@@ -17,13 +17,16 @@ forge/
 │   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start, pause/resume
 │   │   │   │   ├── Agent/          # Agent status, runner service
 │   │   │   │   ├── Scheduler/      # Automatic task scheduling
-│   │   │   │   └── Events/         # SSE endpoint
+│   │   │   │   ├── Events/         # SSE endpoint
+│   │   │   │   └── Mock/           # Mock control endpoints (E2E only)
 │   │   │   ├── Data/               # EF Core DbContext, Entities
 │   │   │   ├── Shared/             # Enums, common types
 │   │   │   └── Program.cs          # Entry point
 │   │   ├── Claude.CodeSdk/         # C# SDK for Claude Code CLI
+│   │   │   └── Mock/               # Mock client for E2E testing
 │   │   └── tests/                  # Test projects
 │   └── Forge.Ui/                   # Angular 21 SPA
+│       ├── e2e/                    # Playwright E2E tests
 │       └── src/app/
 │           ├── features/           # Feature folders
 │           │   ├── board/          # Kanban board components
@@ -59,6 +62,7 @@ forge/
 | Content Blocks | `TextBlock.cs`, `ToolUseBlock.cs`, `ToolResultBlock.cs`                         | Content block types             |
 | Exceptions     | `CliNotFoundException.cs`, `ProcessException.cs`, `JsonDecodeException.cs`      | Error handling                  |
 | Internal       | `CliProcess.cs`, `MessageParser.cs`, `CommandBuilder.cs`, `CliLocator.cs`       | CLI process management          |
+| Mock           | `MockScenario.cs`, `MockScenarioProvider.cs`, `MockClaudeAgentClient.cs`, `MockClaudeAgentClientFactory.cs` | Mock client for E2E testing |
 
 ### Frontend (Partially Implemented)
 
@@ -84,6 +88,7 @@ See `src/Forge.Ui/README.md` for complete component inventory.
 | ORM               | Entity Framework Core            | 10.x     |
 | Agent Execution   | Claude Code CLI                  | Latest   |
 | Frontend Testing  | Vitest                           | 4.x      |
+| E2E Testing       | Playwright                       | 1.x      |
 
 ## Documentation Sources (Context7)
 
@@ -189,9 +194,11 @@ Features/
 │   ├── NotificationEndpoints.cs  # 4 endpoints (list, mark read, mark all read, unread count)
 │   ├── NotificationService.cs    # Notification CRUD and task event helpers (scoped)
 │   └── NotificationModels.cs     # DTOs: NotificationDto, CreateNotificationDto
-└── Events/
-    ├── EventEndpoints.cs       # GET /events (SSE)
-    └── SseService.cs           # Channel-based event broadcasting (singleton)
+├── Events/
+│   ├── EventEndpoints.cs       # GET /events (SSE)
+│   └── SseService.cs           # Channel-based event broadcasting (singleton)
+└── Mock/
+    └── MockEndpoints.cs        # 5 endpoints (status, scenarios, set, remove, reset) - E2E only
 ```
 
 ### Service Organization
@@ -252,6 +259,45 @@ var dto = new CreateTaskDtoBuilder()
 await using var db = _factory.CreateDbContext();
 var entity = await db.Tasks.FindAsync(taskId);
 entity.Should().NotBeNull();
+```
+
+### E2E Testing with Playwright
+
+Located in `src/Forge.Ui/e2e/`. Uses Playwright for browser automation with a mock Claude CLI backend.
+
+**Mock Infrastructure:**
+
+The mock system replaces the real Claude Code CLI with a configurable mock client that simulates agent behavior:
+
+- **MockClaudeAgentClient**: Simulates CLI responses with configurable delays and outputs
+- **MockScenarioProvider**: Manages scenario selection based on task title patterns
+- **MockEndpoints**: API endpoints for controlling mock behavior during tests
+
+**Pre-built Scenarios:**
+
+| Scenario | Behavior | Use Case |
+|----------|----------|----------|
+| `Default` | 3-second delay, success response | Standard testing |
+| `QuickSuccess` | Instant success | Fast test execution |
+| `Error` | Simulated failure | Error handling tests |
+| `LongRunning` | 30-second delay | Timeout/abort tests |
+
+**Environment Toggle:**
+
+Set `CLAUDE_MOCK_MODE=true` to enable mock mode. The `e2e` launch profile configures this automatically.
+
+**Mock Control API:**
+
+During E2E tests, use the mock control endpoints to configure behavior:
+```typescript
+// Set scenario for specific task pattern
+await fetch('/api/mock/scenario', {
+  method: 'POST',
+  body: JSON.stringify({ pattern: 'error-task', scenarioName: 'Error' })
+});
+
+// Reset to defaults
+await fetch('/api/mock/reset', { method: 'POST' });
 ```
 
 ### SSE Implementation
@@ -472,6 +518,24 @@ ng build --configuration production
 ng test
 ```
 
+### E2E Testing
+
+```bash
+# Start backend in mock mode (from Forge.Api project)
+cd src/Forge.Api/Forge.Api
+dotnet run --launch-profile e2e
+
+# Run Playwright tests (from Forge.Ui)
+cd src/Forge.Ui
+npm run e2e
+
+# Run with interactive UI
+npm run e2e:ui
+
+# Run with visible browser
+npm run e2e:headed
+```
+
 ## API Endpoints
 
 ### Tasks
@@ -514,6 +578,15 @@ POST   /api/notifications/mark-all-read # Mark all as read
 GET    /api/notifications/unread-count  # Get unread count
 ```
 
+### Mock (E2E Only - when CLAUDE_MOCK_MODE=true)
+```
+GET    /api/mock/status              # Get mock configuration status
+GET    /api/mock/scenarios           # List available scenarios
+POST   /api/mock/scenario            # Set default or pattern-specific scenario
+DELETE /api/mock/scenario/{pattern}  # Remove pattern mapping
+POST   /api/mock/reset               # Reset to defaults
+```
+
 ## Data Models
 
 ### Task States
@@ -553,4 +626,5 @@ DATABASE_PATH="forge.db"
 CLAUDE_CODE_PATH="claude"
 REPOSITORY_PATH="/path/to/your/repo"
 ASPNETCORE_URLS="http://localhost:5000"
+CLAUDE_MOCK_MODE="true"         # Enable mock Claude client for E2E testing
 ```
