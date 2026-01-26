@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Claude.CodeSdk;
 using Forge.Api.Data;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
@@ -25,6 +26,7 @@ builder.Services.AddDbContext<ForgeDbContext>(options =>
 
 // Services
 builder.Services.AddSingleton<ISseService, SseService>();
+builder.Services.AddSingleton<IClaudeAgentClientFactory, ClaudeAgentClientFactory>();
 builder.Services.AddSingleton<AgentRunnerService>();
 builder.Services.AddScoped<TaskService>();
 

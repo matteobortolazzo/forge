@@ -8,7 +8,7 @@ namespace Claude.CodeSdk;
 /// <summary>
 /// Client for interacting with Claude Code CLI programmatically.
 /// </summary>
-public sealed class ClaudeAgentClient : IAsyncDisposable
+public sealed class ClaudeAgentClient : IClaudeAgentClient
 {
     private readonly ClaudeAgentOptions _defaultOptions;
     private readonly string _cliPath;

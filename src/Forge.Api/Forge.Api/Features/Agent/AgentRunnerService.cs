@@ -11,6 +11,7 @@ public class AgentRunnerService(
     IServiceScopeFactory scopeFactory,
     ISseService sse,
     IConfiguration configuration,
+    IClaudeAgentClientFactory clientFactory,
     ILogger<AgentRunnerService> logger)
 {
     private readonly Lock _lock = new();
@@ -104,7 +105,7 @@ public class AgentRunnerService(
                 Please complete this task. Be thorough and provide updates on your progress.
                 """;
 
-            await using var client = new ClaudeAgentClient(options);
+            await using var client = clientFactory.Create(options);
 
             await foreach (var message in client.QueryStreamAsync(prompt, ct: ct))
             {
