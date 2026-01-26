@@ -269,6 +269,36 @@ public static void MapEventEndpoints(this IEndpointRouteBuilder app)
 }
 ```
 
+### SSE Event Architecture
+
+**Event Types:**
+
+| Event Type | Payload | Trigger |
+|------------|---------|---------|
+| `task:created` | `TaskDto` | Task creation |
+| `task:updated` | `TaskDto` | Task modification, state transition, agent assignment |
+| `task:deleted` | `{ id: Guid }` | Task deletion |
+| `task:log` | `TaskLogDto` | Agent output during execution |
+| `task:paused` | `TaskDto` | Task auto-paused after max retries or manual pause |
+| `task:resumed` | `TaskDto` | Task resumed from paused state |
+| `agent:statusChanged` | `AgentStatusDto` | Agent starts/stops |
+| `scheduler:taskScheduled` | `TaskDto` | Scheduler picks next task |
+| `notification:new` | `NotificationDto` | Notification created |
+
+**Backend Emission Points:**
+
+- **TaskService**: `task:created`, `task:updated`, `task:deleted`, `task:log`
+- **AgentRunnerService**: `agent:statusChanged`, logs via TaskService
+- **SchedulerService**: `task:paused`, `task:resumed`, auto-transitions
+- **TaskSchedulerService**: `scheduler:taskScheduled`
+- **NotificationService**: `notification:new`
+
+**Frontend Consumption:**
+
+- SseService connects to `/api/events`
+- BoardComponent and TaskDetailComponent subscribe to events
+- Signal stores (TaskStore, LogStore, NotificationStore) update from events
+
 ## Frontend Patterns
 
 ### Component Organization
@@ -285,7 +315,7 @@ export const routes: Routes = [
 
 ### State Management with Signals
 
-Use Angular Signals for reactive state (no NgRx for MVP simplicity):
+Use Angular Signals for reactive state:
 
 ```typescript
 // core/stores/task.store.ts
@@ -384,7 +414,7 @@ ng build --configuration production
 ng test
 ```
 
-## API Endpoints (MVP)
+## API Endpoints
 
 ### Tasks
 ```
@@ -443,21 +473,13 @@ Low | Medium | High | Critical
 ### Claude Code CLI Integration
 - Backend spawns Claude Code as a child process
 - Communication via stdin/stdout with `--print --output-format stream-json`
-- MVP: Single agent at a time
+- Single agent at a time
 - Agent output streamed to clients via SSE
 
 ### Real-time Updates
 - Protocol: EventSource/SSE (not WebSocket)
 - Payload: Full state on each event (not deltas)
 - Event types: task:created, task:updated, task:deleted, task:log, task:paused, task:resumed, agent:statusChanged, scheduler:taskScheduled, notification:new
-
-### MVP Scope
-- Single agent execution
-- Automatic task scheduling with manual override (pause/resume)
-- Tasks auto-transition through Planning → Implementing → Reviewing → Testing → PrReady on agent completion
-- Basic CRUD for tasks
-- Simple log viewer (no virtual scrolling)
-- No drag-and-drop on Kanban board
 
 ### Task Scheduling
 The scheduler automatically picks the highest-priority ready task and starts the agent:
