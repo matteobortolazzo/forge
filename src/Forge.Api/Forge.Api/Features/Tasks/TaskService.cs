@@ -1,12 +1,13 @@
 using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.Notifications;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace Forge.Api.Features.Tasks;
 
-public class TaskService(ForgeDbContext db, ISseService sse)
+public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications)
 {
     private static readonly PipelineState[] StateOrder =
     [
@@ -99,12 +100,14 @@ public class TaskService(ForgeDbContext db, ISseService sse)
                 $"Cannot transition from {entity.State} to {dto.TargetState}. Only adjacent state transitions are allowed.");
         }
 
+        var previousState = entity.State;
         entity.State = dto.TargetState;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
+        await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, dto.TargetState);
         return result;
     }
 
@@ -163,6 +166,7 @@ public class TaskService(ForgeDbContext db, ISseService sse)
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
+        await notifications.NotifyTaskErrorAsync(entity.Id, entity.Title, errorMessage);
         return result;
     }
 

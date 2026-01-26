@@ -50,3 +50,19 @@ public enum LogType
     [JsonStringEnumMemberName("thinking")]
     Thinking
 }
+
+/// <summary>
+/// Notification types for user alerts. Serialized as lowercase.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<NotificationType>))]
+public enum NotificationType
+{
+    [JsonStringEnumMemberName("info")]
+    Info,
+    [JsonStringEnumMemberName("success")]
+    Success,
+    [JsonStringEnumMemberName("warning")]
+    Warning,
+    [JsonStringEnumMemberName("error")]
+    Error
+}

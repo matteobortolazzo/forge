@@ -77,7 +77,8 @@ export type ServerEventType =
   | 'task:updated'
   | 'task:deleted'
   | 'task:log'
-  | 'agent:statusChanged';
+  | 'agent:statusChanged'
+  | 'notification:new';
 
 export interface ServerEvent {
   type: ServerEventType;

@@ -4,6 +4,7 @@ using Claude.CodeSdk;
 using Forge.Api.Data;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,7 @@ builder.Services.AddSingleton<ISseService, SseService>();
 builder.Services.AddSingleton<IClaudeAgentClientFactory, ClaudeAgentClientFactory>();
 builder.Services.AddSingleton<AgentRunnerService>();
 builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<NotificationService>();
 
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
@@ -64,5 +66,6 @@ app.UseCors();
 app.MapTaskEndpoints();
 app.MapAgentEndpoints();
 app.MapEventEndpoints();
+app.MapNotificationEndpoints();
 
 await app.RunAsync();

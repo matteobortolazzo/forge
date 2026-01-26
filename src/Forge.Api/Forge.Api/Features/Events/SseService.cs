@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Tasks;
 
 namespace Forge.Api.Features.Events;
@@ -14,6 +15,7 @@ public interface ISseService
     Task EmitTaskDeletedAsync(Guid taskId);
     Task EmitTaskLogAsync(TaskLogDto log);
     Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt);
+    Task EmitNotificationNewAsync(NotificationDto notification);
     IAsyncEnumerable<string> GetEventsAsync(CancellationToken ct);
 }
 
@@ -56,6 +58,12 @@ public sealed class SseService : ISseService
     {
         var status = new AgentStatusDto(isRunning, taskId, startedAt);
         var evt = new ServerEvent("agent:statusChanged", status, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitNotificationNewAsync(NotificationDto notification)
+    {
+        var evt = new ServerEvent("notification:new", notification, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

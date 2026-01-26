@@ -8,6 +8,7 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
 {
     public DbSet<TaskEntity> Tasks => Set<TaskEntity>();
     public DbSet<TaskLogEntity> TaskLogs => Set<TaskLogEntity>();
+    public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,24 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .HasMaxLength(20);
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.ToolName).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<NotificationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Message).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.Type)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.Read);
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

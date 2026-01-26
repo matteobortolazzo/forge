@@ -39,13 +39,14 @@ forge/
 
 ### Backend (Fully Implemented)
 
-| Feature | Files                                                          | Description                                            |
-|---------|----------------------------------------------------------------|--------------------------------------------------------|
-| Tasks   | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`          | 9 endpoints for CRUD, transitions, logs, agent control |
-| Agent   | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs` | Agent status, process lifecycle management             |
-| Events  | `EventEndpoints.cs`, `SseService.cs`                           | SSE event broadcasting via channels                    |
-| Data    | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs`       | EF Core with SQLite                                    |
-| Shared  | `Enums.cs`                                                     | TaskState, Priority enums                              |
+| Feature       | Files                                                                       | Description                                            |
+|---------------|-----------------------------------------------------------------------------|--------------------------------------------------------|
+| Tasks         | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`                       | 9 endpoints for CRUD, transitions, logs, agent control |
+| Agent         | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs`              | Agent status, process lifecycle management             |
+| Events        | `EventEndpoints.cs`, `SseService.cs`                                        | SSE event broadcasting via channels                    |
+| Notifications | `NotificationEndpoints.cs`, `NotificationService.cs`, `NotificationModels.cs` | Notification CRUD, SSE events                          |
+| Data          | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs`, `NotificationEntity.cs` | EF Core with SQLite                                    |
+| Shared        | `Enums.cs`                                                                  | TaskState, Priority, NotificationType enums            |
 
 ### Claude.CodeSdk (Fully Implemented)
 
@@ -171,6 +172,10 @@ Features/
 │   ├── AgentEndpoints.cs       # GET /status
 │   ├── AgentRunnerService.cs   # Claude Code process lifecycle (singleton)
 │   └── AgentModels.cs          # AgentStatusDto
+├── Notifications/
+│   ├── NotificationEndpoints.cs  # 4 endpoints (list, mark read, mark all read, unread count)
+│   ├── NotificationService.cs    # Notification CRUD and task event helpers (scoped)
+│   └── NotificationModels.cs     # DTOs: NotificationDto, CreateNotificationDto
 └── Events/
     ├── EventEndpoints.cs       # GET /events (SSE)
     └── SseService.cs           # Channel-based event broadcasting (singleton)
@@ -397,6 +402,14 @@ GET    /api/agent/status          # Get current agent status
 GET    /api/events                # EventSource/SSE connection
 ```
 
+### Notifications
+```
+GET    /api/notifications              # Get recent notifications (?limit=N)
+PATCH  /api/notifications/{id}/read    # Mark as read
+POST   /api/notifications/mark-all-read # Mark all as read
+GET    /api/notifications/unread-count  # Get unread count
+```
+
 ## Data Models
 
 ### Task States
@@ -420,7 +433,7 @@ Low | Medium | High | Critical
 ### Real-time Updates
 - Protocol: EventSource/SSE (not WebSocket)
 - Payload: Full state on each event (not deltas)
-- Event types: task:created, task:updated, task:deleted, task:log, agent:statusChanged
+- Event types: task:created, task:updated, task:deleted, task:log, agent:statusChanged, notification:new
 
 ### MVP Scope
 - Single agent execution
