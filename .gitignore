@@ -31,3 +31,6 @@ Thumbs.db
 # Misc
 *.tmp
 *.temp
+
+# SQLite database files
+*.db

@@ -3,6 +3,7 @@ using Forge.Api.Features.Events;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -11,12 +12,22 @@ namespace Forge.Api.IntegrationTests.Infrastructure;
 public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private SqliteConnection? _connection;
+    private static readonly string TestDatabasePath = Path.Combine(Path.GetTempPath(), $"forge_test_{Guid.NewGuid()}.db");
 
     public ISseService SseServiceMock { get; private set; } = null!;
     public IClaudeAgentClientFactory ClientFactoryMock { get; private set; } = null!;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Set test database path via configuration to prevent forge.db creation in project directory
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DATABASE_PATH"] = TestDatabasePath
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             // Remove existing DbContext registration
@@ -78,6 +89,12 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
         if (_connection is not null)
         {
             await _connection.DisposeAsync();
+        }
+
+        // Clean up test database file if it was created
+        if (File.Exists(TestDatabasePath))
+        {
+            File.Delete(TestDatabasePath);
         }
     }
 }
