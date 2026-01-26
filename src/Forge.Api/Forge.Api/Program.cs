@@ -20,7 +20,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 
 // Database
-var connectionString = builder.Configuration["DATABASE_URL"] ?? "Data Source=forge.db";
+var databasePath = builder.Configuration["DATABASE_PATH"] ?? "forge.db";
+var connectionString = $"Data Source={databasePath}";
 builder.Services.AddDbContext<ForgeDbContext>(options =>
     options.UseSqlite(connectionString));
 

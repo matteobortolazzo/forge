@@ -431,7 +431,7 @@ Low | Medium | High | Critical
 
 ### Environment Variables
 ```env
-DATABASE_URL="Data Source=forge.db"
+DATABASE_PATH="forge.db"
 CLAUDE_CODE_PATH="claude"
 REPOSITORY_PATH="/path/to/your/repo"
 ASPNETCORE_URLS="http://localhost:5000"

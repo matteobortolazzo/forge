@@ -1882,8 +1882,7 @@ public class AppDbContext : DbContext
 
 ```env
 # Database
-DATABASE_URL="Data Source=app.db"  # SQLite for dev
-# DATABASE_URL="Host=localhost;Database=agent_dashboard;Username=user;Password=pass"  # PostgreSQL for prod
+DATABASE_PATH="app.db"  # SQLite file path (can be absolute or relative)
 
 # Claude Code
 CLAUDE_CODE_PATH="claude"
