@@ -10,29 +10,56 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 
 ```
 forge/
-├── Force.Api/                    # .NET 10 Minimal API
-│   ├── Forge.Api/              # Main API entry point
-│   │   ├── Features/           # Feature folders
-│   │   │   ├── Tasks/          # Task CRUD, transitions, logs
-│   │   │   ├── Agent/          # Agent status, runner service
-│   │   │   └── Events/         # SSE endpoint
-│   │   ├── Data/               # DbContext, migrations
-│   │   ├── Services/           # Cross-cutting services
-│   │   └── Program.cs          # Entry point
-│   ├── Claude.CodeSdk/         # C# Implementation of Claude Code SDK package
-│   └── tests/                  # Unit and integration tests
-└── Forge.Ui/                   # Angular 21 SPA
-    └── src/app/
-        ├── features/           # Feature folders
-        │   ├── board/          # Kanban board components
-        │   ├── task-detail/    # Task detail view with logs
-        │   └── settings/       # Configuration (Phase 2)
-        ├── core/               # Services, interceptors, guards
-        ├── shared/             # Reusable components, models
-        └── app.routes.ts       # Route configuration
+├── src/
+│   ├── Forge.Api/                  # .NET 10 API Solution
+│   │   ├── Forge.Api/              # Main API project
+│   │   │   ├── Features/           # Task, Agent, Events endpoints
+│   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start
+│   │   │   │   ├── Agent/          # Agent status, runner service
+│   │   │   │   └── Events/         # SSE endpoint
+│   │   │   ├── Data/               # EF Core DbContext, Entities
+│   │   │   ├── Shared/             # Enums, common types
+│   │   │   └── Program.cs          # Entry point
+│   │   ├── Claude.CodeSdk/         # C# SDK for Claude Code CLI
+│   │   └── tests/                  # Test projects
+│   └── Forge.Ui/                   # Angular 21 SPA
+│       └── src/app/
+│           ├── features/           # Feature folders
+│           │   ├── board/          # Kanban board components
+│           │   ├── task-detail/    # Task detail view with logs
+│           │   └── notifications/  # Notification panel
+│           ├── core/               # Stores, Services, Mocks
+│           ├── shared/             # Reusable components, models
+│           └── app.routes.ts       # Route configuration
 ```
 
 **Code Organization**: Both API and UI use feature folder organization. Each feature contains all necessary files (endpoints, services, components, models).
+
+## Implementation Status
+
+### Backend (Fully Implemented)
+
+| Feature | Files | Description |
+|---------|-------|-------------|
+| Tasks | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs` | 9 endpoints for CRUD, transitions, logs, agent control |
+| Agent | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs` | Agent status, process lifecycle management |
+| Events | `EventEndpoints.cs`, `SseService.cs` | SSE event broadcasting via channels |
+| Data | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs` | EF Core with SQLite |
+| Shared | `Enums.cs` | TaskState, Priority enums |
+
+### Claude.CodeSdk (Fully Implemented)
+
+| Component | Files | Description |
+|-----------|-------|-------------|
+| Client | `ClaudeAgentClient.cs`, `ClaudeAgentOptions.cs` | Main client for CLI interaction |
+| Messages | `SystemMessage.cs`, `UserMessage.cs`, `AssistantMessage.cs`, `ResultMessage.cs` | Strongly-typed message models |
+| Content Blocks | `TextBlock.cs`, `ToolUseBlock.cs`, `ToolResultBlock.cs` | Content block types |
+| Exceptions | `CliNotFoundException.cs`, `ProcessException.cs`, `JsonDecodeException.cs` | Error handling |
+| Internal | `CliProcess.cs`, `MessageParser.cs`, `CommandBuilder.cs`, `CliLocator.cs` | CLI process management |
+
+### Frontend (Fully Implemented)
+
+See `src/Forge.Ui/README.md` for complete component inventory.
 
 ## Tech Stack
 
@@ -67,6 +94,37 @@ When working with internal libraries, read their documentation files:
 
 **Claude.CodeSdk**: C# SDK for programmatic interaction with Claude Code CLI. Provides `ClaudeAgentClient` for spawning CLI processes, streaming NDJSON responses, and parsing messages into strongly-typed objects. Read the documentation before implementing agent execution features.
 
+Key classes:
+- `ClaudeAgentClient` - Main client for spawning and managing CLI processes
+- `ClaudeAgentOptions` - Configuration (working directory, permission mode, MCP servers)
+- `IMessage` - Base interface for `SystemMessage`, `UserMessage`, `AssistantMessage`, `ResultMessage`
+- `IContentBlock` - Base interface for `TextBlock`, `ToolUseBlock`, `ToolResultBlock`
+
+Typical usage in `AgentRunnerService`:
+```csharp
+var client = new ClaudeAgentClient(new ClaudeAgentOptions { WorkingDirectory = repoPath });
+await foreach (var message in client.QueryStreamAsync(new QueryRequest { Prompt = taskDescription }))
+{
+    // Process streaming messages (AssistantMessage, ToolUseBlock, etc.)
+}
+```
+
+## Frontend Implementation Reference
+
+For detailed Forge.Ui implementation documentation, see:
+
+| Documentation          | Path                              | Content                                         |
+|------------------------|-----------------------------------|-------------------------------------------------|
+| UI Implementation      | `src/Forge.Ui/README.md`          | Component inventory, stores, services, patterns |
+| Angular Best Practices | `src/Forge.Ui/CLAUDE.md`          | Coding standards and conventions                |
+| API Integration        | `src/Forge.Ui/API-INTEGRATION.md` | Endpoints, SSE events, data models              |
+
+**Quick Reference:**
+- **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
+- **5 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner
+- **4 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore
+- **3 services**: TaskService, AgentService, SseService (all with mock mode)
+
 ## Backend Patterns
 
 ### Minimal API Endpoint Pattern
@@ -89,6 +147,7 @@ public static class TaskEndpoints
         group.MapPost("/{id:guid}/transition", TransitionTask);
         group.MapGet("/{id:guid}/logs", GetTaskLogs);
         group.MapPost("/{id:guid}/abort", AbortAgent);
+        group.MapPost("/{id:guid}/start-agent", StartAgent);
     }
 }
 ```
@@ -105,17 +164,16 @@ app.MapEventEndpoints();
 ```
 Features/
 ├── Tasks/
-│   ├── TaskEndpoints.cs        # Endpoint definitions
+│   ├── TaskEndpoints.cs        # 9 endpoints (CRUD, transition, logs, abort, start-agent)
 │   ├── TaskService.cs          # Business logic (scoped)
-│   ├── TaskModels.cs           # DTOs and entities
-│   └── TaskValidation.cs       # Validation logic
+│   └── TaskModels.cs           # DTOs: TaskDto, CreateTaskDto, UpdateTaskDto, etc.
 ├── Agent/
-│   ├── AgentEndpoints.cs
-│   ├── AgentRunnerService.cs   # Claude Code process management (singleton)
-│   └── AgentModels.cs
+│   ├── AgentEndpoints.cs       # GET /status
+│   ├── AgentRunnerService.cs   # Claude Code process lifecycle (singleton)
+│   └── AgentModels.cs          # AgentStatusDto
 └── Events/
-    ├── EventEndpoints.cs       # SSE endpoint
-    └── SseService.cs           # Event broadcasting (singleton)
+    ├── EventEndpoints.cs       # GET /events (SSE)
+    └── SseService.cs           # Channel-based event broadcasting (singleton)
 ```
 
 ### Service Organization
@@ -220,7 +278,7 @@ export class SseService {
 
 ```bash
 # Navigate to backend
-cd backend/Forge.Api
+cd src/Forge.Api/Forge.Api
 
 # Restore and run
 dotnet restore
@@ -229,11 +287,13 @@ dotnet run
 # Run with watch
 dotnet watch run
 
-# Run tests
-dotnet test ../tests/Forge.Api.Tests
+# Run tests (from solution directory)
+cd src/Forge.Api
+dotnet test tests/Forge.Api.Tests
 
-# Database migrations
-dotnet ef migrations add InitialCreate
+# Database migrations (from Forge.Api project)
+cd src/Forge.Api/Forge.Api
+dotnet ef migrations add MigrationName
 dotnet ef database update
 ```
 
@@ -241,7 +301,7 @@ dotnet ef database update
 
 ```bash
 # Navigate to frontend
-cd frontend
+cd src/Forge.Ui
 
 # Install dependencies
 npm install
@@ -260,14 +320,15 @@ ng test
 
 ### Tasks
 ```
-GET    /api/tasks                 # List all tasks
-GET    /api/tasks/{id}            # Get task details
-POST   /api/tasks                 # Create new task
-PATCH  /api/tasks/{id}            # Update task
-DELETE /api/tasks/{id}            # Delete task
-POST   /api/tasks/{id}/transition # Transition to new state
-GET    /api/tasks/{id}/logs       # Get task logs
-POST   /api/tasks/{id}/abort      # Abort assigned agent
+GET    /api/tasks                   # List all tasks
+GET    /api/tasks/{id}              # Get task details
+POST   /api/tasks                   # Create new task
+PATCH  /api/tasks/{id}              # Update task
+DELETE /api/tasks/{id}              # Delete task
+POST   /api/tasks/{id}/transition   # Transition to new state
+GET    /api/tasks/{id}/logs         # Get task logs
+POST   /api/tasks/{id}/abort        # Abort assigned agent
+POST   /api/tasks/{id}/start-agent  # Start agent execution for task
 ```
 
 ### Agent
