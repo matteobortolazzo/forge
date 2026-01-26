@@ -1,9 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Claude.CodeSdk;
+using Claude.CodeSdk.Mock;
 using Forge.Api.Data;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.Mock;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Repository;
 using Forge.Api.Features.Scheduler;
@@ -30,7 +32,19 @@ builder.Services.AddDbContext<ForgeDbContext>(options =>
 
 // Services
 builder.Services.AddSingleton<ISseService, SseService>();
-builder.Services.AddSingleton<IClaudeAgentClientFactory, ClaudeAgentClientFactory>();
+
+// Claude agent client factory - use mock in E2E testing mode
+var useMockMode = Environment.GetEnvironmentVariable("CLAUDE_MOCK_MODE") == "true";
+if (useMockMode)
+{
+    builder.Services.AddSingleton<MockScenarioProvider>();
+    builder.Services.AddSingleton<IClaudeAgentClientFactory, MockClaudeAgentClientFactory>();
+}
+else
+{
+    builder.Services.AddSingleton<IClaudeAgentClientFactory, ClaudeAgentClientFactory>();
+}
+
 builder.Services.AddSingleton<IAgentRunnerService, AgentRunnerService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<NotificationService>();
@@ -76,5 +90,11 @@ app.MapEventEndpoints();
 app.MapNotificationEndpoints();
 app.MapSchedulerEndpoints();
 app.MapRepositoryEndpoints();
+
+// Mock control endpoints (only in mock mode)
+if (useMockMode)
+{
+    app.MapMockEndpoints();
+}
 
 await app.RunAsync();
