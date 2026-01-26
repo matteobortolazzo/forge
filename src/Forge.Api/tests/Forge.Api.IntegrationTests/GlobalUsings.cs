@@ -1,0 +1,12 @@
+global using System.Net;
+global using System.Net.Http.Json;
+global using FluentAssertions;
+global using Forge.Api.Data;
+global using Forge.Api.Data.Entities;
+global using Forge.Api.Features.Tasks;
+global using Forge.Api.Shared;
+global using Forge.Api.IntegrationTests.Infrastructure;
+global using Forge.Api.IntegrationTests.Helpers;
+global using Microsoft.EntityFrameworkCore;
+global using NSubstitute;
+global using Xunit;
