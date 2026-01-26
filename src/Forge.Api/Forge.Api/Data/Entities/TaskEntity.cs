@@ -22,6 +22,15 @@ public class TaskEntity
     public int RetryCount { get; set; }
     public int MaxRetries { get; set; } = 3;
 
+    // Hierarchy fields
+    public Guid? ParentId { get; set; }
+    public TaskEntity? Parent { get; set; }
+    public ICollection<TaskEntity> Children { get; set; } = [];
+
+    // Denormalized for query efficiency
+    public int ChildCount { get; set; } = 0;
+    public PipelineState? DerivedState { get; set; }  // Computed for parents
+
     // Navigation property
     public ICollection<TaskLogEntity> Logs { get; set; } = [];
 }

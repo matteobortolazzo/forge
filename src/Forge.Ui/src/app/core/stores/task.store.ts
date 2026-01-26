@@ -1,5 +1,14 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Task, PipelineState, PIPELINE_STATES, CreateTaskDto, UpdateTaskDto, TransitionTaskDto } from '../../shared/models';
+import {
+  Task,
+  PipelineState,
+  PIPELINE_STATES,
+  CreateTaskDto,
+  UpdateTaskDto,
+  TransitionTaskDto,
+  CreateSubtaskDto,
+  SplitTaskDto,
+} from '../../shared/models';
 import { TaskService } from '../services/task.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -57,6 +66,48 @@ export class TaskStore {
 
   // Computed: paused tasks
   readonly pausedTasks = computed(() => this.tasks().filter(t => t.isPaused));
+
+  // Computed: root tasks only (tasks without parents)
+  readonly rootTasks = computed(() => this.tasks().filter(t => !t.parentId));
+
+  // Computed: children grouped by parent ID
+  readonly childrenByParent = computed(() => {
+    const map = new Map<string, Task[]>();
+    for (const task of this.tasks()) {
+      if (task.parentId) {
+        const children = map.get(task.parentId) ?? [];
+        children.push(task);
+        map.set(task.parentId, children);
+      }
+    }
+    return map;
+  });
+
+  // Computed: leaf tasks only (tasks without children)
+  readonly leafTasks = computed(() => this.tasks().filter(t => t.childCount === 0));
+
+  // Computed: parent tasks only (tasks with children)
+  readonly parentTasks = computed(() => this.tasks().filter(t => t.childCount > 0));
+
+  // Get children for a specific parent
+  getChildrenOf(parentId: string): Task[] {
+    return this.childrenByParent().get(parentId) ?? [];
+  }
+
+  // Get display state (derived state for parents, regular state for leaves)
+  getDisplayState(task: Task): PipelineState {
+    return task.derivedState ?? task.state;
+  }
+
+  // Check if task is a leaf task
+  isLeafTask(task: Task): boolean {
+    return task.childCount === 0;
+  }
+
+  // Check if task is a parent task
+  isParentTask(task: Task): boolean {
+    return task.childCount > 0;
+  }
 
   // Actions
   async loadTasks(): Promise<void> {
@@ -209,5 +260,83 @@ export class TaskStore {
   // Remove task from SSE event
   removeTaskFromEvent(taskId: string): void {
     this.tasks.update(tasks => tasks.filter(t => t.id !== taskId));
+  }
+
+  // Hierarchy actions
+  async splitTask(taskId: string, subtasks: CreateSubtaskDto[]): Promise<boolean> {
+    this.error.set(null);
+
+    try {
+      const dto: SplitTaskDto = { subtasks };
+      const result = await firstValueFrom(this.taskService.splitTask(taskId, dto));
+
+      // Update parent and add children to the store
+      this.tasks.update(tasks => {
+        const updatedTasks = tasks.map(t =>
+          t.id === taskId ? result.parent : t
+        );
+        return [...updatedTasks, ...result.children];
+      });
+
+      return true;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to split task');
+      return false;
+    }
+  }
+
+  async addChild(parentId: string, dto: CreateSubtaskDto): Promise<Task | null> {
+    this.error.set(null);
+
+    try {
+      const child = await firstValueFrom(this.taskService.addChild(parentId, dto));
+
+      // Add child to store and update parent's childCount
+      this.tasks.update(tasks => {
+        const updatedTasks = tasks.map(t => {
+          if (t.id === parentId) {
+            return { ...t, childCount: t.childCount + 1, updatedAt: new Date() };
+          }
+          return t;
+        });
+        return [...updatedTasks, child];
+      });
+
+      return child;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to add child task');
+      return null;
+    }
+  }
+
+  // Handle task:split SSE event
+  handleTaskSplitEvent(parent: Task, children: Task[]): void {
+    this.tasks.update(tasks => {
+      const updatedTasks = tasks.map(t =>
+        t.id === parent.id ? parent : t
+      );
+      // Add children that don't already exist
+      const existingIds = new Set(updatedTasks.map(t => t.id));
+      const newChildren = children.filter(c => !existingIds.has(c.id));
+      return [...updatedTasks, ...newChildren];
+    });
+  }
+
+  // Handle task:childAdded SSE event
+  handleChildAddedEvent(parentId: string, child: Task): void {
+    this.tasks.update(tasks => {
+      const updatedTasks = tasks.map(t => {
+        if (t.id === parentId) {
+          return { ...t, childCount: t.childCount + 1, updatedAt: new Date() };
+        }
+        return t;
+      });
+      // Add child if not already in store
+      const exists = updatedTasks.some(t => t.id === child.id);
+      if (!exists) {
+        return [...updatedTasks, child];
+      }
+      return updatedTasks;
+    });
   }
 }

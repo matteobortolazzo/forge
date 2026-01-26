@@ -11,6 +11,9 @@ import {
   AgentStatus,
   PIPELINE_STATES,
   PipelineState,
+  CreateSubtaskDto,
+  SplitTaskDto,
+  SplitTaskResultDto,
 } from '../../shared/models';
 import { MOCK_TASKS, getLogsForTask, getTaskById } from '../mocks/mock-data';
 
@@ -23,11 +26,15 @@ export class TaskService {
   // In-memory task store for mock mode
   private mockTasks: Task[] = [...MOCK_TASKS];
 
-  getTasks(): Observable<Task[]> {
+  getTasks(rootOnly = false): Observable<Task[]> {
     if (this.useMocks) {
-      return of([...this.mockTasks]).pipe(delay(300));
+      const tasks = rootOnly
+        ? this.mockTasks.filter(t => !t.parentId)
+        : this.mockTasks;
+      return of([...tasks]).pipe(delay(300));
     }
-    return this.http.get<Task[]>(this.apiUrl);
+    const params = rootOnly ? '?rootOnly=true' : '';
+    return this.http.get<Task[]>(`${this.apiUrl}${params}`);
   }
 
   getTask(id: string): Observable<Task> {
@@ -53,6 +60,7 @@ export class TaskService {
         isPaused: false,
         retryCount: 0,
         maxRetries: 3,
+        childCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -188,6 +196,82 @@ export class TaskService {
     return this.http.post<Task>(`${this.apiUrl}/${taskId}/resume`, {});
   }
 
+  // Hierarchy methods
+  splitTask(taskId: string, dto: SplitTaskDto): Observable<SplitTaskResultDto> {
+    if (this.useMocks) {
+      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      if (index === -1) {
+        return throwError(() => new Error('Task not found'));
+      }
+      const parent = this.mockTasks[index];
+      const children: Task[] = dto.subtasks.map((subtask, i) => ({
+        id: `${taskId}-child-${i}`,
+        title: subtask.title,
+        description: subtask.description,
+        priority: subtask.priority,
+        state: 'Backlog' as PipelineState,
+        parentId: taskId,
+        childCount: 0,
+        hasError: false,
+        isPaused: false,
+        retryCount: 0,
+        maxRetries: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+      const updatedParent: Task = {
+        ...parent,
+        childCount: children.length,
+        derivedState: 'Backlog',
+        children,
+        progress: { completed: 0, total: children.length, percent: 0 },
+        updatedAt: new Date(),
+      };
+      this.mockTasks[index] = updatedParent;
+      this.mockTasks.push(...children);
+      return of({ parent: updatedParent, children }).pipe(delay(300));
+    }
+    return this.http.post<SplitTaskResultDto>(`${this.apiUrl}/${taskId}/split`, dto);
+  }
+
+  addChild(parentId: string, dto: CreateSubtaskDto): Observable<Task> {
+    if (this.useMocks) {
+      const parentIndex = this.mockTasks.findIndex(t => t.id === parentId);
+      if (parentIndex === -1) {
+        return throwError(() => new Error('Parent task not found'));
+      }
+      const child: Task = {
+        id: `${parentId}-child-${Date.now()}`,
+        title: dto.title,
+        description: dto.description,
+        priority: dto.priority,
+        state: 'Backlog',
+        parentId,
+        childCount: 0,
+        hasError: false,
+        isPaused: false,
+        retryCount: 0,
+        maxRetries: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.mockTasks.push(child);
+      const parent = this.mockTasks[parentIndex];
+      parent.childCount++;
+      parent.updatedAt = new Date();
+      return of(child).pipe(delay(300));
+    }
+    return this.http.post<Task>(`${this.apiUrl}/${parentId}/children`, dto);
+  }
+
+  getChildren(parentId: string): Observable<Task[]> {
+    if (this.useMocks) {
+      const children = this.mockTasks.filter(t => t.parentId === parentId);
+      return of([...children]).pipe(delay(200));
+    }
+    return this.http.get<Task[]>(`${this.apiUrl}/${parentId}/children`);
+  }
+
   // Helper methods
   getNextState(currentState: PipelineState): PipelineState | null {
     const currentIndex = PIPELINE_STATES.indexOf(currentState);
@@ -203,5 +287,17 @@ export class TaskService {
       return PIPELINE_STATES[currentIndex - 1];
     }
     return null;
+  }
+
+  isLeafTask(task: Task): boolean {
+    return task.childCount === 0;
+  }
+
+  isParentTask(task: Task): boolean {
+    return task.childCount > 0;
+  }
+
+  getDisplayState(task: Task): PipelineState {
+    return task.derivedState ?? task.state;
   }
 }

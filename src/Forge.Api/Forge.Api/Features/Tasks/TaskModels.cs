@@ -3,6 +3,11 @@ using Forge.Api.Shared;
 
 namespace Forge.Api.Features.Tasks;
 
+public record TaskProgressDto(
+    int Completed,
+    int Total,
+    int Percent);
+
 public record TaskDto(
     Guid Id,
     string Title,
@@ -18,9 +23,15 @@ public record TaskDto(
     int RetryCount,
     int MaxRetries,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    // Hierarchy fields
+    Guid? ParentId,
+    int ChildCount,
+    PipelineState? DerivedState,
+    IReadOnlyList<TaskDto>? Children = null,
+    TaskProgressDto? Progress = null)
 {
-    public static TaskDto FromEntity(TaskEntity entity) => new(
+    public static TaskDto FromEntity(TaskEntity entity, IReadOnlyList<TaskDto>? children = null, TaskProgressDto? progress = null) => new(
         entity.Id,
         entity.Title,
         entity.Description,
@@ -35,7 +46,12 @@ public record TaskDto(
         entity.RetryCount,
         entity.MaxRetries,
         entity.CreatedAt,
-        entity.UpdatedAt);
+        entity.UpdatedAt,
+        entity.ParentId,
+        entity.ChildCount,
+        entity.DerivedState,
+        children,
+        progress);
 }
 
 public record TaskLogDto(
@@ -67,3 +83,16 @@ public record UpdateTaskDto(
 
 public record TransitionTaskDto(
     PipelineState TargetState);
+
+// Hierarchy DTOs
+public record CreateSubtaskDto(
+    string Title,
+    string Description,
+    Priority Priority);
+
+public record SplitTaskDto(
+    IReadOnlyList<CreateSubtaskDto> Subtasks);
+
+public record SplitTaskResultDto(
+    TaskDto Parent,
+    IReadOnlyList<TaskDto> Children);

@@ -46,6 +46,7 @@ public class SchedulerService(
 
     /// <summary>
     /// Gets the next task eligible for scheduling based on priority and state.
+    /// Only leaf tasks (tasks without children) can be scheduled.
     /// </summary>
     public async Task<TaskDto?> GetNextSchedulableTaskAsync()
     {
@@ -59,13 +60,15 @@ public class SchedulerService(
         // 2. Filter: IsPaused = false
         // 3. Filter: HasError = false OR RetryCount < MaxRetries
         // 4. Filter: AssignedAgentId IS NULL
-        // 5. Order: Priority DESC, State ASC (Planning first), CreatedAt ASC
+        // 5. Filter: ChildCount == 0 (leaf tasks only - parent state is derived)
+        // 6. Order: Priority DESC, State ASC (Planning first), CreatedAt ASC
 
         var entity = await db.Tasks
             .Where(t => SchedulableStates.Contains(t.State))
             .Where(t => !t.IsPaused)
             .Where(t => !t.HasError || t.RetryCount < t.MaxRetries)
             .Where(t => t.AssignedAgentId == null)
+            .Where(t => t.ChildCount == 0)  // Only schedule leaf tasks
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.State)
             .ThenBy(t => t.CreatedAt)
@@ -76,6 +79,7 @@ public class SchedulerService(
 
     /// <summary>
     /// Handles agent completion and auto-transitions task to next state.
+    /// Also updates parent derived state if task is a child.
     /// </summary>
     public async Task<TaskDto?> HandleAgentCompletionAsync(Guid taskId, AgentCompletionResult result)
     {
@@ -86,13 +90,16 @@ public class SchedulerService(
             return null;
         }
 
+        TaskDto? dto;
         switch (result)
         {
             case AgentCompletionResult.Success:
-                return await HandleSuccessAsync(entity);
+                dto = await HandleSuccessAsync(entity);
+                break;
 
             case AgentCompletionResult.Error:
-                return await HandleErrorAsync(entity);
+                dto = await HandleErrorAsync(entity);
+                break;
 
             case AgentCompletionResult.Cancelled:
                 // Auto-pause to prevent scheduler from restarting
@@ -104,12 +111,51 @@ public class SchedulerService(
 
                 logger.LogInformation("Task {TaskId} agent was cancelled, task paused", taskId);
 
-                var cancelledDto = TaskDto.FromEntity(entity);
-                await sse.EmitTaskPausedAsync(cancelledDto);
-                return cancelledDto;
+                dto = TaskDto.FromEntity(entity);
+                await sse.EmitTaskPausedAsync(dto);
+                break;
 
             default:
-                return TaskDto.FromEntity(entity);
+                dto = TaskDto.FromEntity(entity);
+                break;
+        }
+
+        // Update parent derived state if this is a child task
+        if (entity.ParentId is not null)
+        {
+            await UpdateParentDerivedStateAsync(entity.ParentId.Value);
+        }
+
+        return dto;
+    }
+
+    /// <summary>
+    /// Updates parent's derived state when a child's state changes.
+    /// </summary>
+    private async Task UpdateParentDerivedStateAsync(Guid parentId)
+    {
+        var parent = await db.Tasks
+            .Include(t => t.Children)
+            .FirstOrDefaultAsync(t => t.Id == parentId);
+
+        if (parent is null) return;
+
+        var childStates = parent.Children.Select(c => c.State);
+        var newDerivedState = Tasks.TaskService.ComputeDerivedState(childStates);
+
+        if (parent.DerivedState != newDerivedState)
+        {
+            parent.DerivedState = newDerivedState;
+            parent.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            var progress = Tasks.TaskService.ComputeProgress(childStates);
+            var childDtos = parent.Children.Select(c => TaskDto.FromEntity(c)).ToList();
+            var parentDto = TaskDto.FromEntity(parent, childDtos, progress);
+            await sse.EmitTaskUpdatedAsync(parentDto);
+
+            logger.LogInformation("Parent task {ParentId} derived state updated to {DerivedState}",
+                parentId, newDerivedState);
         }
     }
 
@@ -227,11 +273,13 @@ public class SchedulerService(
     /// </summary>
     public async Task<SchedulerStatusDto> GetStatusAsync(AgentStatusDto agentStatus)
     {
+        // Only count leaf tasks as pending (parent tasks are not schedulable)
         var pendingCount = await db.Tasks
             .Where(t => SchedulableStates.Contains(t.State))
             .Where(t => !t.IsPaused)
             .Where(t => !t.HasError || t.RetryCount < t.MaxRetries)
             .Where(t => t.AssignedAgentId == null)
+            .Where(t => t.ChildCount == 0)
             .CountAsync();
 
         var pausedCount = await db.Tasks

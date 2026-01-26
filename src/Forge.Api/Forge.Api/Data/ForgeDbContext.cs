@@ -28,10 +28,23 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.AssignedAgentId).HasMaxLength(100);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
             entity.Property(e => e.PauseReason).HasMaxLength(500);
+            entity.Property(e => e.DerivedState)
+                .HasConversion<string>()
+                .HasMaxLength(20);
 
             // Index for scheduler queries (schedulable tasks)
             entity.HasIndex(e => new { e.State, e.IsPaused, e.AssignedAgentId })
                 .HasDatabaseName("IX_Tasks_Schedulable");
+
+            // Index for hierarchy queries (children by parent)
+            entity.HasIndex(e => e.ParentId)
+                .HasDatabaseName("IX_Tasks_ParentId");
+
+            // Self-referential relationship for task hierarchy
+            entity.HasOne(e => e.Parent)
+                .WithMany(e => e.Children)
+                .HasForeignKey(e => e.ParentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasMany(e => e.Logs)
                 .WithOne(l => l.Task)

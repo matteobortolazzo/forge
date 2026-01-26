@@ -16,6 +16,8 @@ public interface ISseService
     Task EmitTaskLogAsync(TaskLogDto log);
     Task EmitTaskPausedAsync(TaskDto task);
     Task EmitTaskResumedAsync(TaskDto task);
+    Task EmitTaskSplitAsync(TaskDto parent, IReadOnlyList<TaskDto> children);
+    Task EmitChildAddedAsync(Guid parentId, TaskDto child);
     Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt);
     Task EmitSchedulerTaskScheduledAsync(TaskDto task);
     Task EmitNotificationNewAsync(NotificationDto notification);
@@ -66,6 +68,20 @@ public sealed class SseService : ISseService
     public Task EmitTaskResumedAsync(TaskDto task)
     {
         var evt = new ServerEvent("task:resumed", task, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitTaskSplitAsync(TaskDto parent, IReadOnlyList<TaskDto> children)
+    {
+        var payload = new { parent, children };
+        var evt = new ServerEvent("task:split", payload, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitChildAddedAsync(Guid parentId, TaskDto child)
+    {
+        var payload = new { parentId, child };
+        var evt = new ServerEvent("task:childAdded", payload, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

@@ -42,17 +42,31 @@ public static class TaskEndpoints
 
         group.MapPost("/{id:guid}/resume", ResumeTask)
             .WithName("ResumeTask");
+
+        group.MapPost("/{id:guid}/split", SplitTask)
+            .WithName("SplitTask");
+
+        group.MapPost("/{id:guid}/children", AddChild)
+            .WithName("AddChild");
+
+        group.MapGet("/{id:guid}/children", GetChildren)
+            .WithName("GetChildren");
     }
 
-    private static async Task<IResult> GetAllTasks(TaskService taskService)
+    private static async Task<IResult> GetAllTasks(
+        TaskService taskService,
+        bool rootOnly = false)
     {
-        var tasks = await taskService.GetAllAsync();
+        var tasks = await taskService.GetAllAsync(rootOnly);
         return Results.Ok(tasks);
     }
 
-    private static async Task<IResult> GetTask(Guid id, TaskService taskService)
+    private static async Task<IResult> GetTask(
+        Guid id,
+        TaskService taskService,
+        bool includeChildren = true)
     {
-        var task = await taskService.GetByIdAsync(id);
+        var task = await taskService.GetByIdAsync(id, includeChildren);
         return task is null ? Results.NotFound() : Results.Ok(task);
     }
 
@@ -144,5 +158,42 @@ public static class TaskEndpoints
     {
         var task = await schedulerService.ResumeTaskAsync(id);
         return task is null ? Results.NotFound() : Results.Ok(task);
+    }
+
+    private static async Task<IResult> SplitTask(Guid id, SplitTaskDto dto, TaskService taskService)
+    {
+        try
+        {
+            var result = await taskService.SplitTaskAsync(id, dto);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> AddChild(Guid id, CreateSubtaskDto dto, TaskService taskService)
+    {
+        try
+        {
+            var child = await taskService.AddChildAsync(id, dto);
+            return child is null
+                ? Results.NotFound()
+                : Results.Created($"/api/tasks/{child.Id}", child);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> GetChildren(Guid id, TaskService taskService)
+    {
+        var task = await taskService.GetByIdAsync(id);
+        if (task is null) return Results.NotFound();
+
+        var children = await taskService.GetChildrenAsync(id);
+        return Results.Ok(children);
     }
 }

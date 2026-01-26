@@ -13,7 +13,7 @@ import { LogStore } from '../../core/stores/log.store';
 import { NotificationStore } from '../../core/stores/notification.store';
 import { SseService } from '../../core/services/sse.service';
 import { TaskService } from '../../core/services/task.service';
-import { Task, TaskLog, ServerEvent, PIPELINE_STATES } from '../../shared/models';
+import { Task, TaskLog, ServerEvent, PIPELINE_STATES, PipelineState, TaskSplitPayload, ChildAddedPayload } from '../../shared/models';
 import { StateBadgeComponent } from '../../shared/components/state-badge.component';
 import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
@@ -84,14 +84,53 @@ import { Subscription } from 'rxjs';
               <app-agent-indicator [isRunning]="!!task()!.assignedAgentId" [showLabel]="true" />
             </div>
 
+            <!-- Parent Task Link (for subtasks) -->
+            @if (isSubtask() && parentTask()) {
+              <div class="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M12.207 2.232a.75.75 0 00.025 1.06l4.146 3.958H6.375a5.375 5.375 0 000 10.75H9.25a.75.75 0 000-1.5H6.375a3.875 3.875 0 010-7.75h10.003l-4.146 3.957a.75.75 0 001.036 1.085l5.5-5.25a.75.75 0 000-1.085l-5.5-5.25a.75.75 0 00-1.06.025z" clip-rule="evenodd" />
+                </svg>
+                <span>Subtask of</span>
+                <a
+                  [routerLink]="['/tasks', parentTask()!.id]"
+                  class="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  {{ parentTask()!.title }}
+                </a>
+              </div>
+            }
+
             <!-- Badges -->
             <div class="mt-4 flex flex-wrap items-center gap-2">
-              <app-state-badge [state]="task()!.state" />
+              <app-state-badge [state]="displayState()" />
               <app-priority-badge [priority]="task()!.priority" />
+              @if (isParentTask()) {
+                <span class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                  Parent Task
+                </span>
+              }
               @if (task()!.isPaused) {
                 <app-paused-badge [reason]="task()!.pauseReason" />
               }
             </div>
+
+            <!-- Progress (for parent tasks) -->
+            @if (isParentTask() && task()!.progress) {
+              <div class="mt-4 rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="font-medium text-gray-700 dark:text-gray-300">Subtask Progress</span>
+                  <span class="text-gray-500 dark:text-gray-400">
+                    {{ task()!.progress!.completed }} / {{ task()!.progress!.total }} done
+                  </span>
+                </div>
+                <div class="mt-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                  <div
+                    class="h-2 rounded-full bg-green-500 transition-all"
+                    [style.width.%]="task()!.progress!.percent"
+                  ></div>
+                </div>
+              </div>
+            }
 
             <!-- Error Alert -->
             @if (task()!.hasError && task()!.errorMessage) {
@@ -145,8 +184,80 @@ import { Subscription } from 'rxjs';
               </div>
             </div>
 
+            <!-- Subtasks List (for parent tasks) -->
+            @if (isParentTask() && subtasks().length > 0) {
+              <div class="mt-6">
+                <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Subtasks ({{ subtasks().length }})
+                </h2>
+                <div class="mt-3 space-y-2">
+                  @for (subtask of subtasks(); track subtask.id) {
+                    <a
+                      [routerLink]="['/tasks', subtask.id]"
+                      class="flex items-center gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                      [class.bg-blue-50]="subtask.assignedAgentId"
+                      [class.dark:bg-blue-950/30]="subtask.assignedAgentId"
+                    >
+                      <!-- Checkbox indicator -->
+                      <div
+                        class="flex h-5 w-5 items-center justify-center rounded-full border-2"
+                        [class.border-green-500]="subtask.state === 'Done'"
+                        [class.bg-green-500]="subtask.state === 'Done'"
+                        [class.border-gray-300]="subtask.state !== 'Done'"
+                        [class.dark:border-gray-600]="subtask.state !== 'Done'"
+                      >
+                        @if (subtask.state === 'Done') {
+                          <svg class="h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                          </svg>
+                        }
+                      </div>
+
+                      <!-- Subtask info -->
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                          <span
+                            class="truncate text-sm font-medium text-gray-900 dark:text-gray-100"
+                            [class.line-through]="subtask.state === 'Done'"
+                            [class.text-gray-500]="subtask.state === 'Done'"
+                          >
+                            {{ subtask.title }}
+                          </span>
+                          @if (subtask.hasError) {
+                            <span class="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200">
+                              Error
+                            </span>
+                          }
+                          @if (subtask.assignedAgentId) {
+                            <app-agent-indicator />
+                          }
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-2">
+                          <app-state-badge [state]="subtask.state" />
+                          <app-priority-badge [priority]="subtask.priority" />
+                        </div>
+                      </div>
+
+                      <!-- Arrow -->
+                      <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                      </svg>
+                    </a>
+                  }
+                </div>
+              </div>
+            }
+
             <!-- Action Buttons -->
             <div class="mt-8 space-y-3">
+              <!-- Parent task notice -->
+              @if (isParentTask()) {
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                  <p class="font-medium">This is a parent task</p>
+                  <p class="mt-1">State is automatically derived from subtasks. Manage individual subtasks to progress.</p>
+                </div>
+              }
+
               <!-- State Transition Buttons -->
               <div class="flex gap-2">
                 @if (canMovePrevious()) {
@@ -281,8 +392,45 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
     return t ? this.taskService.getPreviousState(t.state) : null;
   });
 
-  readonly canMoveNext = computed(() => !!this.nextState());
-  readonly canMovePrevious = computed(() => !!this.previousState());
+  readonly canMoveNext = computed(() => {
+    const t = this.task();
+    // Parent tasks cannot be transitioned directly
+    return t && t.childCount === 0 && !!this.nextState();
+  });
+  readonly canMovePrevious = computed(() => {
+    const t = this.task();
+    // Parent tasks cannot be transitioned directly
+    return t && t.childCount === 0 && !!this.previousState();
+  });
+
+  // Hierarchy computed properties
+  readonly isParentTask = computed(() => {
+    const t = this.task();
+    return t ? t.childCount > 0 : false;
+  });
+
+  readonly isSubtask = computed(() => {
+    const t = this.task();
+    return t ? !!t.parentId : false;
+  });
+
+  readonly parentTask = computed(() => {
+    const t = this.task();
+    if (!t?.parentId) return null;
+    return this.taskStore.getTaskById(t.parentId);
+  });
+
+  readonly subtasks = computed(() => {
+    const t = this.task();
+    if (!t || t.childCount === 0) return [];
+    return this.taskStore.getChildrenOf(t.id);
+  });
+
+  readonly displayState = computed((): PipelineState => {
+    const t = this.task();
+    if (!t) return 'Backlog';
+    return t.derivedState ?? t.state;
+  });
 
   ngOnInit(): void {
     this.taskId = this.route.snapshot.paramMap.get('id') || '';
@@ -329,6 +477,16 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
         if (log.taskId === this.taskId) {
           this.logStore.addLog(log);
         }
+        break;
+      }
+      case 'task:split': {
+        const splitPayload = event.payload as TaskSplitPayload;
+        this.taskStore.handleTaskSplitEvent(splitPayload.parent, splitPayload.children);
+        break;
+      }
+      case 'task:childAdded': {
+        const childPayload = event.payload as ChildAddedPayload;
+        this.taskStore.handleChildAddedEvent(childPayload.parentId, childPayload.child);
         break;
       }
     }
