@@ -27,6 +27,11 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .HasMaxLength(20);
             entity.Property(e => e.AssignedAgentId).HasMaxLength(100);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.Property(e => e.PauseReason).HasMaxLength(500);
+
+            // Index for scheduler queries (schedulable tasks)
+            entity.HasIndex(e => new { e.State, e.IsPaused, e.AssignedAgentId })
+                .HasDatabaseName("IX_Tasks_Schedulable");
 
             entity.HasMany(e => e.Logs)
                 .WithOne(l => l.Task)

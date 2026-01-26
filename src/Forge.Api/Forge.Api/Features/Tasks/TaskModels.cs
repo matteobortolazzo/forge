@@ -12,6 +12,11 @@ public record TaskDto(
     string? AssignedAgentId,
     bool HasError,
     string? ErrorMessage,
+    bool IsPaused,
+    string? PauseReason,
+    DateTime? PausedAt,
+    int RetryCount,
+    int MaxRetries,
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
@@ -24,6 +29,11 @@ public record TaskDto(
         entity.AssignedAgentId,
         entity.HasError,
         entity.ErrorMessage,
+        entity.IsPaused,
+        entity.PauseReason,
+        entity.PausedAt,
+        entity.RetryCount,
+        entity.MaxRetries,
         entity.CreatedAt,
         entity.UpdatedAt);
 }

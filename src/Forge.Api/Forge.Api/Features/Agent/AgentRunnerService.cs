@@ -2,6 +2,7 @@ using Claude.CodeSdk;
 using Claude.CodeSdk.ContentBlocks;
 using Claude.CodeSdk.Messages;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
 using Forge.Api.Shared;
 
@@ -12,7 +13,7 @@ public class AgentRunnerService(
     ISseService sse,
     IConfiguration configuration,
     IClaudeAgentClientFactory clientFactory,
-    ILogger<AgentRunnerService> logger)
+    ILogger<AgentRunnerService> logger) : IAgentRunnerService
 {
     private readonly Lock _lock = new();
     private CancellationTokenSource? _cts;
@@ -83,6 +84,8 @@ public class AgentRunnerService(
 
     private async Task RunAgentAsync(Guid taskId, string title, string description, CancellationToken ct)
     {
+        var completionResult = AgentCompletionResult.Success;
+
         try
         {
             var workingDirectory = configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
@@ -114,11 +117,13 @@ public class AgentRunnerService(
 
             // Agent completed successfully
             logger.LogInformation("Agent completed task {TaskId} successfully", taskId);
+            completionResult = AgentCompletionResult.Success;
         }
         catch (OperationCanceledException)
         {
             logger.LogInformation("Agent was cancelled for task {TaskId}", taskId);
             await AddLogAsync(taskId, LogType.Info, "Agent execution was cancelled.");
+            completionResult = AgentCompletionResult.Cancelled;
         }
         catch (Exception ex)
         {
@@ -129,10 +134,11 @@ public class AgentRunnerService(
             using var scope = scopeFactory.CreateScope();
             var taskService = scope.ServiceProvider.GetRequiredService<TaskService>();
             await taskService.SetErrorAsync(taskId, ex.Message);
+            completionResult = AgentCompletionResult.Error;
         }
         finally
         {
-            await CleanupAsync(taskId);
+            await CleanupAsync(taskId, completionResult);
         }
     }
 
@@ -187,7 +193,7 @@ public class AgentRunnerService(
         await taskService.AddLogAsync(taskId, type, content, toolName);
     }
 
-    private async Task CleanupAsync(Guid taskId)
+    private async Task CleanupAsync(Guid taskId, AgentCompletionResult completionResult)
     {
         lock (_lock)
         {
@@ -197,11 +203,15 @@ public class AgentRunnerService(
             _startedAt = null;
         }
 
-        // Clear agent assignment
+        // Clear agent assignment and handle completion via scheduler
         using (var scope = scopeFactory.CreateScope())
         {
             var taskService = scope.ServiceProvider.GetRequiredService<TaskService>();
             await taskService.SetAgentAsync(taskId, null);
+
+            // Let scheduler handle auto-transition based on completion result
+            var schedulerService = scope.ServiceProvider.GetRequiredService<SchedulerService>();
+            await schedulerService.HandleAgentCompletionAsync(taskId, completionResult);
         }
 
         await sse.EmitAgentStatusChangedAsync(false, null, null);

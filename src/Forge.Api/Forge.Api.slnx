@@ -2,6 +2,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Claude.CodeSdk.Tests.Console/Claude.CodeSdk.Tests.Console.csproj" />
     <Project Path="tests/Forge.Api.IntegrationTests/Forge.Api.IntegrationTests.csproj" />
+    <Project Path="tests/Forge.Api.UnitTests/Forge.Api.UnitTests.csproj" />
   </Folder>
   <Project Path="Claude.CodeSdk/Claude.CodeSdk.csproj" />
   <Project Path="Forge.Api/Forge.Api.csproj" />

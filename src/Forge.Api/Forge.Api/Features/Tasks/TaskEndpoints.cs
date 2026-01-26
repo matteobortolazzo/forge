@@ -1,4 +1,5 @@
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.Scheduler;
 
 namespace Forge.Api.Features.Tasks;
 
@@ -35,6 +36,12 @@ public static class TaskEndpoints
 
         group.MapPost("/{id:guid}/start-agent", StartAgent)
             .WithName("StartAgent");
+
+        group.MapPost("/{id:guid}/pause", PauseTask)
+            .WithName("PauseTask");
+
+        group.MapPost("/{id:guid}/resume", ResumeTask)
+            .WithName("ResumeTask");
     }
 
     private static async Task<IResult> GetAllTasks(TaskService taskService)
@@ -89,7 +96,7 @@ public static class TaskEndpoints
         return Results.Ok(logs);
     }
 
-    private static async Task<IResult> AbortAgent(Guid id, TaskService taskService, AgentRunnerService agentRunner)
+    private static async Task<IResult> AbortAgent(Guid id, TaskService taskService, IAgentRunnerService agentRunner)
     {
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
@@ -111,7 +118,7 @@ public static class TaskEndpoints
         return Results.Ok(updatedTask);
     }
 
-    private static async Task<IResult> StartAgent(Guid id, TaskService taskService, AgentRunnerService agentRunner)
+    private static async Task<IResult> StartAgent(Guid id, TaskService taskService, IAgentRunnerService agentRunner)
     {
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
@@ -125,5 +132,17 @@ public static class TaskEndpoints
         // Return updated task
         var updatedTask = await taskService.GetByIdAsync(id);
         return Results.Ok(updatedTask);
+    }
+
+    private static async Task<IResult> PauseTask(Guid id, PauseTaskDto dto, SchedulerService schedulerService)
+    {
+        var task = await schedulerService.PauseTaskAsync(id, dto.Reason);
+        return task is null ? Results.NotFound() : Results.Ok(task);
+    }
+
+    private static async Task<IResult> ResumeTask(Guid id, SchedulerService schedulerService)
+    {
+        var task = await schedulerService.ResumeTaskAsync(id);
+        return task is null ? Results.NotFound() : Results.Ok(task);
     }
 }

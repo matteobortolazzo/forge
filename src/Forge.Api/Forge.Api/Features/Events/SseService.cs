@@ -14,7 +14,10 @@ public interface ISseService
     Task EmitTaskUpdatedAsync(TaskDto task);
     Task EmitTaskDeletedAsync(Guid taskId);
     Task EmitTaskLogAsync(TaskLogDto log);
+    Task EmitTaskPausedAsync(TaskDto task);
+    Task EmitTaskResumedAsync(TaskDto task);
     Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt);
+    Task EmitSchedulerTaskScheduledAsync(TaskDto task);
     Task EmitNotificationNewAsync(NotificationDto notification);
     IAsyncEnumerable<string> GetEventsAsync(CancellationToken ct);
 }
@@ -54,10 +57,28 @@ public sealed class SseService : ISseService
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 
+    public Task EmitTaskPausedAsync(TaskDto task)
+    {
+        var evt = new ServerEvent("task:paused", task, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitTaskResumedAsync(TaskDto task)
+    {
+        var evt = new ServerEvent("task:resumed", task, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
     public Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt)
     {
         var status = new AgentStatusDto(isRunning, taskId, startedAt);
         var evt = new ServerEvent("agent:statusChanged", status, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSchedulerTaskScheduledAsync(TaskDto task)
+    {
+        var evt = new ServerEvent("scheduler:taskScheduled", task, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

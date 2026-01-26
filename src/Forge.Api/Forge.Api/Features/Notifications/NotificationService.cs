@@ -80,4 +80,13 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             NotificationType.Error,
             taskId));
     }
+
+    public async Task NotifyTaskPausedAsync(Guid taskId, string taskTitle, string reason)
+    {
+        await CreateAsync(new CreateNotificationDto(
+            "Task Paused",
+            $"\"{taskTitle}\" was paused: {reason}",
+            NotificationType.Warning,
+            taskId));
+    }
 }

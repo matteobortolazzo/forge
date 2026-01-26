@@ -1,11 +1,13 @@
 using Claude.CodeSdk;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.Scheduler;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Forge.Api.IntegrationTests.Infrastructure;
 
@@ -56,6 +58,9 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
             services.RemoveAll<IClaudeAgentClientFactory>();
             services.AddSingleton(ClientFactoryMock);
 
+            // Remove TaskSchedulerService background service during tests
+            services.RemoveAll<IHostedService>();
+
             // Build service provider to create database
             var sp = services.BuildServiceProvider();
             using var scope = sp.CreateScope();
@@ -75,6 +80,7 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
     public async Task ResetDatabaseAsync()
     {
         await using var db = CreateDbContext();
+        await db.Notifications.ExecuteDeleteAsync();
         await db.TaskLogs.ExecuteDeleteAsync();
         await db.Tasks.ExecuteDeleteAsync();
 

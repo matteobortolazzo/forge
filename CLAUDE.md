@@ -13,9 +13,10 @@ forge/
 ├── src/
 │   ├── Forge.Api/                  # .NET 10 API Solution
 │   │   ├── Forge.Api/              # Main API project
-│   │   │   ├── Features/           # Task, Agent, Events endpoints
-│   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start
+│   │   │   ├── Features/           # Task, Agent, Events, Scheduler endpoints
+│   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start, pause/resume
 │   │   │   │   ├── Agent/          # Agent status, runner service
+│   │   │   │   ├── Scheduler/      # Automatic task scheduling
 │   │   │   │   └── Events/         # SSE endpoint
 │   │   │   ├── Data/               # EF Core DbContext, Entities
 │   │   │   ├── Shared/             # Enums, common types
@@ -41,8 +42,9 @@ forge/
 
 | Feature       | Files                                                                       | Description                                            |
 |---------------|-----------------------------------------------------------------------------|--------------------------------------------------------|
-| Tasks         | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`                       | 9 endpoints for CRUD, transitions, logs, agent control |
+| Tasks         | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`                       | 11 endpoints for CRUD, transitions, logs, agent control, pause/resume |
 | Agent         | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs`              | Agent status, process lifecycle management             |
+| Scheduler     | `SchedulerEndpoints.cs`, `SchedulerService.cs`, `TaskSchedulerService.cs`, `SchedulerModels.cs` | Automatic task scheduling and pipeline progression |
 | Events        | `EventEndpoints.cs`, `SseService.cs`                                        | SSE event broadcasting via channels                    |
 | Notifications | `NotificationEndpoints.cs`, `NotificationService.cs`, `NotificationModels.cs` | Notification CRUD, SSE events                          |
 | Data          | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs`, `NotificationEntity.cs` | EF Core with SQLite                                    |
@@ -165,13 +167,18 @@ app.MapEventEndpoints();
 ```
 Features/
 ├── Tasks/
-│   ├── TaskEndpoints.cs        # 9 endpoints (CRUD, transition, logs, abort, start-agent)
+│   ├── TaskEndpoints.cs        # 11 endpoints (CRUD, transition, logs, abort, start-agent, pause, resume)
 │   ├── TaskService.cs          # Business logic (scoped)
 │   └── TaskModels.cs           # DTOs: TaskDto, CreateTaskDto, UpdateTaskDto, etc.
 ├── Agent/
 │   ├── AgentEndpoints.cs       # GET /status
 │   ├── AgentRunnerService.cs   # Claude Code process lifecycle (singleton)
 │   └── AgentModels.cs          # AgentStatusDto
+├── Scheduler/
+│   ├── SchedulerEndpoints.cs   # 3 endpoints (status, enable, disable)
+│   ├── SchedulerService.cs     # Task selection, completion handling, pause/resume (scoped)
+│   ├── TaskSchedulerService.cs # Background service for automatic scheduling (hosted)
+│   └── SchedulerModels.cs      # DTOs: SchedulerStatusDto, PauseTaskDto, AgentCompletionResult
 ├── Notifications/
 │   ├── NotificationEndpoints.cs  # 4 endpoints (list, mark read, mark all read, unread count)
 │   ├── NotificationService.cs    # Notification CRUD and task event helpers (scoped)
@@ -390,11 +397,20 @@ POST   /api/tasks/{id}/transition   # Transition to new state
 GET    /api/tasks/{id}/logs         # Get task logs
 POST   /api/tasks/{id}/abort        # Abort assigned agent
 POST   /api/tasks/{id}/start-agent  # Start agent execution for task
+POST   /api/tasks/{id}/pause        # Pause task from automatic scheduling
+POST   /api/tasks/{id}/resume       # Resume paused task
 ```
 
 ### Agent
 ```
 GET    /api/agent/status          # Get current agent status
+```
+
+### Scheduler
+```
+GET    /api/scheduler/status      # Get scheduler status (enabled, agent running, pending/paused counts)
+POST   /api/scheduler/enable      # Enable automatic task scheduling
+POST   /api/scheduler/disable     # Disable automatic task scheduling
 ```
 
 ### Events
@@ -433,14 +449,23 @@ Low | Medium | High | Critical
 ### Real-time Updates
 - Protocol: EventSource/SSE (not WebSocket)
 - Payload: Full state on each event (not deltas)
-- Event types: task:created, task:updated, task:deleted, task:log, agent:statusChanged, notification:new
+- Event types: task:created, task:updated, task:deleted, task:log, task:paused, task:resumed, agent:statusChanged, scheduler:taskScheduled, notification:new
 
 ### MVP Scope
 - Single agent execution
-- Manual state transitions via buttons
+- Automatic task scheduling with manual override (pause/resume)
+- Tasks auto-transition through Planning → Implementing → Reviewing → Testing → PrReady on agent completion
 - Basic CRUD for tasks
 - Simple log viewer (no virtual scrolling)
 - No drag-and-drop on Kanban board
+
+### Task Scheduling
+The scheduler automatically picks the highest-priority ready task and starts the agent:
+- **Schedulable States**: Planning, Implementing, Reviewing, Testing
+- **Task Selection**: Priority DESC, then State (Planning first), then CreatedAt ASC
+- **Auto-transition**: On successful agent completion, task moves to next state
+- **Error Handling**: Tasks are auto-paused after 3 failed retry attempts
+- **Human Intervention**: Pause/resume endpoints allow manual control
 
 ### Environment Variables
 ```env

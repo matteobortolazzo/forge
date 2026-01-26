@@ -15,6 +15,13 @@ public class TaskEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    // Scheduling fields
+    public bool IsPaused { get; set; }
+    public string? PauseReason { get; set; }
+    public DateTime? PausedAt { get; set; }
+    public int RetryCount { get; set; }
+    public int MaxRetries { get; set; } = 3;
+
     // Navigation property
     public ICollection<TaskLogEntity> Logs { get; set; } = [];
 }
