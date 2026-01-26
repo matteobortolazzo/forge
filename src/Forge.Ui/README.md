@@ -294,6 +294,47 @@ Templates use `@if`, `@for`, `@switch` syntax (not `*ngIf`, `*ngFor`).
 ### Zoneless Mode
 Application runs without Zone.js for better performance.
 
+## Testing
+
+### Framework: Vitest 4.x
+
+This project uses **Vitest** (NOT Jasmine, NOT Jest) for unit testing.
+
+**Test file location:** `*.spec.ts` files co-located with source files.
+
+**Existing test files:**
+- `core/stores/repository.store.spec.ts`
+- `shared/components/repository-info.component.spec.ts`
+
+**Run tests:**
+```bash
+ng test           # Run tests via Angular CLI (uses Vitest)
+npm run test      # Alternative
+```
+
+**Quick Reference:**
+| Pattern | Vitest Syntax |
+|---------|---------------|
+| Create mock function | `vi.fn()` |
+| Spy on method | `vi.spyOn(obj, 'method')` |
+| Mock return value | `vi.fn().mockReturnValue(value)` |
+| Mock resolved promise | `vi.fn().mockResolvedValue(value)` |
+| Mock observable | `vi.fn().mockReturnValue(of(value))` |
+| Assert called | `expect(mock).toHaveBeenCalled()` |
+
+**Example:**
+```typescript
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
+
+const serviceMock = {
+  getData: vi.fn().mockReturnValue(of(['item1', 'item2'])),
+};
+```
+
+See `src/Forge.Ui/CLAUDE.md` for complete testing patterns.
+
 ## Related Documentation
 
 - [API Integration Guide](./API-INTEGRATION.md) - API endpoints, SSE events, data models

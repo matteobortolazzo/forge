@@ -29,6 +29,11 @@ export interface Task {
   assignedAgentId?: string;
   hasError: boolean;
   errorMessage?: string;
+  isPaused: boolean;
+  pauseReason?: string;
+  pausedAt?: Date;
+  retryCount: number;
+  maxRetries: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,7 +82,10 @@ export type ServerEventType =
   | 'task:updated'
   | 'task:deleted'
   | 'task:log'
+  | 'task:paused'
+  | 'task:resumed'
   | 'agent:statusChanged'
+  | 'scheduler:taskScheduled'
   | 'notification:new';
 
 export interface ServerEvent {
@@ -91,4 +99,29 @@ export interface AgentStatus {
   isRunning: boolean;
   currentTaskId?: string;
   startedAt?: Date;
+}
+
+// Scheduler Status
+export interface SchedulerStatus {
+  isEnabled: boolean;
+  isAgentRunning: boolean;
+  currentTaskId?: string;
+  pendingTaskCount: number;
+  pausedTaskCount: number;
+}
+
+// Pause Task DTO
+export interface PauseTaskDto {
+  reason: string;
+}
+
+// Repository Info
+export interface RepositoryInfo {
+  name: string;
+  path: string;
+  branch?: string;
+  commitHash?: string;
+  remoteUrl?: string;
+  isDirty: boolean;
+  isGitRepository: boolean;
 }

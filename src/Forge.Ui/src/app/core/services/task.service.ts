@@ -7,6 +7,7 @@ import {
   CreateTaskDto,
   UpdateTaskDto,
   TransitionTaskDto,
+  PauseTaskDto,
   AgentStatus,
   PIPELINE_STATES,
   PipelineState,
@@ -49,6 +50,9 @@ export class TaskService {
         priority: dto.priority,
         state: 'Backlog',
         hasError: false,
+        isPaused: false,
+        retryCount: 0,
+        maxRetries: 3,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -144,6 +148,44 @@ export class TaskService {
       return of({ ...updatedTask }).pipe(delay(500));
     }
     return this.http.post<Task>(`${this.apiUrl}/${taskId}/start-agent`, {});
+  }
+
+  pauseTask(taskId: string, dto: PauseTaskDto): Observable<Task> {
+    if (this.useMocks) {
+      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      if (index === -1) {
+        return throwError(() => new Error('Task not found'));
+      }
+      const updatedTask: Task = {
+        ...this.mockTasks[index],
+        isPaused: true,
+        pauseReason: dto.reason,
+        pausedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.mockTasks[index] = updatedTask;
+      return of({ ...updatedTask }).pipe(delay(300));
+    }
+    return this.http.post<Task>(`${this.apiUrl}/${taskId}/pause`, dto);
+  }
+
+  resumeTask(taskId: string): Observable<Task> {
+    if (this.useMocks) {
+      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      if (index === -1) {
+        return throwError(() => new Error('Task not found'));
+      }
+      const updatedTask: Task = {
+        ...this.mockTasks[index],
+        isPaused: false,
+        pauseReason: undefined,
+        pausedAt: undefined,
+        updatedAt: new Date(),
+      };
+      this.mockTasks[index] = updatedTask;
+      return of({ ...updatedTask }).pipe(delay(300));
+    }
+    return this.http.post<Task>(`${this.apiUrl}/${taskId}/resume`, {});
   }
 
   // Helper methods

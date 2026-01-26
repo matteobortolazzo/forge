@@ -2,13 +2,17 @@ import { Component, ChangeDetectionStrategy, inject, signal, OnInit, OnDestroy }
 import { TaskStore } from '../../core/stores/task.store';
 import { LogStore } from '../../core/stores/log.store';
 import { NotificationStore } from '../../core/stores/notification.store';
+import { SchedulerStore } from '../../core/stores/scheduler.store';
+import { RepositoryStore } from '../../core/stores/repository.store';
 import { SseService } from '../../core/services/sse.service';
-import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task, Notification } from '../../shared/models';
+import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task, Notification, AgentStatus } from '../../shared/models';
 import { TaskColumnComponent } from './task-column.component';
 import { CreateTaskDialogComponent } from './create-task-dialog.component';
 import { NotificationPanelComponent } from '../notifications/notification-panel.component';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner.component';
 import { ErrorAlertComponent } from '../../shared/components/error-alert.component';
+import { SchedulerStatusComponent } from '../../shared/components/scheduler-status.component';
+import { RepositoryInfoComponent } from '../../shared/components/repository-info.component';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -20,6 +24,8 @@ import { Subscription } from 'rxjs';
     NotificationPanelComponent,
     LoadingSpinnerComponent,
     ErrorAlertComponent,
+    SchedulerStatusComponent,
+    RepositoryInfoComponent,
   ],
   template: `
     <div class="flex h-screen flex-col bg-gray-100 dark:bg-gray-950">
@@ -32,9 +38,15 @@ import { Subscription } from 'rxjs';
           <span class="text-sm text-gray-500 dark:text-gray-400">
             AI Agent Dashboard
           </span>
+          <div class="h-5 w-px bg-gray-300 dark:bg-gray-700" aria-hidden="true"></div>
+          <app-repository-info />
         </div>
 
         <div class="flex items-center gap-4">
+          <app-scheduler-status />
+
+          <div class="h-5 w-px bg-gray-300 dark:bg-gray-700" aria-hidden="true"></div>
+
           <button
             type="button"
             class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -105,6 +117,8 @@ export class BoardComponent implements OnInit, OnDestroy {
   protected readonly taskStore = inject(TaskStore);
   private readonly logStore = inject(LogStore);
   private readonly notificationStore = inject(NotificationStore);
+  protected readonly schedulerStore = inject(SchedulerStore);
+  private readonly repositoryStore = inject(RepositoryStore);
   private readonly sseService = inject(SseService);
 
   readonly pipelineStates = PIPELINE_STATES;
@@ -115,7 +129,17 @@ export class BoardComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadTasks();
     this.loadNotifications();
+    this.loadSchedulerStatus();
+    this.loadRepositoryInfo();
     this.connectToSse();
+  }
+
+  loadSchedulerStatus(): void {
+    this.schedulerStore.loadStatus();
+  }
+
+  loadRepositoryInfo(): void {
+    this.repositoryStore.loadInfo();
   }
 
   loadNotifications(): void {
@@ -157,6 +181,8 @@ export class BoardComponent implements OnInit, OnDestroy {
     switch (event.type) {
       case 'task:created':
       case 'task:updated':
+      case 'task:paused':
+      case 'task:resumed':
         this.taskStore.updateTaskFromEvent(event.payload as Task);
         break;
       case 'task:deleted':
@@ -165,8 +191,14 @@ export class BoardComponent implements OnInit, OnDestroy {
       case 'task:log':
         this.logStore.addLog(event.payload as TaskLog);
         break;
-      case 'agent:statusChanged':
-        // Handle agent status changes if needed
+      case 'agent:statusChanged': {
+        const agentStatus = event.payload as AgentStatus;
+        this.schedulerStore.updateAgentStatus(agentStatus.isRunning, agentStatus.currentTaskId);
+        break;
+      }
+      case 'scheduler:taskScheduled':
+        this.taskStore.updateTaskFromEvent(event.payload as Task);
+        this.schedulerStore.updateFromScheduledEvent((event.payload as Task).id);
         break;
       case 'notification:new':
         this.notificationStore.addNotificationFromEvent(event.payload as Notification);

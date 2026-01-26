@@ -83,6 +83,7 @@ See `src/Forge.Ui/README.md` for complete component inventory.
 | Database          | SQLite (dev) / PostgreSQL (prod) | -        |
 | ORM               | Entity Framework Core            | 10.x     |
 | Agent Execution   | Claude Code CLI                  | Latest   |
+| Frontend Testing  | Vitest                           | 4.x      |
 
 ## Documentation Sources (Context7)
 
@@ -373,6 +374,58 @@ export class SseService {
 - **Signals**: Use signals for reactive state
 - **Control Flow**: Use @if, @for, @switch (not *ngIf, *ngFor)
 - **Zoneless**: Application runs in zoneless mode
+
+### Frontend Testing
+
+The frontend uses **Vitest 4.x** (NOT Jasmine, NOT Jest) for unit testing.
+
+**Key Patterns:**
+- Test files: `*.spec.ts` co-located with source files
+- Use `vi.fn()` for mocks, NOT `jasmine.createSpy()`
+- Use `vi.spyOn()` for spying, NOT `spyOn()`
+- Import from `vitest` when explicit imports are needed
+- Combine with Angular TestBed for component testing
+
+**Example Component Test:**
+```typescript
+import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MyComponent } from './my.component';
+import { MyService } from '../../core/services/my.service';
+
+describe('MyComponent', () => {
+  let component: MyComponent;
+  let fixture: ComponentFixture<MyComponent>;
+  let serviceMock: { getData: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    serviceMock = {
+      getData: vi.fn().mockReturnValue(of('result')),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [MyComponent],
+      providers: [{ provide: MyService, useValue: serviceMock }],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(MyComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+});
+```
+
+**Vitest vs Jasmine Quick Reference:**
+
+| DO NOT USE (Jasmine)       | USE THIS (Vitest)              |
+|----------------------------|--------------------------------|
+| `jasmine.createSpy()`      | `vi.fn()`                      |
+| `spyOn(obj, 'method')`     | `vi.spyOn(obj, 'method')`      |
+| `jasmine.createSpyObj()`   | Manual mock object with `vi.fn()` |
+| No explicit imports needed | `import { vi } from 'vitest'` |
 
 ## Development Commands
 

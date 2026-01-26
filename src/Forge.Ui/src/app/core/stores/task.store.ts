@@ -55,6 +55,9 @@ export class TaskStore {
   // Computed: tasks with active agents
   readonly tasksWithAgents = computed(() => this.tasks().filter(t => t.assignedAgentId));
 
+  // Computed: paused tasks
+  readonly pausedTasks = computed(() => this.tasks().filter(t => t.isPaused));
+
   // Actions
   async loadTasks(): Promise<void> {
     this.loading.set(true);
@@ -153,6 +156,36 @@ export class TaskStore {
       return updatedTask;
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to start agent');
+      return null;
+    }
+  }
+
+  async pauseTask(id: string, reason: string): Promise<Task | null> {
+    this.error.set(null);
+
+    try {
+      const updatedTask = await firstValueFrom(this.taskService.pauseTask(id, { reason }));
+      this.tasks.update(tasks =>
+        tasks.map(t => (t.id === id ? updatedTask : t))
+      );
+      return updatedTask;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to pause task');
+      return null;
+    }
+  }
+
+  async resumeTask(id: string): Promise<Task | null> {
+    this.error.set(null);
+
+    try {
+      const updatedTask = await firstValueFrom(this.taskService.resumeTask(id));
+      this.tasks.update(tasks =>
+        tasks.map(t => (t.id === id ? updatedTask : t))
+      );
+      return updatedTask;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Failed to resume task');
       return null;
     }
   }

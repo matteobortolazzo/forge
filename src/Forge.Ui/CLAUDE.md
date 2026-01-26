@@ -54,3 +54,91 @@ You are an expert in TypeScript, Angular, and scalable web application developme
 - Design services around a single responsibility
 - Use the `providedIn: 'root'` option for singleton services
 - Use the `inject()` function instead of constructor injection
+
+## Testing
+
+This project uses **Vitest 4.x** for unit testing. Do NOT use Jasmine or Jest patterns.
+
+### Required Patterns
+- Use `vi.fn()` for creating mock functions
+- Use `vi.spyOn(obj, 'method')` for spying on methods
+- Use `vi.mock('module')` for module mocking
+- Import test utilities from `vitest` when explicit imports are needed
+
+### Forbidden Patterns
+- Do NOT use `jasmine.createSpy()` or `jasmine.createSpyObj()`
+- Do NOT use `spyOn()` without the `vi.` prefix
+- Do NOT use Jest-style `jest.fn()` or `jest.mock()`
+
+### Example Component Test
+```typescript
+import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { signal } from '@angular/core';
+import { of } from 'rxjs';
+import { MyComponent } from './my.component';
+import { MyService } from '../../core/services/my.service';
+
+describe('MyComponent', () => {
+  let component: MyComponent;
+  let fixture: ComponentFixture<MyComponent>;
+  let serviceMock: { getData: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    serviceMock = {
+      getData: vi.fn().mockReturnValue(of('result')),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [MyComponent],
+      providers: [{ provide: MyService, useValue: serviceMock }],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(MyComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should call service method', () => {
+    component.loadData();
+    expect(serviceMock.getData).toHaveBeenCalled();
+  });
+});
+```
+
+### Example Store/Service Test
+```typescript
+import { TestBed } from '@angular/core/testing';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { of } from 'rxjs';
+import { MyStore } from './my.store';
+import { MyService } from '../services/my.service';
+
+describe('MyStore', () => {
+  let store: MyStore;
+  let serviceMock: { fetchData: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    serviceMock = {
+      fetchData: vi.fn().mockReturnValue(of([{ id: '1', name: 'Test' }])),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        MyStore,
+        { provide: MyService, useValue: serviceMock },
+      ],
+    });
+
+    store = TestBed.inject(MyStore);
+  });
+
+  it('should load data', () => {
+    store.loadData();
+    expect(store.items()).toHaveLength(1);
+  });
+});
+```

@@ -5,6 +5,7 @@ using Forge.Api.Data;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Notifications;
+using Forge.Api.Features.Repository;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,7 @@ builder.Services.Configure<SchedulerOptions>(builder.Configuration.GetSection(Sc
 builder.Services.AddSingleton<SchedulerState>();
 builder.Services.AddScoped<SchedulerService>();
 builder.Services.AddHostedService<TaskSchedulerService>();
+builder.Services.AddSingleton<RepositoryService>();
 
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
@@ -52,11 +54,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Ensure database is created
+// Apply pending migrations (creates database if not exists)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
 }
 
 // Configure the HTTP request pipeline
@@ -73,5 +75,6 @@ app.MapAgentEndpoints();
 app.MapEventEndpoints();
 app.MapNotificationEndpoints();
 app.MapSchedulerEndpoints();
+app.MapRepositoryEndpoints();
 
 await app.RunAsync();

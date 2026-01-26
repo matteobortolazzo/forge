@@ -17,6 +17,7 @@ import { Task, TaskLog, ServerEvent, PIPELINE_STATES } from '../../shared/models
 import { StateBadgeComponent } from '../../shared/components/state-badge.component';
 import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
+import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 import { ErrorAlertComponent } from '../../shared/components/error-alert.component';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner.component';
 import { AgentOutputComponent } from './agent-output.component';
@@ -30,6 +31,7 @@ import { Subscription } from 'rxjs';
     StateBadgeComponent,
     PriorityBadgeComponent,
     AgentIndicatorComponent,
+    PausedBadgeComponent,
     ErrorAlertComponent,
     LoadingSpinnerComponent,
     AgentOutputComponent,
@@ -86,6 +88,9 @@ import { Subscription } from 'rxjs';
             <div class="mt-4 flex flex-wrap items-center gap-2">
               <app-state-badge [state]="task()!.state" />
               <app-priority-badge [priority]="task()!.priority" />
+              @if (task()!.isPaused) {
+                <app-paused-badge [reason]="task()!.pauseReason" />
+              }
             </div>
 
             <!-- Error Alert -->
@@ -122,6 +127,22 @@ import { Subscription } from 'rxjs';
                   <span class="font-mono text-xs text-gray-700 dark:text-gray-300">{{ task()!.assignedAgentId }}</span>
                 </div>
               }
+              @if (task()!.isPaused) {
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Paused At</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{ formatDate(task()!.pausedAt!) }}</span>
+                </div>
+                @if (task()!.pauseReason) {
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">Pause Reason</span>
+                    <span class="text-gray-700 dark:text-gray-300">{{ task()!.pauseReason }}</span>
+                  </div>
+                }
+              }
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-500 dark:text-gray-400">Retry Count</span>
+                <span class="text-gray-700 dark:text-gray-300">{{ task()!.retryCount }} / {{ task()!.maxRetries }}</span>
+              </div>
             </div>
 
             <!-- Action Buttons -->
@@ -164,6 +185,37 @@ import { Subscription } from 'rxjs';
                     Abort Agent
                   }
                 </button>
+              }
+
+              <!-- Pause/Resume Button -->
+              @if (!task()!.assignedAgentId) {
+                @if (task()!.isPaused) {
+                  <button
+                    type="button"
+                    class="w-full rounded-md border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:border-green-700 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                    (click)="resumeTask()"
+                    [disabled]="isPausing()"
+                  >
+                    @if (isPausing()) {
+                      Resuming...
+                    } @else {
+                      Resume Task
+                    }
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="w-full rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50"
+                    (click)="pauseTask()"
+                    [disabled]="isPausing()"
+                  >
+                    @if (isPausing()) {
+                      Pausing...
+                    } @else {
+                      Pause Task
+                    }
+                  </button>
+                }
               }
 
               <!-- Delete Button -->
@@ -211,6 +263,7 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   readonly isTransitioning = signal(false);
   readonly isAborting = signal(false);
   readonly isDeleting = signal(false);
+  readonly isPausing = signal(false);
 
   private taskId = '';
   private sseSubscription?: Subscription;
@@ -266,14 +319,18 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   private handleSseEvent(event: ServerEvent): void {
     switch (event.type) {
       case 'task:updated':
+      case 'task:paused':
+      case 'task:resumed':
+      case 'scheduler:taskScheduled':
         this.taskStore.updateTaskFromEvent(event.payload as Task);
         break;
-      case 'task:log':
+      case 'task:log': {
         const log = event.payload as TaskLog;
         if (log.taskId === this.taskId) {
           this.logStore.addLog(log);
         }
         break;
+      }
     }
   }
 
@@ -312,6 +369,18 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
     if (success) {
       this.router.navigate(['/']);
     }
+  }
+
+  async pauseTask(): Promise<void> {
+    this.isPausing.set(true);
+    await this.taskStore.pauseTask(this.taskId, 'Manually paused by user');
+    this.isPausing.set(false);
+  }
+
+  async resumeTask(): Promise<void> {
+    this.isPausing.set(true);
+    await this.taskStore.resumeTask(this.taskId);
+    this.isPausing.set(false);
   }
 
   formatDate(date: Date): string {

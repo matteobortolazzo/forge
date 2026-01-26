@@ -1,13 +1,14 @@
-import { Component, ChangeDetectionStrategy, input, output, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Task } from '../../shared/models';
 import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
+import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 
 @Component({
   selector: 'app-task-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, PriorityBadgeComponent, AgentIndicatorComponent],
+  imports: [RouterLink, PriorityBadgeComponent, AgentIndicatorComponent, PausedBadgeComponent],
   template: `
     <a
       [routerLink]="['/tasks', task().id]"
@@ -18,9 +19,14 @@ import { AgentIndicatorComponent } from '../../shared/components/agent-indicator
         <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
           {{ task().title }}
         </h3>
-        @if (task().assignedAgentId) {
-          <app-agent-indicator [isRunning]="true" />
-        }
+        <div class="flex items-center gap-1">
+          @if (task().isPaused) {
+            <app-paused-badge [reason]="task().pauseReason" />
+          }
+          @if (task().assignedAgentId) {
+            <app-agent-indicator [isRunning]="true" />
+          }
+        </div>
       </div>
 
       @if (task().description) {
@@ -71,6 +77,10 @@ export class TaskCardComponent {
 
     if (this.task().hasError) {
       return `${base} border-red-300 dark:border-red-700`;
+    }
+
+    if (this.task().isPaused) {
+      return `${base} border-amber-300 dark:border-amber-700`;
     }
 
     if (this.task().assignedAgentId) {
