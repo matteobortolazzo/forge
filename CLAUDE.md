@@ -39,23 +39,23 @@ forge/
 
 ### Backend (Fully Implemented)
 
-| Feature | Files | Description |
-|---------|-------|-------------|
-| Tasks | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs` | 9 endpoints for CRUD, transitions, logs, agent control |
-| Agent | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs` | Agent status, process lifecycle management |
-| Events | `EventEndpoints.cs`, `SseService.cs` | SSE event broadcasting via channels |
-| Data | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs` | EF Core with SQLite |
-| Shared | `Enums.cs` | TaskState, Priority enums |
+| Feature | Files                                                          | Description                                            |
+|---------|----------------------------------------------------------------|--------------------------------------------------------|
+| Tasks   | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`          | 9 endpoints for CRUD, transitions, logs, agent control |
+| Agent   | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs` | Agent status, process lifecycle management             |
+| Events  | `EventEndpoints.cs`, `SseService.cs`                           | SSE event broadcasting via channels                    |
+| Data    | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs`       | EF Core with SQLite                                    |
+| Shared  | `Enums.cs`                                                     | TaskState, Priority enums                              |
 
 ### Claude.CodeSdk (Fully Implemented)
 
-| Component | Files | Description |
-|-----------|-------|-------------|
-| Client | `ClaudeAgentClient.cs`, `ClaudeAgentOptions.cs` | Main client for CLI interaction |
-| Messages | `SystemMessage.cs`, `UserMessage.cs`, `AssistantMessage.cs`, `ResultMessage.cs` | Strongly-typed message models |
-| Content Blocks | `TextBlock.cs`, `ToolUseBlock.cs`, `ToolResultBlock.cs` | Content block types |
-| Exceptions | `CliNotFoundException.cs`, `ProcessException.cs`, `JsonDecodeException.cs` | Error handling |
-| Internal | `CliProcess.cs`, `MessageParser.cs`, `CommandBuilder.cs`, `CliLocator.cs` | CLI process management |
+| Component      | Files                                                                           | Description                     |
+|----------------|---------------------------------------------------------------------------------|---------------------------------|
+| Client         | `ClaudeAgentClient.cs`, `ClaudeAgentOptions.cs`                                 | Main client for CLI interaction |
+| Messages       | `SystemMessage.cs`, `UserMessage.cs`, `AssistantMessage.cs`, `ResultMessage.cs` | Strongly-typed message models   |
+| Content Blocks | `TextBlock.cs`, `ToolUseBlock.cs`, `ToolResultBlock.cs`                         | Content block types             |
+| Exceptions     | `CliNotFoundException.cs`, `ProcessException.cs`, `JsonDecodeException.cs`      | Error handling                  |
+| Internal       | `CliProcess.cs`, `MessageParser.cs`, `CommandBuilder.cs`, `CliLocator.cs`       | CLI process management          |
 
 ### Frontend (Fully Implemented)
 
@@ -181,6 +181,61 @@ Features/
 - **Scoped Services**: DbContext-dependent (TaskService)
 - **Singleton Services**: Stateless or managing global state (SseService, AgentRunnerService)
 
+### Integration Tests
+
+Located in `src/Forge.Api/tests/Forge.Api.IntegrationTests/`. Uses `WebApplicationFactory` with SQLite in-memory database.
+
+**Project Structure:**
+```
+Forge.Api.IntegrationTests/
+├── Infrastructure/
+│   ├── ForgeWebApplicationFactory.cs  # Test server with mocked services
+│   └── ApiCollection.cs               # Shared fixture collection
+├── Features/
+│   └── Tasks/
+│       ├── CreateTaskTests.cs         # Task creation tests
+│       └── TransitionTaskTests.cs     # State transition tests
+├── Helpers/
+│   ├── HttpClientExtensions.cs        # JSON helpers with shared JsonOptions
+│   ├── TestDatabaseHelper.cs          # Seed data utilities
+│   └── Builders/                       # Test data builders
+└── GlobalUsings.cs
+```
+
+**Key Patterns:**
+
+1. **Shared JSON Options**: Use `HttpClientExtensions.JsonOptions` with built-in HTTP methods:
+```csharp
+// POST with built-in method (System.Net.Http.Json)
+var response = await client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
+
+// PATCH uses custom extension (no built-in equivalent)
+var response = await client.PatchAsJsonAsync("/api/tasks/id", dto);
+
+// Read response body
+var task = await response.ReadAsAsync<TaskDto>();
+```
+
+2. **Test Database Reset**: Each test resets to clean state:
+```csharp
+public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+```
+
+3. **Builder Pattern for Test Data**:
+```csharp
+var dto = new CreateTaskDtoBuilder()
+    .WithTitle("Test Task")
+    .WithPriority(Priority.High)
+    .Build();
+```
+
+4. **Direct Database Verification**:
+```csharp
+await using var db = _factory.CreateDbContext();
+var entity = await db.Tasks.FindAsync(taskId);
+entity.Should().NotBeNull();
+```
+
 ### SSE Implementation
 
 ```csharp
@@ -287,9 +342,10 @@ dotnet run
 # Run with watch
 dotnet watch run
 
-# Run tests (from solution directory)
+
+# Run integration tests (from solution directory)
 cd src/Forge.Api
-dotnet test tests/Forge.Api.Tests
+dotnet test tests/Forge.Api.IntegrationTests
 
 # Database migrations (from Forge.Api project)
 cd src/Forge.Api/Forge.Api

@@ -27,7 +27,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -56,7 +56,7 @@ public class TransitionTaskTests : IAsyncLifetime
         foreach (var state in states)
         {
             var dto = new TransitionTaskDtoBuilder().WithTargetState(state).Build();
-            var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+            var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var task = await response.ReadAsAsync<TaskDto>();
             task!.State.Should().Be(state);
@@ -75,7 +75,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -95,7 +95,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -113,7 +113,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -129,7 +129,7 @@ public class TransitionTaskTests : IAsyncLifetime
 
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{nonExistentId}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{nonExistentId}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -147,7 +147,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskUpdatedAsync(
@@ -168,7 +168,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         var task = await response.ReadAsAsync<TaskDto>();
@@ -187,7 +187,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
@@ -207,7 +207,7 @@ public class TransitionTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto);
+        var response = await _client.PostAsJsonAsync($"/api/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

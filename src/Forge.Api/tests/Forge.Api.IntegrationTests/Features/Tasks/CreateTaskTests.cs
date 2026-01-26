@@ -26,7 +26,7 @@ public class CreateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/tasks", dto);
+        var response = await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -51,7 +51,7 @@ public class CreateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/tasks", dto);
+        var response = await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
         var task = await response.ReadAsAsync<TaskDto>();
 
         // Assert - Verify persistence
@@ -71,7 +71,7 @@ public class CreateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        await _client.PostAsJsonAsync("/api/tasks", dto);
+        await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskCreatedAsync(
@@ -85,7 +85,7 @@ public class CreateTaskTests : IAsyncLifetime
         var dto = new CreateTaskDtoBuilder().Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/tasks", dto);
+        var response = await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
         var task = await response.ReadAsAsync<TaskDto>();
 
         // Assert
@@ -107,7 +107,7 @@ public class CreateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/tasks", dto);
+        var response = await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -123,7 +123,7 @@ public class CreateTaskTests : IAsyncLifetime
         var dto = new CreateTaskDtoBuilder().Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/tasks", dto);
+        var response = await _client.PostAsJsonAsync("/api/tasks", dto, HttpClientExtensions.JsonOptions);
         var afterCreate = DateTime.UtcNow;
 
         // Assert
