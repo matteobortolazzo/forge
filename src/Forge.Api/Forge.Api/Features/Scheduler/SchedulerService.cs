@@ -95,9 +95,18 @@ public class SchedulerService(
                 return await HandleErrorAsync(entity);
 
             case AgentCompletionResult.Cancelled:
-                // Task stays in current state, no retry increment
-                logger.LogInformation("Task {TaskId} agent was cancelled, staying in {State}", taskId, entity.State);
-                return TaskDto.FromEntity(entity);
+                // Auto-pause to prevent scheduler from restarting
+                entity.IsPaused = true;
+                entity.PauseReason = "Manually aborted by user";
+                entity.PausedAt = DateTime.UtcNow;
+                entity.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+
+                logger.LogInformation("Task {TaskId} agent was cancelled, task paused", taskId);
+
+                var cancelledDto = TaskDto.FromEntity(entity);
+                await sse.EmitTaskPausedAsync(cancelledDto);
+                return cancelledDto;
 
             default:
                 return TaskDto.FromEntity(entity);
