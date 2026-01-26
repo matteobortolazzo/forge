@@ -5,6 +5,7 @@ using Forge.Api.Data;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Notifications;
+using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,9 +30,13 @@ builder.Services.AddDbContext<ForgeDbContext>(options =>
 // Services
 builder.Services.AddSingleton<ISseService, SseService>();
 builder.Services.AddSingleton<IClaudeAgentClientFactory, ClaudeAgentClientFactory>();
-builder.Services.AddSingleton<AgentRunnerService>();
+builder.Services.AddSingleton<IAgentRunnerService, AgentRunnerService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.Configure<SchedulerOptions>(builder.Configuration.GetSection(SchedulerOptions.SectionName));
+builder.Services.AddSingleton<SchedulerState>();
+builder.Services.AddScoped<SchedulerService>();
+builder.Services.AddHostedService<TaskSchedulerService>();
 
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
@@ -67,5 +72,6 @@ app.MapTaskEndpoints();
 app.MapAgentEndpoints();
 app.MapEventEndpoints();
 app.MapNotificationEndpoints();
+app.MapSchedulerEndpoints();
 
 await app.RunAsync();

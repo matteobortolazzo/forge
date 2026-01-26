@@ -11,7 +11,7 @@ public static class AgentEndpoints
             .WithName("GetAgentStatus");
     }
 
-    private static IResult GetAgentStatus(AgentRunnerService agentRunner)
+    private static IResult GetAgentStatus(IAgentRunnerService agentRunner)
     {
         var status = agentRunner.GetStatus();
         return Results.Ok(status);
