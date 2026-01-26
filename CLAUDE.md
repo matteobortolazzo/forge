@@ -60,9 +60,14 @@ forge/
 | Exceptions     | `CliNotFoundException.cs`, `ProcessException.cs`, `JsonDecodeException.cs`      | Error handling                  |
 | Internal       | `CliProcess.cs`, `MessageParser.cs`, `CommandBuilder.cs`, `CliLocator.cs`       | CLI process management          |
 
-### Frontend (Fully Implemented)
+### Frontend (Partially Implemented)
 
 See `src/Forge.Ui/README.md` for complete component inventory.
+
+**Note:** Scheduler UI components exist but are not fully integrated:
+- SchedulerService, SchedulerStore, SchedulerStatusComponent, PausedBadgeComponent created
+- Components display with mock data but SSE event handling doesn't update SchedulerStore
+- Pause/resume UI works via TaskStore, but scheduler enable/disable toggle needs real API wiring
 
 ## Tech Stack
 
@@ -124,9 +129,9 @@ For detailed Forge.Ui implementation documentation, see:
 
 **Quick Reference:**
 - **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
-- **5 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner
-- **4 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore
-- **3 services**: TaskService, AgentService, SseService (all with mock mode)
+- **7 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus
+- **5 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore
+- **4 services**: TaskService, AgentService, SseService, SchedulerService (all with mock mode)
 
 ## Backend Patterns
 
