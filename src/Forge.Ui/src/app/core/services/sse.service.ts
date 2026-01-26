@@ -5,7 +5,7 @@ import { ServerEvent, TaskLog, LogType } from '../../shared/models';
 @Injectable({ providedIn: 'root' })
 export class SseService {
   private readonly zone = inject(NgZone);
-  private readonly useMocks = true;
+  private readonly useMocks = false;
   private eventSource: EventSource | null = null;
   private readonly destroy$ = new Subject<void>();
 

@@ -16,7 +16,7 @@ import { MOCK_TASKS, getLogsForTask, getTaskById } from '../mocks/mock-data';
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private readonly http = inject(HttpClient);
-  private readonly useMocks = true;
+  private readonly useMocks = false;
   private readonly apiUrl = '/api/tasks';
 
   // In-memory task store for mock mode

@@ -6,7 +6,7 @@ import { AgentStatus } from '../../shared/models';
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly http = inject(HttpClient);
-  private readonly useMocks = true;
+  private readonly useMocks = false;
   private readonly apiUrl = '/api/agent';
 
   private mockAgentStatus: AgentStatus = {
