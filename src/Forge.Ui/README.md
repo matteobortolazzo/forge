@@ -296,6 +296,18 @@ HTTP service for repository operations.
 - `setDefault(id): Observable<Repository>` - Set as default repository
 - `getInfo(): Observable<Repository>` - Get default repository (legacy)
 
+### NotificationService (`core/services/notification.service.ts`)
+
+HTTP service for notification operations.
+
+**Mock Mode:** Controlled by `useMocks` flag. Uses in-memory notification store with simulated delays.
+
+**Methods:**
+- `getNotifications(limit): Observable<Notification[]>` - Get notifications with optional limit
+- `markAsRead(id): Observable<void>` - Mark notification as read
+- `markAllAsRead(): Observable<{ markedCount: number }>` - Mark all as read
+- `getUnreadCount(): Observable<{ count: number }>` - Get unread count
+
 ## Routes
 
 Defined in `app.routes.ts`:

@@ -26,10 +26,10 @@ export class NotificationStore {
   readonly unreadCount = computed(() => this.unreadNotifications().length);
 
   // Computed: recent notifications (last 10)
+  // Note: notifications are maintained in sorted order (newest first),
+  // so we only need to slice, not sort.
   readonly recentNotifications = computed(() =>
-    [...this.notifications()]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10)
+    this.notifications().slice(0, 10)
   );
 
   // Load notifications from API
@@ -41,11 +41,14 @@ export class NotificationStore {
       const notifications = await firstValueFrom(
         this.notificationService.getNotifications(limit)
       );
-      // Convert date strings to Date objects
-      const parsed = notifications.map(n => ({
-        ...n,
-        createdAt: new Date(n.createdAt),
-      }));
+      // Convert date strings to Date objects and sort by createdAt descending
+      // (API may not return sorted, so we sort once here)
+      const parsed = notifications
+        .map(n => ({
+          ...n,
+          createdAt: new Date(n.createdAt),
+        }))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       this.notifications.set(parsed);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load notifications');
@@ -64,26 +67,26 @@ export class NotificationStore {
   }
 
   // Mark notification as read (optimistic update + API call)
-  markAsRead(id: string): void {
+  async markAsRead(id: string): Promise<void> {
     // Optimistic update
     this.notifications.update(list =>
       list.map(n => (n.id === id ? { ...n, read: true } : n))
     );
 
     // Call API in background
-    this.notificationService.markAsRead(id).subscribe({
-      error: (err) => {
-        console.error('Failed to mark notification as read:', err);
-        // Revert optimistic update on error
-        this.notifications.update(list =>
-          list.map(n => (n.id === id ? { ...n, read: false } : n))
-        );
-      },
-    });
+    try {
+      await firstValueFrom(this.notificationService.markAsRead(id));
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
+      // Revert optimistic update on error
+      this.notifications.update(list =>
+        list.map(n => (n.id === id ? { ...n, read: false } : n))
+      );
+    }
   }
 
   // Mark all notifications as read (optimistic update + API call)
-  markAllAsRead(): void {
+  async markAllAsRead(): Promise<void> {
     // Store previous state for potential revert
     const previousState = this.notifications();
 
@@ -93,13 +96,13 @@ export class NotificationStore {
     );
 
     // Call API in background
-    this.notificationService.markAllAsRead().subscribe({
-      error: (err) => {
-        console.error('Failed to mark all notifications as read:', err);
-        // Revert optimistic update on error
-        this.notifications.set(previousState);
-      },
-    });
+    try {
+      await firstValueFrom(this.notificationService.markAllAsRead());
+    } catch (err) {
+      console.error('Failed to mark all notifications as read:', err);
+      // Revert optimistic update on error
+      this.notifications.set(previousState);
+    }
   }
 
   removeNotification(id: string): void {

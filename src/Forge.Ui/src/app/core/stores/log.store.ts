@@ -39,11 +39,7 @@ export class LogStore {
         throw new Error('Task not found');
       }
       const logs = await firstValueFrom(this.taskService.getTaskLogs(task.repositoryId, taskId));
-      this.logsByTaskId.update(map => {
-        const newMap = new Map(map);
-        newMap.set(taskId, logs);
-        return newMap;
-      });
+      this.setLogsForTask(taskId, logs);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load logs');
     } finally {
@@ -54,12 +50,14 @@ export class LogStore {
   // Add a log from SSE event
   addLog(log: TaskLog): void {
     this.logsByTaskId.update(map => {
-      const newMap = new Map(map);
-      const existingLogs = newMap.get(log.taskId) ?? [];
+      const existingLogs = map.get(log.taskId) ?? [];
       // Avoid duplicates
-      if (!existingLogs.some(l => l.id === log.id)) {
-        newMap.set(log.taskId, [...existingLogs, log]);
+      if (existingLogs.some(l => l.id === log.id)) {
+        return map; // No change needed
       }
+      // Only create new Map when actually adding
+      const newMap = new Map(map);
+      newMap.set(log.taskId, [...existingLogs, log]);
       return newMap;
     });
   }
@@ -67,8 +65,25 @@ export class LogStore {
   // Clear logs for a task
   clearLogsForTask(taskId: string): void {
     this.logsByTaskId.update(map => {
+      if (!map.has(taskId)) {
+        return map; // No change needed
+      }
       const newMap = new Map(map);
       newMap.delete(taskId);
+      return newMap;
+    });
+  }
+
+  // Helper to set logs for a task (avoids copy if unchanged)
+  private setLogsForTask(taskId: string, logs: TaskLog[]): void {
+    this.logsByTaskId.update(map => {
+      const existing = map.get(taskId);
+      // Skip update if same reference (shouldn't happen but safety check)
+      if (existing === logs) {
+        return map;
+      }
+      const newMap = new Map(map);
+      newMap.set(taskId, logs);
       return newMap;
     });
   }

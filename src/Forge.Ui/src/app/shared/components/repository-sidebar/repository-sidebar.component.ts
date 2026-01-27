@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, output, signal } from '@angular/core';
 import { RepositoryStore } from '../../../core/stores/repository.store';
 import { Repository } from '../../models';
 
@@ -93,7 +93,7 @@ export class RepositorySidebarComponent {
   readonly addRepository = output<void>();
   readonly openSettings = output<Repository>();
 
-  private hoveredId: string | null = null;
+  private readonly hoveredId = signal<string | null>(null);
 
   selectRepository(id: string): void {
     this.repositoryStore.setSelectedRepository(id);
@@ -113,14 +113,14 @@ export class RepositorySidebarComponent {
   }
 
   setHovered(id: string): void {
-    this.hoveredId = id;
+    this.hoveredId.set(id);
   }
 
   clearHovered(): void {
-    this.hoveredId = null;
+    this.hoveredId.set(null);
   }
 
   isHovered(id: string): boolean {
-    return this.hoveredId === id;
+    return this.hoveredId() === id;
   }
 }

@@ -75,7 +75,7 @@ export class SseService {
 - **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
 - **13 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo, RepositorySidebar, AddRepositoryDialog, RepositorySettingsDialog
 - **7 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore
-- **6 services**: TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService (all with mock mode)
+- **7 services**: TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService, NotificationService (all with mock mode)
 
 ## Multi-Repository Support
 

@@ -1,9 +1,10 @@
-import { Component, inject, signal, OnInit, ViewChild } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, viewChild } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { RepositorySidebarComponent } from './shared/components/repository-sidebar/repository-sidebar.component';
 import { AddRepositoryDialogComponent } from './shared/components/add-repository-dialog/add-repository-dialog.component';
 import { RepositorySettingsDialogComponent } from './shared/components/repository-settings-dialog/repository-settings-dialog.component';
 import { RepositoryStore } from './core/stores/repository.store';
+import { SseEventDispatcher } from './core/services/sse-event-dispatcher.service';
 import { CreateRepositoryDto, Repository } from './shared/models';
 
 @Component({
@@ -53,11 +54,12 @@ import { CreateRepositoryDto, Repository } from './shared/models';
     }
   `,
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   private readonly repositoryStore = inject(RepositoryStore);
+  private readonly sseEventDispatcher = inject(SseEventDispatcher);
 
-  @ViewChild('addDialog') addDialogRef!: AddRepositoryDialogComponent;
-  @ViewChild('settingsDialog') settingsDialogRef!: RepositorySettingsDialogComponent;
+  readonly addDialogRef = viewChild<AddRepositoryDialogComponent>('addDialog');
+  readonly settingsDialogRef = viewChild<RepositorySettingsDialogComponent>('settingsDialog');
 
   readonly isAddDialogOpen = signal(false);
   readonly isSettingsDialogOpen = signal(false);
@@ -66,6 +68,12 @@ export class App implements OnInit {
   ngOnInit(): void {
     // Load repositories on app start
     this.repositoryStore.loadRepositories();
+    // Connect to SSE for real-time updates
+    this.sseEventDispatcher.connect();
+  }
+
+  ngOnDestroy(): void {
+    this.sseEventDispatcher.disconnect();
   }
 
   openAddDialog(): void {
@@ -74,7 +82,7 @@ export class App implements OnInit {
 
   closeAddDialog(): void {
     this.isAddDialogOpen.set(false);
-    this.addDialogRef?.resetForm();
+    this.addDialogRef()?.resetForm();
   }
 
   openSettingsDialog(repository: Repository): void {
@@ -85,7 +93,7 @@ export class App implements OnInit {
   closeSettingsDialog(): void {
     this.isSettingsDialogOpen.set(false);
     this.settingsRepository.set(null);
-    this.settingsDialogRef?.resetState();
+    this.settingsDialogRef()?.resetState();
   }
 
   async onCreateRepository(dto: CreateRepositoryDto): Promise<void> {
@@ -93,7 +101,7 @@ export class App implements OnInit {
     if (repo) {
       this.closeAddDialog();
     } else {
-      this.addDialogRef?.setError(this.repositoryStore.error() ?? 'Failed to create repository');
+      this.addDialogRef()?.setError(this.repositoryStore.error() ?? 'Failed to create repository');
     }
   }
 
@@ -109,6 +117,6 @@ export class App implements OnInit {
     if (updated) {
       this.settingsRepository.set(updated);
     }
-    this.settingsDialogRef?.resetState();
+    this.settingsDialogRef()?.resetState();
   }
 }
