@@ -6,7 +6,7 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 
 ## Architecture
 
-The system implements a Kanban-style pipeline where tasks flow through stages:
+The system implements a pipeline where tasks flow through stages:
 
 ```
 Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done

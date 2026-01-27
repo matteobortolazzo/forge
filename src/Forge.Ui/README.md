@@ -7,11 +7,10 @@ Angular 21 single-page application for the AI Agent Dashboard. Uses signals for 
 ```
 src/app/
 ├── features/                      # Feature modules (lazy-loaded)
-│   ├── board/                     # Kanban board feature
-│   │   ├── board.component.ts           # Main board view
-│   │   ├── task-column.component.ts     # Column for pipeline state
-│   │   ├── task-card.component.ts       # Task card display
-│   │   └── create-task-dialog.component.ts  # Task creation modal
+│   ├── queue/                     # Task queue feature (primary view)
+│   │   ├── task-queue.component.ts      # Main queue view with table, filters, sorting
+│   │   ├── task-row.component.ts        # Individual task row with hierarchy support
+│   │   └── split-task-dialog.component.ts  # Dialog for splitting tasks into subtasks
 │   ├── task-detail/               # Task detail feature
 │   │   ├── task-detail.component.ts     # Task detail view
 │   │   └── agent-output.component.ts    # Agent log viewer
@@ -22,18 +21,26 @@ src/app/
 │   │   ├── task.store.ts                # Task state management
 │   │   ├── agent.store.ts               # Agent status management
 │   │   ├── log.store.ts                 # Task log management
-│   │   └── notification.store.ts        # Notification management
+│   │   ├── notification.store.ts        # Notification management
+│   │   ├── scheduler.store.ts           # Scheduler state management
+│   │   └── artifact.store.ts            # Artifact management
 │   ├── services/                  # API and infrastructure services
 │   │   ├── task.service.ts              # Task API operations
 │   │   ├── agent.service.ts             # Agent status API
-│   │   └── sse.service.ts               # Server-sent events
+│   │   ├── sse.service.ts               # Server-sent events
+│   │   ├── scheduler.service.ts         # Scheduler API
+│   │   └── artifact.service.ts          # Artifact API
 │   └── mocks/                     # Development mock data
-│       └── mock-data.ts                 # 18 tasks, logs, notifications
+│       └── mock-data.ts                 # Tasks, logs, notifications
 ├── shared/                        # Reusable components and models
 │   ├── components/                # Presentation components
 │   │   ├── state-badge.component.ts     # Pipeline state badge
 │   │   ├── priority-badge.component.ts  # Priority level badge
 │   │   ├── agent-indicator.component.ts # Agent running indicator
+│   │   ├── paused-badge.component.ts    # Paused state indicator
+│   │   ├── scheduler-status.component.ts # Scheduler status display
+│   │   ├── artifact-type-badge.component.ts # Artifact type badge
+│   │   ├── artifact-panel.component.ts  # Artifact display panel
 │   │   ├── error-alert.component.ts     # Error alert display
 │   │   └── loading-spinner.component.ts # Loading spinner
 │   └── models/                    # TypeScript interfaces
@@ -49,10 +56,9 @@ src/app/
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `BoardComponent` | `features/board/` | Main Kanban board view with 7 columns, header, and SSE connection |
-| `TaskColumnComponent` | `features/board/` | Single column displaying tasks for a pipeline state |
-| `TaskCardComponent` | `features/board/` | Task card with title, description preview, badges |
-| `CreateTaskDialogComponent` | `features/board/` | Modal dialog for creating new tasks |
+| `TaskQueueComponent` | `features/queue/` | Main task queue view with table, state/priority filters, sorting, parent/child hierarchy |
+| `TaskRowComponent` | `features/queue/` | Task row displaying title, state, priority, progress, with expand/collapse for subtasks |
+| `SplitTaskDialogComponent` | `features/queue/` | Modal dialog for splitting a task into subtasks |
 | `TaskDetailComponent` | `features/task-detail/` | Task detail view with metadata, actions, and agent output |
 | `AgentOutputComponent` | `features/task-detail/` | Real-time agent log viewer with color-coded entries |
 | `NotificationPanelComponent` | `features/notifications/` | Dropdown panel showing recent notifications |
@@ -64,34 +70,23 @@ src/app/
 | `StateBadgeComponent` | `app-state-badge` | `state: PipelineState` (required) | - |
 | `PriorityBadgeComponent` | `app-priority-badge` | `priority: Priority` (required) | - |
 | `AgentIndicatorComponent` | `app-agent-indicator` | `isRunning: boolean`, `showLabel: boolean` | - |
+| `PausedBadgeComponent` | `app-paused-badge` | `isPaused: boolean` | - |
+| `SchedulerStatusComponent` | `app-scheduler-status` | - | - |
+| `ArtifactTypeBadgeComponent` | `app-artifact-type-badge` | `type: ArtifactType` | - |
+| `ArtifactPanelComponent` | `app-artifact-panel` | `artifact: Artifact` | - |
 | `ErrorAlertComponent` | `app-error-alert` | `title?: string`, `message: string` (required), `dismissible: boolean` | `dismiss: void` |
 | `LoadingSpinnerComponent` | `app-loading-spinner` | `size: 'sm'\|'md'\|'lg'`, `label?: string`, `inline: boolean` | - |
 
-### Component Input/Output Reference
+### Queue Features
 
-**TaskColumnComponent**
-```typescript
-readonly state = input.required<PipelineState>();
-readonly tasks = input.required<Task[]>();
-```
-
-**TaskCardComponent**
-```typescript
-readonly task = input.required<Task>();
-```
-
-**CreateTaskDialogComponent**
-```typescript
-readonly isOpen = input(false);
-readonly create = output<CreateTaskDto>();
-readonly cancel = output<void>();
-```
-
-**AgentOutputComponent**
-```typescript
-readonly logs = input.required<TaskLog[]>();
-readonly autoScroll = input(true);
-```
+The task queue provides:
+- **Table view**: Tasks displayed in a sortable, filterable table
+- **State filter**: Filter by pipeline state (Backlog, Research, Planning, etc.)
+- **Priority filter**: Filter by priority level (Low, Medium, High, Critical)
+- **Sorting**: Sort by title, state, priority, or updated date
+- **Hierarchy display**: Parent tasks expandable to show subtasks
+- **Progress indicators**: Visual progress bars for parent task completion
+- **Quick actions**: Start agent, pause/resume, split task actions in each row
 
 ## State Management
 
@@ -149,6 +144,30 @@ All stores use Angular signals and are provided at root level.
 - `clearLogsForTask(taskId)` - Clear logs for task
 - `clearAllLogs()` - Clear all logs
 
+### SchedulerStore (`core/stores/scheduler.store.ts`)
+
+**Signals:**
+- `isEnabled: Signal<boolean>` - Scheduler enabled state
+- `isAgentRunning: Signal<boolean>` - Agent running state
+- `pendingCount: Signal<number>` - Pending tasks count
+- `pausedCount: Signal<number>` - Paused tasks count
+
+**Actions:**
+- `loadStatus()` - Load scheduler status
+- `enable()` - Enable scheduler
+- `disable()` - Disable scheduler
+- `updateFromEvent(status)` - Update from SSE event
+
+### ArtifactStore (`core/stores/artifact.store.ts`)
+
+**Signals:**
+- `isLoading: Signal<boolean>` - Loading state
+- `artifacts: Signal<Artifact[]>` - Artifacts for current task
+
+**Actions:**
+- `loadForTask(taskId)` - Load artifacts for task
+- `addArtifact(artifact)` - Add artifact from SSE event
+
 ### NotificationStore (`core/stores/notification.store.ts`)
 
 **Signals:**
@@ -163,10 +182,6 @@ All stores use Angular signals and are provided at root level.
 - `markAllAsRead()` - Mark all as read
 - `removeNotification(id)` - Remove notification
 - `clearAll()` - Clear all notifications
-- `notifyTaskCreated(title, taskId)` - Helper for task created
-- `notifyTaskCompleted(title, taskId)` - Helper for task completed
-- `notifyAgentStarted(title, taskId)` - Helper for agent started
-- `notifyAgentError(title, taskId, error)` - Helper for agent error
 
 ## Services
 
@@ -186,23 +201,37 @@ HTTP service for task CRUD operations.
 - `getTaskLogs(taskId): Observable<TaskLog[]>`
 - `startAgent(taskId): Observable<Task>`
 - `abortAgent(taskId): Observable<Task>`
-- `getNextState(currentState): PipelineState | null`
-- `getPreviousState(currentState): PipelineState | null`
+- `pauseTask(taskId): Observable<Task>`
+- `resumeTask(taskId): Observable<Task>`
 
 ### AgentService (`core/services/agent.service.ts`)
 
 HTTP service for agent status.
 
-**Mock Mode:** Enabled by default. Returns simulated agent status.
-
 **Methods:**
 - `getStatus(): Observable<AgentStatus>`
+
+### SchedulerService (`core/services/scheduler.service.ts`)
+
+HTTP service for scheduler control.
+
+**Methods:**
+- `getStatus(): Observable<SchedulerStatus>`
+- `enable(): Observable<void>`
+- `disable(): Observable<void>`
+
+### ArtifactService (`core/services/artifact.service.ts`)
+
+HTTP service for task artifacts.
+
+**Methods:**
+- `getArtifacts(taskId): Observable<Artifact[]>`
+- `getLatestArtifact(taskId): Observable<Artifact>`
+- `getArtifactsByState(taskId, state): Observable<Artifact[]>`
 
 ### SseService (`core/services/sse.service.ts`)
 
 Server-sent events connection management.
-
-**Mock Mode:** Enabled by default. Generates simulated log events every 3 seconds.
 
 **Methods:**
 - `connect(): Observable<ServerEvent>` - Connect to SSE stream
@@ -214,7 +243,7 @@ Defined in `app.routes.ts`:
 
 | Path | Component | Load |
 |------|-----------|------|
-| `/` | `BoardComponent` | Lazy |
+| `/` | `TaskQueueComponent` | Lazy |
 | `/tasks/:id` | `TaskDetailComponent` | Lazy |
 | `**` | Redirect to `/` | - |
 
@@ -224,13 +253,13 @@ Defined in `shared/models/index.ts`:
 
 **Pipeline States:**
 ```typescript
-const PIPELINE_STATES = ['Backlog', 'Planning', 'Implementing', 'Reviewing', 'Testing', 'PrReady', 'Done'] as const;
+const PIPELINE_STATES = ['Backlog', 'Split', 'Research', 'Planning', 'Implementing', 'Simplifying', 'Verifying', 'Reviewing', 'PrReady', 'Done'] as const;
 type PipelineState = (typeof PIPELINE_STATES)[number];
 ```
 
 **Priority Levels:**
 ```typescript
-const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
+const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'] as const;
 type Priority = (typeof PRIORITIES)[number];
 ```
 
@@ -240,21 +269,7 @@ const LOG_TYPES = ['info', 'toolUse', 'toolResult', 'error', 'thinking'] as cons
 type LogType = (typeof LOG_TYPES)[number];
 ```
 
-**Interfaces:** `Task`, `TaskLog`, `Notification`, `CreateTaskDto`, `UpdateTaskDto`, `TransitionTaskDto`, `ServerEvent`, `AgentStatus`
-
-## Mock Data
-
-Located in `core/mocks/mock-data.ts`:
-
-- **18 tasks** distributed across all pipeline states
-- **12 log entries** for active task (task-006)
-- **3 error logs** for task-008
-- **5 notifications** with various types
-
-Helper functions:
-- `getLogsForTask(taskId): TaskLog[]`
-- `getTaskById(taskId): Task | undefined`
-- `getTasksByState(state): Task[]`
+**Interfaces:** `Task`, `TaskLog`, `Notification`, `Artifact`, `CreateTaskDto`, `UpdateTaskDto`, `TransitionTaskDto`, `ServerEvent`, `AgentStatus`, `SchedulerStatus`
 
 ## Development Commands
 
@@ -301,10 +316,6 @@ Application runs without Zone.js for better performance.
 This project uses **Vitest** (NOT Jasmine, NOT Jest) for unit testing.
 
 **Test file location:** `*.spec.ts` files co-located with source files.
-
-**Existing test files:**
-- `core/stores/repository.store.spec.ts`
-- `shared/components/repository-info.component.spec.ts`
 
 **Run tests:**
 ```bash

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents powered by Claude Code CLI. The system implements a Kanban-style pipeline where tasks flow through stages (Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done), with agents executed via stdin/stdout communication with the Claude Code process. The pipeline supports human-in-the-loop oversight through conditional and mandatory approval gates, confidence-based escalation, and git worktree isolation for subtasks.
+Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents powered by Claude Code CLI. The system implements a pipeline where tasks flow through stages (Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done), with agents executed via stdin/stdout communication with the Claude Code process. The pipeline supports human-in-the-loop oversight through conditional and mandatory approval gates, confidence-based escalation, and git worktree isolation for subtasks.
 
 ## Repository Structure
 
@@ -49,7 +49,7 @@ forge/
 │       ├── e2e/                    # Playwright E2E tests
 │       └── src/app/
 │           ├── features/           # Feature folders
-│           │   ├── board/          # Kanban board components
+│           │   ├── queue/          # Task queue view (table with filtering/sorting)
 │           │   ├── task-detail/    # Task detail view with logs
 │           │   └── notifications/  # Notification panel
 │           ├── core/               # Stores, Services, Mocks
