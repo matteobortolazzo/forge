@@ -70,7 +70,7 @@ forge/
 | Backend           | .NET                             | 10.x     |
 | Backend Framework | ASP.NET Core Minimal APIs        | 10.x     |
 | Real-time         | EventSource/SSE                  | Native   |
-| Database          | SQLite (dev) / PostgreSQL (prod) | -        |
+| Database          | SQLite                           | -        |
 | ORM               | Entity Framework Core            | 10.x     |
 | Agent Execution   | Claude Code CLI                  | Latest   |
 | Frontend Testing  | Vitest                           | 4.x      |
