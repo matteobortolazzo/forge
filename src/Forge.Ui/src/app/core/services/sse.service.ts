@@ -2,6 +2,8 @@ import { Injectable, NgZone, inject } from '@angular/core';
 import { Observable, Subject, interval, map, takeUntil, timer } from 'rxjs';
 import { ServerEvent, TaskLog, LogType } from '../../shared/models';
 
+const SSE_ENDPOINT = '/api/events';
+
 @Injectable({ providedIn: 'root' })
 export class SseService {
   private readonly zone = inject(NgZone);
@@ -27,7 +29,7 @@ export class SseService {
   private createRealEventStream(): Observable<ServerEvent> {
     return new Observable(observer => {
       this.zone.runOutsideAngular(() => {
-        this.eventSource = new EventSource('/api/events');
+        this.eventSource = new EventSource(SSE_ENDPOINT);
 
         this.eventSource.onmessage = (event) => {
           this.zone.run(() => {

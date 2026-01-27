@@ -2,11 +2,19 @@ import { Component, ChangeDetectionStrategy, input, output, inject, signal } fro
 import { TitleCasePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CreateTaskDto, Priority, PRIORITIES } from '../../shared/models';
+import {
+  FormFieldComponent,
+  INPUT_CLASSES,
+  TEXTAREA_CLASSES,
+  SELECT_CLASSES,
+  PRIMARY_BUTTON_CLASSES,
+  SECONDARY_BUTTON_CLASSES,
+} from '../../shared/components/form';
 
 @Component({
   selector: 'app-create-task-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, TitleCasePipe],
+  imports: [ReactiveFormsModule, TitleCasePipe, FormFieldComponent],
   template: `
     @if (isOpen()) {
       <div
@@ -33,68 +41,49 @@ import { CreateTaskDto, Priority, PRIORITIES } from '../../shared/models';
 
           <form [formGroup]="form" (ngSubmit)="onSubmit()" class="mt-4 space-y-4">
             <!-- Title -->
-            <div>
-              <label
-                for="title"
-                class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Title
-              </label>
+            <app-form-field
+              id="title"
+              label="Title"
+              [error]="form.controls.title.invalid && form.controls.title.touched ? 'Title is required' : ''"
+            >
               <input
                 id="title"
                 type="text"
                 formControlName="title"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                [class]="inputClasses"
                 placeholder="Enter task title"
               />
-              @if (form.controls.title.invalid && form.controls.title.touched) {
-                <p class="mt-1 text-sm text-red-600 dark:text-red-400">
-                  Title is required
-                </p>
-              }
-            </div>
+            </app-form-field>
 
             <!-- Description -->
-            <div>
-              <label
-                for="description"
-                class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Description
-              </label>
+            <app-form-field id="description" label="Description">
               <textarea
                 id="description"
                 formControlName="description"
                 rows="3"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                [class]="textareaClasses"
                 placeholder="Describe the task"
               ></textarea>
-            </div>
+            </app-form-field>
 
             <!-- Priority -->
-            <div>
-              <label
-                for="priority"
-                class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Priority
-              </label>
+            <app-form-field id="priority" label="Priority">
               <select
                 id="priority"
                 formControlName="priority"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                [class]="selectClasses"
               >
                 @for (p of priorities; track p) {
                   <option [value]="p">{{ p | titlecase }}</option>
                 }
               </select>
-            </div>
+            </app-form-field>
 
             <!-- Actions -->
             <div class="mt-6 flex justify-end gap-3">
               <button
                 type="button"
-                class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                [class]="secondaryButtonClasses"
                 (click)="onCancel()"
               >
                 Cancel
@@ -102,7 +91,7 @@ import { CreateTaskDto, Priority, PRIORITIES } from '../../shared/models';
               <button
                 type="submit"
                 [disabled]="form.invalid || isSubmitting()"
-                class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                [class]="primaryButtonClasses"
               >
                 @if (isSubmitting()) {
                   Creating...
@@ -126,6 +115,13 @@ export class CreateTaskDialogComponent {
 
   readonly priorities: readonly Priority[] = PRIORITIES;
   readonly isSubmitting = signal(false);
+
+  // Shared form classes
+  readonly inputClasses = INPUT_CLASSES;
+  readonly textareaClasses = TEXTAREA_CLASSES;
+  readonly selectClasses = SELECT_CLASSES;
+  readonly primaryButtonClasses = PRIMARY_BUTTON_CLASSES;
+  readonly secondaryButtonClasses = SECONDARY_BUTTON_CLASSES;
 
   readonly form = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.minLength(1)]],

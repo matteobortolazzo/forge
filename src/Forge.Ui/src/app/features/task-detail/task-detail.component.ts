@@ -466,10 +466,14 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
       await this.taskStore.loadTasks();
     }
 
+    // Get repositoryId from the task (after tasks are loaded)
+    const task = this.taskStore.getTaskById(this.taskId);
+    const repositoryId = task?.repositoryId ?? '';
+
     // Load logs and artifacts for this task in parallel
     await Promise.all([
       this.logStore.loadLogsForTask(this.taskId),
-      this.artifactStore.loadArtifactsForTask(this.taskId),
+      this.artifactStore.loadArtifactsForTask(repositoryId, this.taskId),
     ]);
 
     this.isLoading.set(false);

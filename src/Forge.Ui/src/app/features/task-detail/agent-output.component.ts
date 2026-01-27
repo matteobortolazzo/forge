@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, computed, ElementRef, viewChild, effect } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, computed, ElementRef, viewChild, effect, signal, afterRenderEffect } from '@angular/core';
 import { TaskLog, LogType } from '../../shared/models';
 
 @Component({
@@ -96,17 +96,28 @@ export class AgentOutputComponent {
   readonly autoScroll = input(true);
 
   private readonly logContainer = viewChild<ElementRef<HTMLDivElement>>('logContainer');
+  private readonly scrollPending = signal(false);
 
   constructor() {
-    // Auto-scroll to bottom when new logs arrive
+    // Track when new logs arrive and scroll is needed
     effect(() => {
       const logs = this.logs();
-      const container = this.logContainer();
-      if (this.autoScroll() && container && logs.length > 0) {
-        setTimeout(() => {
-          container.nativeElement.scrollTop = container.nativeElement.scrollHeight;
-        }, 0);
+      if (this.autoScroll() && logs.length > 0) {
+        this.scrollPending.set(true);
       }
+    });
+
+    // Perform scroll after render to ensure DOM is updated
+    afterRenderEffect({
+      write: () => {
+        if (this.scrollPending()) {
+          const container = this.logContainer()?.nativeElement;
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+          this.scrollPending.set(false);
+        }
+      },
     });
   }
 

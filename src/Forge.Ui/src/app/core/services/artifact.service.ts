@@ -11,17 +11,19 @@ export class ArtifactService {
   /**
    * Gets all artifacts for a task.
    */
-  getArtifactsForTask(taskId: string): Observable<Artifact[]> {
+  getArtifactsForTask(repositoryId: string, taskId: string): Observable<Artifact[]> {
     if (this.useMocks) {
       return of([]).pipe(delay(200));
     }
-    return this.http.get<Artifact[]>(`/api/tasks/${taskId}/artifacts`);
+    return this.http.get<Artifact[]>(
+      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts`
+    );
   }
 
   /**
    * Gets a specific artifact by ID.
    */
-  getArtifact(taskId: string, artifactId: string): Observable<Artifact> {
+  getArtifact(repositoryId: string, taskId: string, artifactId: string): Observable<Artifact> {
     if (this.useMocks) {
       return of({
         id: artifactId,
@@ -32,13 +34,15 @@ export class ArtifactService {
         createdAt: new Date(),
       } as Artifact).pipe(delay(200));
     }
-    return this.http.get<Artifact>(`/api/tasks/${taskId}/artifacts/${artifactId}`);
+    return this.http.get<Artifact>(
+      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/${artifactId}`
+    );
   }
 
   /**
    * Gets the latest artifact for a task.
    */
-  getLatestArtifact(taskId: string): Observable<Artifact> {
+  getLatestArtifact(repositoryId: string, taskId: string): Observable<Artifact> {
     if (this.useMocks) {
       return of({
         id: 'mock-latest',
@@ -49,16 +53,20 @@ export class ArtifactService {
         createdAt: new Date(),
       } as Artifact).pipe(delay(200));
     }
-    return this.http.get<Artifact>(`/api/tasks/${taskId}/artifacts/latest`);
+    return this.http.get<Artifact>(
+      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/latest`
+    );
   }
 
   /**
    * Gets artifacts by pipeline state.
    */
-  getArtifactsByState(taskId: string, state: string): Observable<Artifact[]> {
+  getArtifactsByState(repositoryId: string, taskId: string, state: string): Observable<Artifact[]> {
     if (this.useMocks) {
       return of([]).pipe(delay(200));
     }
-    return this.http.get<Artifact[]>(`/api/tasks/${taskId}/artifacts/by-state/${state}`);
+    return this.http.get<Artifact[]>(
+      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/by-state/${state}`
+    );
   }
 }

@@ -44,16 +44,14 @@ export class ArtifactStore {
   /**
    * Loads artifacts for a specific task.
    */
-  async loadArtifactsForTask(taskId: string): Promise<void> {
+  async loadArtifactsForTask(repositoryId: string, taskId: string): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const artifacts = await firstValueFrom(this.artifactService.getArtifactsForTask(taskId));
-      this.artifactsByTaskId.update(map => {
-        const newMap = new Map(map);
-        newMap.set(taskId, artifacts);
-        return newMap;
-      });
+      const artifacts = await firstValueFrom(
+        this.artifactService.getArtifactsForTask(repositoryId, taskId)
+      );
+      this.setArtifactsForTask(taskId, artifacts);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load artifacts');
     } finally {
@@ -66,12 +64,14 @@ export class ArtifactStore {
    */
   addArtifactFromEvent(artifact: Artifact): void {
     this.artifactsByTaskId.update(map => {
-      const newMap = new Map(map);
-      const existingArtifacts = newMap.get(artifact.taskId) ?? [];
+      const existingArtifacts = map.get(artifact.taskId) ?? [];
       // Check if artifact already exists
-      if (!existingArtifacts.some(a => a.id === artifact.id)) {
-        newMap.set(artifact.taskId, [...existingArtifacts, artifact]);
+      if (existingArtifacts.some(a => a.id === artifact.id)) {
+        return map; // No change needed
       }
+      // Only create new Map when actually adding
+      const newMap = new Map(map);
+      newMap.set(artifact.taskId, [...existingArtifacts, artifact]);
       return newMap;
     });
   }
@@ -81,8 +81,26 @@ export class ArtifactStore {
    */
   clearArtifactsForTask(taskId: string): void {
     this.artifactsByTaskId.update(map => {
+      if (!map.has(taskId)) {
+        return map; // No change needed
+      }
       const newMap = new Map(map);
       newMap.delete(taskId);
+      return newMap;
+    });
+  }
+
+  /**
+   * Helper to set artifacts for a task (avoids copy if unchanged).
+   */
+  private setArtifactsForTask(taskId: string, artifacts: Artifact[]): void {
+    this.artifactsByTaskId.update(map => {
+      const existing = map.get(taskId);
+      if (existing === artifacts) {
+        return map; // No change needed
+      }
+      const newMap = new Map(map);
+      newMap.set(taskId, artifacts);
       return newMap;
     });
   }

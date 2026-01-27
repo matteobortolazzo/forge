@@ -8,6 +8,14 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Priority, PRIORITIES, CreateSubtaskDto } from '../../shared/models';
+import {
+  INPUT_CLASSES,
+  TEXTAREA_CLASSES,
+  SELECT_CLASSES,
+  PRIMARY_BUTTON_CLASSES,
+  SECONDARY_BUTTON_CLASSES,
+  LABEL_CLASSES,
+} from '../../shared/components/form';
 
 interface SubtaskForm {
   title: string;
@@ -113,14 +121,14 @@ interface SubtaskForm {
                   <div>
                     <label
                       [for]="'subtask-title-' + i"
-                      class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                      [class]="labelClasses"
                     >
                       Title
                     </label>
                     <input
                       type="text"
                       [id]="'subtask-title-' + i"
-                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                      [class]="inputClasses"
                       placeholder="Enter subtask title"
                       [ngModel]="subtask.title"
                       (ngModelChange)="updateSubtask(i, 'title', $event)"
@@ -131,14 +139,14 @@ interface SubtaskForm {
                   <div>
                     <label
                       [for]="'subtask-desc-' + i"
-                      class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                      [class]="labelClasses"
                     >
                       Description
                     </label>
                     <textarea
                       [id]="'subtask-desc-' + i"
                       rows="2"
-                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                      [class]="textareaClasses"
                       placeholder="Enter subtask description"
                       [ngModel]="subtask.description"
                       (ngModelChange)="updateSubtask(i, 'description', $event)"
@@ -149,13 +157,13 @@ interface SubtaskForm {
                   <div>
                     <label
                       [for]="'subtask-priority-' + i"
-                      class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                      [class]="labelClasses"
                     >
                       Priority
                     </label>
                     <select
                       [id]="'subtask-priority-' + i"
-                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                      [class]="selectClasses"
                       [ngModel]="subtask.priority"
                       (ngModelChange)="updateSubtask(i, 'priority', $event)"
                     >
@@ -195,14 +203,14 @@ interface SubtaskForm {
         >
           <button
             type="button"
-            class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+            [class]="secondaryButtonClasses"
             (click)="onCancel()"
           >
             Cancel
           </button>
           <button
             type="button"
-            class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            [class]="primaryButtonClasses"
             [disabled]="!isValid()"
             (click)="onSplit()"
           >
@@ -225,6 +233,14 @@ export class SplitTaskDialogComponent {
     this.createEmptySubtask(),
     this.createEmptySubtask(),
   ]);
+
+  // Shared form classes
+  readonly labelClasses = LABEL_CLASSES;
+  readonly inputClasses = INPUT_CLASSES;
+  readonly textareaClasses = TEXTAREA_CLASSES;
+  readonly selectClasses = SELECT_CLASSES;
+  readonly primaryButtonClasses = PRIMARY_BUTTON_CLASSES;
+  readonly secondaryButtonClasses = SECONDARY_BUTTON_CLASSES;
 
   constructor() {
     // Reset subtasks when dialog opens with new task
