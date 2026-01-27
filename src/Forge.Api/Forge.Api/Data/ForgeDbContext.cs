@@ -6,6 +6,7 @@ namespace Forge.Api.Data;
 
 public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContext(options)
 {
+    public DbSet<RepositoryEntity> Repositories => Set<RepositoryEntity>();
     public DbSet<TaskEntity> Tasks => Set<TaskEntity>();
     public DbSet<TaskLogEntity> TaskLogs => Set<TaskLogEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
@@ -17,6 +18,30 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<RepositoryEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Path).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.Branch).HasMaxLength(200);
+            entity.Property(e => e.CommitHash).HasMaxLength(50);
+            entity.Property(e => e.RemoteUrl).HasMaxLength(500);
+
+            // Unique constraint on Path
+            entity.HasIndex(e => e.Path)
+                .IsUnique()
+                .HasDatabaseName("IX_Repositories_Path");
+
+            // Index for queries on IsDefault and IsActive
+            entity.HasIndex(e => new { e.IsDefault, e.IsActive })
+                .HasDatabaseName("IX_Repositories_Default_Active");
+
+            entity.HasMany(e => e.Tasks)
+                .WithOne(t => t.Repository)
+                .HasForeignKey(t => t.RepositoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<TaskEntity>(entity =>
         {
@@ -43,6 +68,10 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             // Index for hierarchy queries (children by parent)
             entity.HasIndex(e => e.ParentId)
                 .HasDatabaseName("IX_Tasks_ParentId");
+
+            // Index for repository queries
+            entity.HasIndex(e => e.RepositoryId)
+                .HasDatabaseName("IX_Tasks_RepositoryId");
 
             // Self-referential relationship for task hierarchy
             entity.HasOne(e => e.Parent)

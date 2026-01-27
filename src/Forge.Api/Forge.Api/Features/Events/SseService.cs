@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Notifications;
+using Forge.Api.Features.Repositories;
 using Forge.Api.Features.Tasks;
 using Forge.Api.Shared;
 
@@ -45,6 +46,11 @@ public interface ISseService
     // Rollback events
     Task EmitRollbackInitiatedAsync(RollbackDto rollback);
     Task EmitRollbackCompletedAsync(RollbackDto rollback);
+
+    // Repository events
+    Task EmitRepositoryCreatedAsync(RepositoryDto repository);
+    Task EmitRepositoryUpdatedAsync(RepositoryDto repository);
+    Task EmitRepositoryDeletedAsync(Guid repositoryId);
 
     IAsyncEnumerable<string> GetEventsAsync(CancellationToken ct);
 }
@@ -174,6 +180,24 @@ public sealed class SseService : ISseService
     public Task EmitRollbackCompletedAsync(RollbackDto rollback)
     {
         var evt = new ServerEvent("rollback:completed", rollback, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitRepositoryCreatedAsync(RepositoryDto repository)
+    {
+        var evt = new ServerEvent("repository:created", repository, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitRepositoryUpdatedAsync(RepositoryDto repository)
+    {
+        var evt = new ServerEvent("repository:updated", repository, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitRepositoryDeletedAsync(Guid repositoryId)
+    {
+        var evt = new ServerEvent("repository:deleted", new { id = repositoryId }, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

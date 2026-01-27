@@ -7,7 +7,7 @@ using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Mock;
 using Forge.Api.Features.Notifications;
-using Forge.Api.Features.Repository;
+using Forge.Api.Features.Repositories;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Agents;
 using Forge.Api.Features.Tasks;
@@ -60,7 +60,7 @@ builder.Services.Configure<PipelineConfiguration>(builder.Configuration.GetSecti
 builder.Services.AddSingleton<SchedulerState>();
 builder.Services.AddScoped<SchedulerService>();
 builder.Services.AddHostedService<TaskSchedulerService>();
-builder.Services.AddSingleton<RepositoryService>();
+builder.Services.AddScoped<IRepositoryService, RepositoryService>();
 
 // Agent orchestration services
 builder.Services.AddSingleton<IAgentConfigLoader, AgentConfigLoader>();
