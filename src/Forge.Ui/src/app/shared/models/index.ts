@@ -33,6 +33,7 @@ export interface TaskProgress {
 // Task Interface
 export interface Task {
   id: string;
+  repositoryId: string;
   title: string;
   description: string;
   state: PipelineState;
@@ -137,7 +138,10 @@ export type ServerEventType =
   | 'agent:statusChanged'
   | 'scheduler:taskScheduled'
   | 'notification:new'
-  | 'artifact:created';
+  | 'artifact:created'
+  | 'repository:created'
+  | 'repository:updated'
+  | 'repository:deleted';
 
 // SSE Event Payloads
 export interface TaskSplitPayload {
@@ -177,13 +181,34 @@ export interface PauseTaskDto {
   reason: string;
 }
 
-// Repository Info
-export interface RepositoryInfo {
+// Repository Interface (full entity)
+export interface Repository {
+  id: string;
   name: string;
   path: string;
+  isDefault: boolean;
+  isActive: boolean;
   branch?: string;
   commitHash?: string;
   remoteUrl?: string;
-  isDirty: boolean;
+  isDirty?: boolean;
   isGitRepository: boolean;
+  lastRefreshedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  taskCount: number;
 }
+
+// Repository DTOs
+export interface CreateRepositoryDto {
+  name: string;
+  path: string;
+  setAsDefault?: boolean;
+}
+
+export interface UpdateRepositoryDto {
+  name?: string;
+}
+
+// Legacy alias for backward compatibility
+export type RepositoryInfo = Repository;

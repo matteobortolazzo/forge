@@ -27,6 +27,7 @@ import {
   AgentStatus,
   TaskSplitPayload,
   ChildAddedPayload,
+  Repository,
 } from '../../shared/models';
 import { TaskRowComponent } from './task-row.component';
 import { SplitTaskDialogComponent } from './split-task-dialog.component';
@@ -382,10 +383,10 @@ export class TaskQueueComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    this.loadTasks();
+    // Load repositories first, tasks will load automatically when repository is selected
+    this.loadRepositories();
     this.loadNotifications();
     this.loadSchedulerStatus();
-    this.loadRepositoryInfo();
     this.connectToSse();
   }
 
@@ -402,8 +403,8 @@ export class TaskQueueComponent implements OnInit, OnDestroy {
     this.schedulerStore.loadStatus();
   }
 
-  loadRepositoryInfo(): void {
-    this.repositoryStore.loadInfo();
+  loadRepositories(): void {
+    this.repositoryStore.loadRepositories();
   }
 
   loadNotifications(): void {
@@ -515,6 +516,13 @@ export class TaskQueueComponent implements OnInit, OnDestroy {
         this.notificationStore.addNotificationFromEvent(
           event.payload as Notification
         );
+        break;
+      case 'repository:created':
+      case 'repository:updated':
+        this.repositoryStore.updateRepositoryFromEvent(event.payload as Repository);
+        break;
+      case 'repository:deleted':
+        this.repositoryStore.removeRepositoryFromEvent((event.payload as { id: string }).id);
         break;
     }
   }

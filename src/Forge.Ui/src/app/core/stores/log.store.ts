@@ -1,11 +1,13 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { TaskLog } from '../../shared/models';
 import { TaskService } from '../services/task.service';
+import { TaskStore } from './task.store';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class LogStore {
   private readonly taskService = inject(TaskService);
+  private readonly taskStore = inject(TaskStore);
 
   // State: logs grouped by task ID
   private readonly logsByTaskId = signal<Map<string, TaskLog[]>>(new Map());
@@ -32,7 +34,11 @@ export class LogStore {
     this.error.set(null);
 
     try {
-      const logs = await firstValueFrom(this.taskService.getTaskLogs(taskId));
+      const task = this.taskStore.getTaskById(taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const logs = await firstValueFrom(this.taskService.getTaskLogs(task.repositoryId, taskId));
       this.logsByTaskId.update(map => {
         const newMap = new Map(map);
         newMap.set(taskId, logs);

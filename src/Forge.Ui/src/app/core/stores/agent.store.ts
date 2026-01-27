@@ -2,12 +2,14 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { AgentStatus } from '../../shared/models';
 import { AgentService } from '../services/agent.service';
 import { TaskService } from '../services/task.service';
+import { TaskStore } from './task.store';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AgentStore {
   private readonly agentService = inject(AgentService);
   private readonly taskService = inject(TaskService);
+  private readonly taskStore = inject(TaskStore);
 
   // State
   private readonly status = signal<AgentStatus>({
@@ -44,7 +46,11 @@ export class AgentStore {
     this.error.set(null);
 
     try {
-      await firstValueFrom(this.taskService.startAgent(taskId));
+      const task = this.taskStore.getTaskById(taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      await firstValueFrom(this.taskService.startAgent(task.repositoryId, taskId));
       this.status.set({
         isRunning: true,
         currentTaskId: taskId,

@@ -5,7 +5,7 @@ import { NotificationStore } from '../../core/stores/notification.store';
 import { SchedulerStore } from '../../core/stores/scheduler.store';
 import { RepositoryStore } from '../../core/stores/repository.store';
 import { SseService } from '../../core/services/sse.service';
-import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task, Notification, AgentStatus } from '../../shared/models';
+import { PIPELINE_STATES, CreateTaskDto, ServerEvent, TaskLog, Task, Notification, AgentStatus, Repository } from '../../shared/models';
 import { TaskColumnComponent } from './task-column.component';
 import { CreateTaskDialogComponent } from './create-task-dialog.component';
 import { NotificationPanelComponent } from '../notifications/notification-panel.component';
@@ -127,10 +127,10 @@ export class BoardComponent implements OnInit, OnDestroy {
   private sseSubscription?: Subscription;
 
   ngOnInit(): void {
-    this.loadTasks();
+    // Load repositories first, tasks will load automatically when repository is selected
+    this.loadRepositories();
     this.loadNotifications();
     this.loadSchedulerStatus();
-    this.loadRepositoryInfo();
     this.connectToSse();
   }
 
@@ -138,8 +138,8 @@ export class BoardComponent implements OnInit, OnDestroy {
     this.schedulerStore.loadStatus();
   }
 
-  loadRepositoryInfo(): void {
-    this.repositoryStore.loadInfo();
+  loadRepositories(): void {
+    this.repositoryStore.loadRepositories();
   }
 
   loadNotifications(): void {
@@ -202,6 +202,13 @@ export class BoardComponent implements OnInit, OnDestroy {
         break;
       case 'notification:new':
         this.notificationStore.addNotificationFromEvent(event.payload as Notification);
+        break;
+      case 'repository:created':
+      case 'repository:updated':
+        this.repositoryStore.updateRepositoryFromEvent(event.payload as Repository);
+        break;
+      case 'repository:deleted':
+        this.repositoryStore.removeRepositoryFromEvent((event.payload as { id: string }).id);
         break;
     }
   }

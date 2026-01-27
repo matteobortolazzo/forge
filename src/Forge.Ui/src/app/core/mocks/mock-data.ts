@@ -22,11 +22,15 @@ const minutesAgo = (minutes: number) => {
   return date;
 };
 
+// Default mock repository ID
+const MOCK_REPO_ID = 'repo-1';
+
 // Mock Tasks - 18 tasks distributed across all states
 export const MOCK_TASKS: Task[] = [
   // Backlog (3 tasks)
   {
     id: 'task-001',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add user authentication',
     description: 'Implement JWT-based authentication with login, logout, and token refresh functionality.',
     state: 'Backlog',
@@ -41,6 +45,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-002',
+    repositoryId: MOCK_REPO_ID,
     title: 'Create dashboard charts',
     description: 'Add interactive charts showing task completion metrics and agent performance over time.',
     state: 'Backlog',
@@ -55,6 +60,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-003',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add dark mode support',
     description: 'Implement system-wide dark mode toggle with persistent user preference.',
     state: 'Backlog',
@@ -71,6 +77,7 @@ export const MOCK_TASKS: Task[] = [
   // Planning (2 tasks)
   {
     id: 'task-004',
+    repositoryId: MOCK_REPO_ID,
     title: 'Implement drag-and-drop',
     description: 'Allow users to drag tasks between columns on the Kanban board.',
     state: 'Planning',
@@ -85,6 +92,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-005',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add task filtering',
     description: 'Implement filters for priority, assignee, and date range on the board view.',
     state: 'Planning',
@@ -103,6 +111,7 @@ export const MOCK_TASKS: Task[] = [
   // Implementing (3 tasks - one with agent)
   {
     id: 'task-006',
+    repositoryId: MOCK_REPO_ID,
     title: 'Fix API rate limiting',
     description: 'Implement proper rate limiting on all API endpoints to prevent abuse.',
     state: 'Implementing',
@@ -118,6 +127,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-007',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add email notifications',
     description: 'Send email notifications when tasks are assigned or completed.',
     state: 'Implementing',
@@ -132,6 +142,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-008',
+    repositoryId: MOCK_REPO_ID,
     title: 'Improve error handling',
     description: 'Add comprehensive error boundaries and user-friendly error messages.',
     state: 'Implementing',
@@ -151,6 +162,7 @@ export const MOCK_TASKS: Task[] = [
   // Reviewing (3 tasks)
   {
     id: 'task-009',
+    repositoryId: MOCK_REPO_ID,
     title: 'Refactor task service',
     description: 'Simplify the task service API and improve type safety.',
     state: 'Reviewing',
@@ -165,6 +177,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-010',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add loading states',
     description: 'Implement skeleton loaders and loading indicators throughout the app.',
     state: 'Reviewing',
@@ -179,6 +192,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-011',
+    repositoryId: MOCK_REPO_ID,
     title: 'Update API documentation',
     description: 'Add OpenAPI spec and update README with new endpoints.',
     state: 'Reviewing',
@@ -195,6 +209,7 @@ export const MOCK_TASKS: Task[] = [
   // Testing (3 tasks)
   {
     id: 'task-012',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add unit tests for stores',
     description: 'Write comprehensive unit tests for all signal stores.',
     state: 'Testing',
@@ -209,6 +224,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-013',
+    repositoryId: MOCK_REPO_ID,
     title: 'Fix flaky E2E tests',
     description: 'Investigate and fix intermittent failures in Playwright tests.',
     state: 'Testing',
@@ -224,6 +240,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-014',
+    repositoryId: MOCK_REPO_ID,
     title: 'Performance testing',
     description: 'Run load tests and optimize slow database queries.',
     state: 'Testing',
@@ -240,6 +257,7 @@ export const MOCK_TASKS: Task[] = [
   // PR Ready (2 tasks)
   {
     id: 'task-015',
+    repositoryId: MOCK_REPO_ID,
     title: 'Add keyboard shortcuts',
     description: 'Implement keyboard shortcuts for common actions (create task, navigate).',
     state: 'PrReady',
@@ -254,6 +272,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-016',
+    repositoryId: MOCK_REPO_ID,
     title: 'Improve accessibility',
     description: 'Add ARIA labels and improve screen reader support.',
     state: 'PrReady',
@@ -270,6 +289,7 @@ export const MOCK_TASKS: Task[] = [
   // Done (2 tasks)
   {
     id: 'task-017',
+    repositoryId: MOCK_REPO_ID,
     title: 'Setup CI/CD pipeline',
     description: 'Configure GitHub Actions for automated testing and deployment.',
     state: 'Done',
@@ -284,6 +304,7 @@ export const MOCK_TASKS: Task[] = [
   },
   {
     id: 'task-018',
+    repositoryId: MOCK_REPO_ID,
     title: 'Initial project setup',
     description: 'Create Angular project with Tailwind CSS and configure ESLint.',
     state: 'Done',

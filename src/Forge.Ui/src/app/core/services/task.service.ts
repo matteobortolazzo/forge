@@ -8,50 +8,53 @@ import {
   UpdateTaskDto,
   TransitionTaskDto,
   PauseTaskDto,
-  AgentStatus,
   PIPELINE_STATES,
   PipelineState,
   CreateSubtaskDto,
   SplitTaskDto,
   SplitTaskResultDto,
 } from '../../shared/models';
-import { MOCK_TASKS, getLogsForTask, getTaskById } from '../mocks/mock-data';
+import { MOCK_TASKS, getLogsForTask } from '../mocks/mock-data';
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
   private readonly http = inject(HttpClient);
   private readonly useMocks = false;
-  private readonly apiUrl = '/api/tasks';
 
   // In-memory task store for mock mode
   private mockTasks: Task[] = [...MOCK_TASKS];
 
-  getTasks(rootOnly = false): Observable<Task[]> {
+  private getApiUrl(repositoryId: string): string {
+    return `/api/repositories/${repositoryId}/tasks`;
+  }
+
+  getTasks(repositoryId: string, rootOnly = false): Observable<Task[]> {
     if (this.useMocks) {
       const tasks = rootOnly
-        ? this.mockTasks.filter(t => !t.parentId)
-        : this.mockTasks;
+        ? this.mockTasks.filter(t => !t.parentId && t.repositoryId === repositoryId)
+        : this.mockTasks.filter(t => t.repositoryId === repositoryId);
       return of([...tasks]).pipe(delay(300));
     }
     const params = rootOnly ? '?rootOnly=true' : '';
-    return this.http.get<Task[]>(`${this.apiUrl}${params}`);
+    return this.http.get<Task[]>(`${this.getApiUrl(repositoryId)}${params}`);
   }
 
-  getTask(id: string): Observable<Task> {
+  getTask(repositoryId: string, id: string): Observable<Task> {
     if (this.useMocks) {
-      const task = this.mockTasks.find(t => t.id === id);
+      const task = this.mockTasks.find(t => t.id === id && t.repositoryId === repositoryId);
       if (task) {
         return of({ ...task }).pipe(delay(200));
       }
       return throwError(() => new Error('Task not found'));
     }
-    return this.http.get<Task>(`${this.apiUrl}/${id}`);
+    return this.http.get<Task>(`${this.getApiUrl(repositoryId)}/${id}`);
   }
 
-  createTask(dto: CreateTaskDto): Observable<Task> {
+  createTask(repositoryId: string, dto: CreateTaskDto): Observable<Task> {
     if (this.useMocks) {
       const newTask: Task = {
         id: `task-${Date.now()}`,
+        repositoryId,
         title: dto.title,
         description: dto.description,
         priority: dto.priority,
@@ -67,12 +70,12 @@ export class TaskService {
       this.mockTasks = [newTask, ...this.mockTasks];
       return of({ ...newTask }).pipe(delay(300));
     }
-    return this.http.post<Task>(this.apiUrl, dto);
+    return this.http.post<Task>(this.getApiUrl(repositoryId), dto);
   }
 
-  updateTask(id: string, dto: UpdateTaskDto): Observable<Task> {
+  updateTask(repositoryId: string, id: string, dto: UpdateTaskDto): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === id);
+      const index = this.mockTasks.findIndex(t => t.id === id && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -84,24 +87,24 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(200));
     }
-    return this.http.patch<Task>(`${this.apiUrl}/${id}`, dto);
+    return this.http.patch<Task>(`${this.getApiUrl(repositoryId)}/${id}`, dto);
   }
 
-  deleteTask(id: string): Observable<void> {
+  deleteTask(repositoryId: string, id: string): Observable<void> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === id);
+      const index = this.mockTasks.findIndex(t => t.id === id && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
       this.mockTasks = this.mockTasks.filter(t => t.id !== id);
       return of(undefined).pipe(delay(200));
     }
-    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+    return this.http.delete<void>(`${this.getApiUrl(repositoryId)}/${id}`);
   }
 
-  transitionTask(id: string, dto: TransitionTaskDto): Observable<Task> {
+  transitionTask(repositoryId: string, id: string, dto: TransitionTaskDto): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === id);
+      const index = this.mockTasks.findIndex(t => t.id === id && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -113,20 +116,20 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(200));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${id}/transition`, dto);
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${id}/transition`, dto);
   }
 
-  getTaskLogs(taskId: string): Observable<TaskLog[]> {
+  getTaskLogs(repositoryId: string, taskId: string): Observable<TaskLog[]> {
     if (this.useMocks) {
       const logs = getLogsForTask(taskId);
       return of([...logs]).pipe(delay(200));
     }
-    return this.http.get<TaskLog[]>(`${this.apiUrl}/${taskId}/logs`);
+    return this.http.get<TaskLog[]>(`${this.getApiUrl(repositoryId)}/${taskId}/logs`);
   }
 
-  abortAgent(taskId: string): Observable<Task> {
+  abortAgent(repositoryId: string, taskId: string): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      const index = this.mockTasks.findIndex(t => t.id === taskId && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -138,12 +141,12 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(300));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${taskId}/abort`, {});
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${taskId}/abort`, {});
   }
 
-  startAgent(taskId: string): Observable<Task> {
+  startAgent(repositoryId: string, taskId: string): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      const index = this.mockTasks.findIndex(t => t.id === taskId && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -155,12 +158,12 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(500));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${taskId}/start-agent`, {});
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${taskId}/start-agent`, {});
   }
 
-  pauseTask(taskId: string, dto: PauseTaskDto): Observable<Task> {
+  pauseTask(repositoryId: string, taskId: string, dto: PauseTaskDto): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      const index = this.mockTasks.findIndex(t => t.id === taskId && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -174,12 +177,12 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(300));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${taskId}/pause`, dto);
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${taskId}/pause`, dto);
   }
 
-  resumeTask(taskId: string): Observable<Task> {
+  resumeTask(repositoryId: string, taskId: string): Observable<Task> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      const index = this.mockTasks.findIndex(t => t.id === taskId && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
@@ -193,19 +196,20 @@ export class TaskService {
       this.mockTasks[index] = updatedTask;
       return of({ ...updatedTask }).pipe(delay(300));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${taskId}/resume`, {});
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${taskId}/resume`, {});
   }
 
   // Hierarchy methods
-  splitTask(taskId: string, dto: SplitTaskDto): Observable<SplitTaskResultDto> {
+  splitTask(repositoryId: string, taskId: string, dto: SplitTaskDto): Observable<SplitTaskResultDto> {
     if (this.useMocks) {
-      const index = this.mockTasks.findIndex(t => t.id === taskId);
+      const index = this.mockTasks.findIndex(t => t.id === taskId && t.repositoryId === repositoryId);
       if (index === -1) {
         return throwError(() => new Error('Task not found'));
       }
       const parent = this.mockTasks[index];
       const children: Task[] = dto.subtasks.map((subtask, i) => ({
         id: `${taskId}-child-${i}`,
+        repositoryId,
         title: subtask.title,
         description: subtask.description,
         priority: subtask.priority,
@@ -231,17 +235,18 @@ export class TaskService {
       this.mockTasks.push(...children);
       return of({ parent: updatedParent, children }).pipe(delay(300));
     }
-    return this.http.post<SplitTaskResultDto>(`${this.apiUrl}/${taskId}/split`, dto);
+    return this.http.post<SplitTaskResultDto>(`${this.getApiUrl(repositoryId)}/${taskId}/split`, dto);
   }
 
-  addChild(parentId: string, dto: CreateSubtaskDto): Observable<Task> {
+  addChild(repositoryId: string, parentId: string, dto: CreateSubtaskDto): Observable<Task> {
     if (this.useMocks) {
-      const parentIndex = this.mockTasks.findIndex(t => t.id === parentId);
+      const parentIndex = this.mockTasks.findIndex(t => t.id === parentId && t.repositoryId === repositoryId);
       if (parentIndex === -1) {
         return throwError(() => new Error('Parent task not found'));
       }
       const child: Task = {
         id: `${parentId}-child-${Date.now()}`,
+        repositoryId,
         title: dto.title,
         description: dto.description,
         priority: dto.priority,
@@ -261,15 +266,15 @@ export class TaskService {
       parent.updatedAt = new Date();
       return of(child).pipe(delay(300));
     }
-    return this.http.post<Task>(`${this.apiUrl}/${parentId}/children`, dto);
+    return this.http.post<Task>(`${this.getApiUrl(repositoryId)}/${parentId}/children`, dto);
   }
 
-  getChildren(parentId: string): Observable<Task[]> {
+  getChildren(repositoryId: string, parentId: string): Observable<Task[]> {
     if (this.useMocks) {
-      const children = this.mockTasks.filter(t => t.parentId === parentId);
+      const children = this.mockTasks.filter(t => t.parentId === parentId && t.repositoryId === repositoryId);
       return of([...children]).pipe(delay(200));
     }
-    return this.http.get<Task[]>(`${this.apiUrl}/${parentId}/children`);
+    return this.http.get<Task[]>(`${this.getApiUrl(repositoryId)}/${parentId}/children`);
   }
 
   // Helper methods

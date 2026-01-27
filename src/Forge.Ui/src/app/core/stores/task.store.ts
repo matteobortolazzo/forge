@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal, effect } from '@angular/core';
 import {
   Task,
   PipelineState,
@@ -10,11 +10,13 @@ import {
   SplitTaskDto,
 } from '../../shared/models';
 import { TaskService } from '../services/task.service';
+import { RepositoryStore } from './repository.store';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class TaskStore {
   private readonly taskService = inject(TaskService);
+  private readonly repositoryStore = inject(RepositoryStore);
 
   // State
   private readonly tasks = signal<Task[]>([]);
@@ -26,7 +28,14 @@ export class TaskStore {
   readonly errorMessage = this.error.asReadonly();
   readonly allTasks = this.tasks.asReadonly();
 
-  // Computed: tasks grouped by state
+  // Computed: tasks for the selected repository only
+  readonly repositoryTasks = computed(() => {
+    const repoId = this.repositoryStore.selectedId();
+    if (!repoId) return [];
+    return this.tasks().filter(t => t.repositoryId === repoId);
+  });
+
+  // Computed: tasks grouped by state (for selected repository)
   readonly tasksByState = computed(() => {
     const grouped: Record<PipelineState, Task[]> = {} as Record<PipelineState, Task[]>;
 
@@ -36,7 +45,7 @@ export class TaskStore {
     }
 
     // Group tasks by state
-    for (const task of this.tasks()) {
+    for (const task of this.repositoryTasks()) {
       grouped[task.state].push(task);
     }
 
@@ -55,25 +64,25 @@ export class TaskStore {
     return counts;
   });
 
-  // Computed: total task count
-  readonly totalTaskCount = computed(() => this.tasks().length);
+  // Computed: total task count (for selected repository)
+  readonly totalTaskCount = computed(() => this.repositoryTasks().length);
 
   // Computed: tasks with errors
-  readonly tasksWithErrors = computed(() => this.tasks().filter(t => t.hasError));
+  readonly tasksWithErrors = computed(() => this.repositoryTasks().filter(t => t.hasError));
 
   // Computed: tasks with active agents
-  readonly tasksWithAgents = computed(() => this.tasks().filter(t => t.assignedAgentId));
+  readonly tasksWithAgents = computed(() => this.repositoryTasks().filter(t => t.assignedAgentId));
 
   // Computed: paused tasks
-  readonly pausedTasks = computed(() => this.tasks().filter(t => t.isPaused));
+  readonly pausedTasks = computed(() => this.repositoryTasks().filter(t => t.isPaused));
 
   // Computed: root tasks only (tasks without parents)
-  readonly rootTasks = computed(() => this.tasks().filter(t => !t.parentId));
+  readonly rootTasks = computed(() => this.repositoryTasks().filter(t => !t.parentId));
 
   // Computed: children grouped by parent ID
   readonly childrenByParent = computed(() => {
     const map = new Map<string, Task[]>();
-    for (const task of this.tasks()) {
+    for (const task of this.repositoryTasks()) {
       if (task.parentId) {
         const children = map.get(task.parentId) ?? [];
         children.push(task);
@@ -84,10 +93,20 @@ export class TaskStore {
   });
 
   // Computed: leaf tasks only (tasks without children)
-  readonly leafTasks = computed(() => this.tasks().filter(t => t.childCount === 0));
+  readonly leafTasks = computed(() => this.repositoryTasks().filter(t => t.childCount === 0));
 
   // Computed: parent tasks only (tasks with children)
-  readonly parentTasks = computed(() => this.tasks().filter(t => t.childCount > 0));
+  readonly parentTasks = computed(() => this.repositoryTasks().filter(t => t.childCount > 0));
+
+  constructor() {
+    // Auto-reload tasks when selected repository changes
+    effect(() => {
+      const repoId = this.repositoryStore.selectedId();
+      if (repoId) {
+        this.loadTasks();
+      }
+    });
+  }
 
   // Get children for a specific parent
   getChildrenOf(parentId: string): Task[] {
@@ -109,14 +128,33 @@ export class TaskStore {
     return task.childCount > 0;
   }
 
+  // Helper to get current repository ID
+  private getRepositoryId(): string {
+    const repoId = this.repositoryStore.selectedId();
+    if (!repoId) {
+      throw new Error('No repository selected');
+    }
+    return repoId;
+  }
+
   // Actions
   async loadTasks(): Promise<void> {
+    const repoId = this.repositoryStore.selectedId();
+    if (!repoId) {
+      this.tasks.set([]);
+      return;
+    }
+
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      const tasks = await firstValueFrom(this.taskService.getTasks());
-      this.tasks.set(tasks);
+      const tasks = await firstValueFrom(this.taskService.getTasks(repoId));
+      // Replace tasks for this repository, keep tasks from other repositories
+      this.tasks.update(existing => {
+        const otherRepoTasks = existing.filter(t => t.repositoryId !== repoId);
+        return [...otherRepoTasks, ...tasks];
+      });
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
@@ -128,7 +166,8 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const newTask = await firstValueFrom(this.taskService.createTask(dto));
+      const repoId = this.getRepositoryId();
+      const newTask = await firstValueFrom(this.taskService.createTask(repoId, dto));
       this.tasks.update(tasks => [newTask, ...tasks]);
       return newTask;
     } catch (err) {
@@ -141,7 +180,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const updatedTask = await firstValueFrom(this.taskService.updateTask(id, dto));
+      const task = this.tasks().find(t => t.id === id);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const updatedTask = await firstValueFrom(this.taskService.updateTask(task.repositoryId, id, dto));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -156,7 +199,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      await firstValueFrom(this.taskService.deleteTask(id));
+      const task = this.tasks().find(t => t.id === id);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      await firstValueFrom(this.taskService.deleteTask(task.repositoryId, id));
       this.tasks.update(tasks => tasks.filter(t => t.id !== id));
       return true;
     } catch (err) {
@@ -169,8 +216,12 @@ export class TaskStore {
     this.error.set(null);
 
     try {
+      const task = this.tasks().find(t => t.id === id);
+      if (!task) {
+        throw new Error('Task not found');
+      }
       const dto: TransitionTaskDto = { targetState };
-      const updatedTask = await firstValueFrom(this.taskService.transitionTask(id, dto));
+      const updatedTask = await firstValueFrom(this.taskService.transitionTask(task.repositoryId, id, dto));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -185,7 +236,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const updatedTask = await firstValueFrom(this.taskService.abortAgent(taskId));
+      const task = this.tasks().find(t => t.id === taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const updatedTask = await firstValueFrom(this.taskService.abortAgent(task.repositoryId, taskId));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === taskId ? updatedTask : t))
       );
@@ -200,7 +255,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const updatedTask = await firstValueFrom(this.taskService.startAgent(taskId));
+      const task = this.tasks().find(t => t.id === taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const updatedTask = await firstValueFrom(this.taskService.startAgent(task.repositoryId, taskId));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === taskId ? updatedTask : t))
       );
@@ -215,7 +274,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const updatedTask = await firstValueFrom(this.taskService.pauseTask(id, { reason }));
+      const task = this.tasks().find(t => t.id === id);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const updatedTask = await firstValueFrom(this.taskService.pauseTask(task.repositoryId, id, { reason }));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -230,7 +293,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const updatedTask = await firstValueFrom(this.taskService.resumeTask(id));
+      const task = this.tasks().find(t => t.id === id);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      const updatedTask = await firstValueFrom(this.taskService.resumeTask(task.repositoryId, id));
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -267,8 +334,12 @@ export class TaskStore {
     this.error.set(null);
 
     try {
+      const task = this.tasks().find(t => t.id === taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
       const dto: SplitTaskDto = { subtasks };
-      const result = await firstValueFrom(this.taskService.splitTask(taskId, dto));
+      const result = await firstValueFrom(this.taskService.splitTask(task.repositoryId, taskId, dto));
 
       // Update parent and add children to the store
       this.tasks.update(tasks => {
@@ -289,7 +360,11 @@ export class TaskStore {
     this.error.set(null);
 
     try {
-      const child = await firstValueFrom(this.taskService.addChild(parentId, dto));
+      const parent = this.tasks().find(t => t.id === parentId);
+      if (!parent) {
+        throw new Error('Parent task not found');
+      }
+      const child = await firstValueFrom(this.taskService.addChild(parent.repositoryId, parentId, dto));
 
       // Add child to store and update parent's childCount
       this.tasks.update(tasks => {
