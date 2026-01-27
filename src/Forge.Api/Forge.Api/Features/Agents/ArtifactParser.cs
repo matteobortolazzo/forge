@@ -17,6 +17,21 @@ public interface IArtifactParser
     /// Extracts the recommended next state from agent output.
     /// </summary>
     PipelineState? ParseRecommendedNextState(string agentOutput);
+
+    /// <summary>
+    /// Extracts the confidence score from agent output.
+    /// </summary>
+    decimal? ParseConfidenceScore(string agentOutput);
+
+    /// <summary>
+    /// Checks if the agent requested human input.
+    /// </summary>
+    (bool Requested, string? Reason) ParseHumanInputRequest(string agentOutput);
+
+    /// <summary>
+    /// Extracts the verdict from a simplification review.
+    /// </summary>
+    string? ParseSimplificationVerdict(string agentOutput);
 }
 
 /// <summary>
@@ -24,7 +39,10 @@ public interface IArtifactParser
 /// </summary>
 public record ParsedArtifact(
     ArtifactType Type,
-    string Content
+    string Content,
+    decimal? ConfidenceScore = null,
+    bool HumanInputRequested = false,
+    string? HumanInputReason = null
 );
 
 /// <summary>
@@ -42,6 +60,10 @@ public partial class ArtifactParser : IArtifactParser
         "# Code Review",
         "# Angular Code Review",
         "# Testing Report",
+        "# Research Findings",
+        "# Task Split",
+        "# Simplification Review",
+        "# Verification Report",
     ];
 
     public ArtifactParser(ILogger<ArtifactParser> logger)
@@ -67,9 +89,14 @@ public partial class ArtifactParser : IArtifactParser
             content = agentOutput;
         }
 
-        _logger.LogDebug("Parsed artifact of type {Type} with {Length} characters", artifactType, content.Length);
+        // Extract confidence score and human input request
+        var confidenceScore = ParseConfidenceScore(agentOutput);
+        var (humanInputRequested, humanInputReason) = ParseHumanInputRequest(agentOutput);
 
-        return new ParsedArtifact(artifactType, content);
+        _logger.LogDebug("Parsed artifact of type {Type} with {Length} characters, confidence: {Confidence}, human input: {HumanInput}",
+            artifactType, content.Length, confidenceScore, humanInputRequested);
+
+        return new ParsedArtifact(artifactType, content, confidenceScore, humanInputRequested, humanInputReason);
     }
 
     public PipelineState? ParseRecommendedNextState(string agentOutput)
@@ -101,6 +128,67 @@ public partial class ArtifactParser : IArtifactParser
         return null;
     }
 
+    public decimal? ParseConfidenceScore(string agentOutput)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput))
+            return null;
+
+        // Look for confidence_score in YAML format
+        var match = ConfidenceScoreRegex().Match(agentOutput);
+        if (match.Success && decimal.TryParse(match.Groups[1].Value, out var score))
+        {
+            // Ensure score is between 0 and 1
+            if (score is >= 0 and <= 1)
+            {
+                _logger.LogDebug("Parsed confidence score: {Score}", score);
+                return score;
+            }
+        }
+
+        return null;
+    }
+
+    public (bool Requested, string? Reason) ParseHumanInputRequest(string agentOutput)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput))
+            return (false, null);
+
+        // Look for human_input_requested in YAML format
+        var requestedMatch = HumanInputRequestedRegex().Match(agentOutput);
+        if (requestedMatch.Success)
+        {
+            var value = requestedMatch.Groups[1].Value.Trim().ToLowerInvariant();
+            if (value is "true" or "yes")
+            {
+                // Try to find the reason
+                var reasonMatch = HumanInputReasonRegex().Match(agentOutput);
+                var reason = reasonMatch.Success ? reasonMatch.Groups[1].Value.Trim() : null;
+
+                _logger.LogDebug("Human input requested: {Reason}", reason);
+                return (true, reason);
+            }
+        }
+
+        return (false, null);
+    }
+
+    public string? ParseSimplificationVerdict(string agentOutput)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput))
+            return null;
+
+        // Look for verdict in YAML format
+        var match = VerdictRegex().Match(agentOutput);
+        if (match.Success)
+        {
+            var verdict = match.Groups[1].Value.Trim().Trim('"');
+            _logger.LogDebug("Parsed verdict: {Verdict}", verdict);
+            return verdict;
+        }
+
+        return null;
+    }
+
     private static ArtifactType GetArtifactType(AgentConfig config)
     {
         // First check explicit output type in config
@@ -108,8 +196,12 @@ public partial class ArtifactParser : IArtifactParser
         {
             return config.Output.Type.ToLowerInvariant() switch
             {
+                "task_split" => ArtifactType.TaskSplit,
+                "research_findings" => ArtifactType.ResearchFindings,
                 "plan" => ArtifactType.Plan,
                 "implementation" => ArtifactType.Implementation,
+                "simplification_review" => ArtifactType.SimplificationReview,
+                "verification_report" => ArtifactType.VerificationReport,
                 "review" => ArtifactType.Review,
                 "test" => ArtifactType.Test,
                 _ => ArtifactType.General
@@ -119,10 +211,13 @@ public partial class ArtifactParser : IArtifactParser
         // Fall back to inferring from state
         return config.State switch
         {
+            PipelineState.Split => ArtifactType.TaskSplit,
+            PipelineState.Research => ArtifactType.ResearchFindings,
             PipelineState.Planning => ArtifactType.Plan,
             PipelineState.Implementing => ArtifactType.Implementation,
+            PipelineState.Simplifying => ArtifactType.SimplificationReview,
+            PipelineState.Verifying => ArtifactType.VerificationReport,
             PipelineState.Reviewing => ArtifactType.Review,
-            PipelineState.Testing => ArtifactType.Test,
             _ => ArtifactType.General
         };
     }
@@ -169,4 +264,17 @@ public partial class ArtifactParser : IArtifactParser
 
     [GeneratedRegex(@"^# .+$", RegexOptions.Multiline)]
     private static partial Regex MarkdownHeaderRegex();
+
+    // New patterns for confidence, human input, and verdict parsing
+    [GeneratedRegex(@"confidence_score:\s*([\d.]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ConfidenceScoreRegex();
+
+    [GeneratedRegex(@"human_input_requested:\s*(\w+)", RegexOptions.IgnoreCase)]
+    private static partial Regex HumanInputRequestedRegex();
+
+    [GeneratedRegex(@"human_input_reason:\s*[""']?([^""'\n]+)[""']?", RegexOptions.IgnoreCase)]
+    private static partial Regex HumanInputReasonRegex();
+
+    [GeneratedRegex(@"verdict:\s*[""']?(\w+)[""']?", RegexOptions.IgnoreCase)]
+    private static partial Regex VerdictRegex();
 }

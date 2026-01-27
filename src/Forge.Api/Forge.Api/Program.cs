@@ -11,6 +11,11 @@ using Forge.Api.Features.Repository;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Agents;
 using Forge.Api.Features.Tasks;
+using Forge.Api.Features.Worktree;
+using Forge.Api.Features.Rollback;
+using Forge.Api.Features.Subtasks;
+using Forge.Api.Features.HumanGates;
+using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,6 +55,7 @@ builder.Services.AddSingleton<IAgentRunnerService, AgentRunnerService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.Configure<SchedulerOptions>(builder.Configuration.GetSection(SchedulerOptions.SectionName));
+builder.Services.Configure<PipelineConfiguration>(builder.Configuration.GetSection(PipelineConfiguration.SectionName));
 builder.Services.AddSingleton<SchedulerState>();
 builder.Services.AddScoped<SchedulerService>();
 builder.Services.AddHostedService<TaskSchedulerService>();
@@ -61,6 +67,10 @@ builder.Services.AddSingleton<IContextDetector, ContextDetector>();
 builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
 builder.Services.AddSingleton<IArtifactParser, ArtifactParser>();
 builder.Services.AddSingleton<IOrchestratorService, OrchestratorService>();
+builder.Services.AddSingleton<IWorktreeService, WorktreeService>();
+builder.Services.AddScoped<IRollbackService, RollbackService>();
+builder.Services.AddScoped<SubtaskService>();
+builder.Services.AddScoped<HumanGateService>();
 
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
@@ -102,6 +112,8 @@ app.MapEventEndpoints();
 app.MapNotificationEndpoints();
 app.MapSchedulerEndpoints();
 app.MapRepositoryEndpoints();
+app.MapSubtaskEndpoints();
+app.MapHumanGateEndpoints();
 
 // Mock control endpoints (only in mock mode)
 if (useMockMode)

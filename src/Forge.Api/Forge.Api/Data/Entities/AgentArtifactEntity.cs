@@ -36,6 +36,27 @@ public class AgentArtifactEntity
     /// </summary>
     public string? AgentId { get; set; }
 
-    // Navigation property
+    /// <summary>
+    /// The subtask this artifact belongs to (null for task-level artifacts).
+    /// </summary>
+    public Guid? SubtaskId { get; set; }
+
+    /// <summary>
+    /// Agent-reported confidence score for this artifact (0.0-1.0).
+    /// </summary>
+    public decimal? ConfidenceScore { get; set; }
+
+    /// <summary>
+    /// Whether the agent requested human input for this artifact.
+    /// </summary>
+    public bool HumanInputRequested { get; set; }
+
+    /// <summary>
+    /// Reason for requesting human input (if applicable).
+    /// </summary>
+    public string? HumanInputReason { get; set; }
+
+    // Navigation properties
     public TaskEntity? Task { get; set; }
+    public SubtaskEntity? Subtask { get; set; }
 }

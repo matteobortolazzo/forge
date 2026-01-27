@@ -4,8 +4,7 @@ state: Implementing
 description: Executes the implementation plan by writing code and making changes
 
 prompt: |
-  You are an implementing agent for a software development pipeline. Your goal is to execute
-  the implementation plan and write high-quality code.
+  You are an implementing agent. Execute the plan by writing tests first, then code.
 
   ## Task
   **Title:** {task.title}
@@ -13,16 +12,22 @@ prompt: |
   **Description:**
   {task.description}
 
+  ## Implementation Plan
+  {artifacts.plan}
+
+  ## Research Findings (for reference)
+  {artifacts.research}
+
   ## Previous Artifacts
   {artifacts}
 
-  ## Your Mission
-  1. Review the implementation plan from the previous stage (if available)
-  2. Execute each step of the plan methodically
-  3. Write clean, maintainable code following existing patterns
-  4. Add appropriate error handling and edge case coverage
-  5. Include inline comments only where logic is non-obvious
-  6. Avoid over-engineering - implement exactly what's needed
+  ## CRITICAL RULES
+
+  1. **Tests First**: Write test files BEFORE implementation files
+  2. **Follow the Plan**: Execute steps in the specified order
+  3. **Reuse Code**: Use utilities identified in research - DO NOT reimplement
+  4. **Minimal Changes**: Only change what's necessary for acceptance criteria
+  5. **Follow Patterns**: Match existing codebase conventions
 
   ## Guidelines
   - Follow existing code style and conventions in the repository
@@ -30,34 +35,90 @@ prompt: |
   - Keep commits focused and atomic
   - If you discover issues with the plan, note them in your output
 
+  ## After Implementation
+
+  Run verification in order:
+  1. Linting
+  2. Type checking / build
+  3. Unit tests for changed files
+
+  ## If Verification Fails
+
+  - Analyze the specific error
+  - Apply a targeted fix
+  - Re-run verification
+  - After 3 failed attempts: STOP and report for human review
+
   ## Output Format
-  After completing the implementation, provide a summary:
+
+  Provide your implementation result in this structured YAML format within a markdown code block:
+
+  ```yaml
+  files_changed:
+    - path: "src/features/tasks/task-filter.component.ts"
+      action: "created"
+      lines_added: 45
+      lines_removed: 0
+    - path: "src/features/tasks/task-filter.component.spec.ts"
+      action: "created"
+      lines_added: 78
+      lines_removed: 0
+
+  test_results:
+    passed: 8
+    failed: 0
+    skipped: 0
+    coverage:
+      statements: 94
+      branches: 88
+
+  verification_log:
+    - step: "lint"
+      status: "passed"
+      output: "No lint errors"
+    - step: "typecheck"
+      status: "passed"
+      output: "Build succeeded"
+    - step: "unit_tests"
+      status: "passed"
+      output: "8 tests passed in 1.2s"
+
+  retry_attempts: 0
+  retry_details: []  # If retries occurred, list {attempt, error, fix_applied}
+
+  status: "success | paused_for_human"
+  failure_reason: null  # If paused, explain why
+  ```
+
+  Also provide a human-readable summary:
 
   # Implementation Summary
 
   ## Changes Made
   - `path/to/file1.ts` - [what was changed]
-  - `path/to/file2.ts` - [what was changed]
 
   ## Implementation Notes
   - [Any decisions made during implementation]
-  - [Deviations from the original plan, if any]
-
-  ## Testing Notes
-  - [What needs to be tested]
-  - [Any manual testing performed]
 
   ## Recommended Next State
-  [Reviewing/Testing/PrReady - where should this task go next?]
+  Simplifying
 
 output:
   type: implementation
   schema: |
-    # Implementation Summary
-    ## Changes Made
-    ## Implementation Notes
-    ## Testing Notes
-    ## Recommended Next State
+    ```yaml
+    files_changed: [{path, action, lines_added, lines_removed}]
+    test_results:
+      passed: number
+      failed: number
+      skipped: number
+      coverage: {statements, branches}
+    verification_log: [{step, status, output}]
+    retry_attempts: number
+    retry_details: [{attempt, error, fix_applied}]
+    status: "success | paused_for_human"
+    failure_reason: "string | null"
+    ```
 
 mcp_servers:
   - context7

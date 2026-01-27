@@ -10,6 +10,9 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
     public DbSet<TaskLogEntity> TaskLogs => Set<TaskLogEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
     public DbSet<AgentArtifactEntity> AgentArtifacts => Set<AgentArtifactEntity>();
+    public DbSet<SubtaskEntity> Subtasks => Set<SubtaskEntity>();
+    public DbSet<HumanGateEntity> HumanGates => Set<HumanGateEntity>();
+    public DbSet<RollbackRecordEntity> RollbackRecords => Set<RollbackRecordEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,6 +66,22 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.RecommendedNextState)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+
+            // Confidence and human gate tracking
+            entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
+            entity.Property(e => e.HumanInputReason).HasMaxLength(1000);
+
+            // Subtasks relationship
+            entity.HasMany(e => e.Subtasks)
+                .WithOne(s => s.ParentTask)
+                .HasForeignKey(s => s.ParentTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Human gates relationship
+            entity.HasMany(e => e.HumanGates)
+                .WithOne(g => g.Task)
+                .HasForeignKey(g => g.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TaskLogEntity>(entity =>
@@ -112,6 +131,102 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             // Index for retrieving artifacts by state
             entity.HasIndex(e => new { e.TaskId, e.ProducedInState })
                 .HasDatabaseName("IX_AgentArtifacts_Task_State");
+
+            // Index for retrieving artifacts by subtask
+            entity.HasIndex(e => new { e.SubtaskId, e.CreatedAt })
+                .HasDatabaseName("IX_AgentArtifacts_Subtask_CreatedAt");
+
+            entity.Property(e => e.HumanInputReason).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<SubtaskEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).IsRequired();
+            entity.Property(e => e.EstimatedScope)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.CurrentStage)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.WorktreePath).HasMaxLength(500);
+            entity.Property(e => e.BranchName).HasMaxLength(200);
+            entity.Property(e => e.FailureReason).HasMaxLength(2000);
+            entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
+
+            // Index for retrieving subtasks by parent task
+            entity.HasIndex(e => new { e.ParentTaskId, e.ExecutionOrder })
+                .HasDatabaseName("IX_Subtasks_Parent_Order");
+
+            // Index for finding pending subtasks
+            entity.HasIndex(e => e.Status)
+                .HasDatabaseName("IX_Subtasks_Status");
+
+            entity.HasOne(e => e.ParentTask)
+                .WithMany(t => t.Subtasks)
+                .HasForeignKey(e => e.ParentTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Artifacts)
+                .WithOne(a => a.Subtask)
+                .HasForeignKey(a => a.SubtaskId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<HumanGateEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GateType)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.ResolvedBy).HasMaxLength(200);
+            entity.Property(e => e.Resolution).HasMaxLength(2000);
+
+            // Index for finding pending gates
+            entity.HasIndex(e => new { e.TaskId, e.Status })
+                .HasDatabaseName("IX_HumanGates_Task_Status");
+
+            entity.HasOne(e => e.Task)
+                .WithMany(t => t.HumanGates)
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Subtask)
+                .WithMany(s => s.HumanGates)
+                .HasForeignKey(e => e.SubtaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RollbackRecordEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Trigger)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            // Index for audit trail
+            entity.HasIndex(e => e.Timestamp)
+                .HasDatabaseName("IX_RollbackRecords_Timestamp");
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Subtask)
+                .WithMany()
+                .HasForeignKey(e => e.SubtaskId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

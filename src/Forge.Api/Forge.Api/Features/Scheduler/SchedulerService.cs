@@ -1,4 +1,5 @@
 using Forge.Api.Data;
+using Forge.Api.Data.Entities;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Notifications;
@@ -15,17 +16,22 @@ public class SchedulerService(
     NotificationService notifications,
     SchedulerState schedulerState,
     IOptions<SchedulerOptions> options,
+    IOptions<PipelineConfiguration> pipelineConfig,
     ILogger<SchedulerService> logger)
 {
+    private readonly PipelineConfiguration _pipelineConfig = pipelineConfig.Value;
     /// <summary>
     /// States that require agent work and are eligible for scheduling.
     /// </summary>
     private static readonly PipelineState[] SchedulableStates =
     [
+        PipelineState.Split,
+        PipelineState.Research,
         PipelineState.Planning,
         PipelineState.Implementing,
-        PipelineState.Reviewing,
-        PipelineState.Testing
+        PipelineState.Simplifying,
+        PipelineState.Verifying,
+        PipelineState.Reviewing
     ];
 
     /// <summary>
@@ -33,10 +39,13 @@ public class SchedulerService(
     /// </summary>
     private static readonly Dictionary<PipelineState, PipelineState> StateTransitions = new()
     {
+        { PipelineState.Split, PipelineState.Research },
+        { PipelineState.Research, PipelineState.Planning },
         { PipelineState.Planning, PipelineState.Implementing },
-        { PipelineState.Implementing, PipelineState.Reviewing },
-        { PipelineState.Reviewing, PipelineState.Testing },
-        { PipelineState.Testing, PipelineState.PrReady }
+        { PipelineState.Implementing, PipelineState.Simplifying },
+        { PipelineState.Simplifying, PipelineState.Verifying },
+        { PipelineState.Verifying, PipelineState.Reviewing },
+        { PipelineState.Reviewing, PipelineState.PrReady }
     };
 
     public bool IsEnabled => schedulerState.IsEnabled;
@@ -56,12 +65,13 @@ public class SchedulerService(
         }
 
         // Task Selection Algorithm:
-        // 1. Filter: State IN (Planning, Implementing, Reviewing, Testing)
+        // 1. Filter: State IN schedulable states
         // 2. Filter: IsPaused = false
         // 3. Filter: HasError = false OR RetryCount < MaxRetries
         // 4. Filter: AssignedAgentId IS NULL
         // 5. Filter: ChildCount == 0 (leaf tasks only - parent state is derived)
-        // 6. Order: Priority DESC, State ASC (Planning first), CreatedAt ASC
+        // 6. Filter: HasPendingGate = false (no pending human gates)
+        // 7. Order: Priority DESC, State ASC (Split first), CreatedAt ASC
 
         var entity = await db.Tasks
             .Where(t => SchedulableStates.Contains(t.State))
@@ -69,6 +79,7 @@ public class SchedulerService(
             .Where(t => !t.HasError || t.RetryCount < t.MaxRetries)
             .Where(t => t.AssignedAgentId == null)
             .Where(t => t.ChildCount == 0)  // Only schedule leaf tasks
+            .Where(t => !t.HasPendingGate)   // No pending human gates
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.State)
             .ThenBy(t => t.CreatedAt)
@@ -159,7 +170,7 @@ public class SchedulerService(
         }
     }
 
-    private async Task<TaskDto> HandleSuccessAsync(Data.Entities.TaskEntity entity)
+    private async Task<TaskDto> HandleSuccessAsync(TaskEntity entity)
     {
         // Clear any previous error state
         if (entity.HasError)
@@ -167,6 +178,21 @@ public class SchedulerService(
             entity.HasError = false;
             entity.ErrorMessage = null;
             entity.RetryCount = 0;
+        }
+
+        // Check if human gate is needed based on confidence
+        if (await ShouldTriggerHumanGateAsync(entity))
+        {
+            var gate = await CreateHumanGateAsync(entity);
+            entity.HasPendingGate = true;
+            entity.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("Task {TaskId} requires human approval at {State} gate", entity.Id, gate.GateType);
+
+            var dto = TaskDto.FromEntity(entity);
+            await sse.EmitTaskUpdatedAsync(dto);
+            return dto;
         }
 
         // Auto-transition to next state
@@ -191,7 +217,168 @@ public class SchedulerService(
         return TaskDto.FromEntity(entity);
     }
 
-    private async Task<TaskDto> HandleErrorAsync(Data.Entities.TaskEntity entity)
+    /// <summary>
+    /// Checks if a human gate should be triggered based on confidence score and pipeline configuration.
+    /// </summary>
+    private Task<bool> ShouldTriggerHumanGateAsync(TaskEntity entity)
+    {
+        // PR gate is always mandatory
+        if (entity.State == PipelineState.Reviewing)
+        {
+            return Task.FromResult(true);
+        }
+
+        // Check confidence threshold for conditional gates
+        var confidenceThreshold = _pipelineConfig.ConfidenceThreshold;
+
+        if (entity.State == PipelineState.Split)
+        {
+            if (_pipelineConfig.HumanGates.IsSplitMandatory)
+                return Task.FromResult(true);
+
+            return Task.FromResult(entity.ConfidenceScore.HasValue && entity.ConfidenceScore < confidenceThreshold);
+        }
+
+        if (entity.State == PipelineState.Planning)
+        {
+            if (_pipelineConfig.HumanGates.IsPlanningMandatory)
+                return Task.FromResult(true);
+
+            return Task.FromResult(entity.ConfidenceScore.HasValue && entity.ConfidenceScore < confidenceThreshold);
+        }
+
+        // Check if human input was explicitly requested
+        if (entity.HumanInputRequested)
+        {
+            return Task.FromResult(true);
+        }
+
+        return Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// Creates a human gate for a task.
+    /// </summary>
+    private async Task<HumanGateEntity> CreateHumanGateAsync(TaskEntity entity)
+    {
+        var gateType = entity.State switch
+        {
+            PipelineState.Split => HumanGateType.Split,
+            PipelineState.Planning => HumanGateType.Planning,
+            PipelineState.Reviewing => HumanGateType.Pr,
+            _ => HumanGateType.Planning
+        };
+
+        var reason = entity.HumanInputRequested
+            ? entity.HumanInputReason ?? "Agent requested human input"
+            : entity.ConfidenceScore.HasValue
+                ? $"Confidence score ({entity.ConfidenceScore:F2}) below threshold ({_pipelineConfig.ConfidenceThreshold:F2})"
+                : "Mandatory approval required";
+
+        var gate = new HumanGateEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskId = entity.Id,
+            SubtaskId = null,
+            GateType = gateType,
+            Status = HumanGateStatus.Pending,
+            ConfidenceScore = entity.ConfidenceScore ?? 0,
+            Reason = reason,
+            RequestedAt = DateTime.UtcNow
+        };
+
+        db.HumanGates.Add(gate);
+        await db.SaveChangesAsync();
+
+        // Emit SSE event
+        var gateDto = new HumanGateDto(
+            gate.Id,
+            gate.TaskId,
+            gate.SubtaskId,
+            gate.GateType,
+            gate.Status,
+            gate.ConfidenceScore,
+            gate.Reason,
+            gate.RequestedAt,
+            gate.ResolvedAt,
+            gate.ResolvedBy,
+            gate.Resolution
+        );
+        await sse.EmitHumanGateRequestedAsync(gateDto);
+
+        return gate;
+    }
+
+    /// <summary>
+    /// Handles simplification review verdict and potentially loops back to Implementation.
+    /// </summary>
+    public async Task<TaskDto?> HandleSimplificationVerdictAsync(Guid taskId, string verdict)
+    {
+        var entity = await db.Tasks.FindAsync(taskId);
+        if (entity == null || entity.State != PipelineState.Simplifying)
+        {
+            return null;
+        }
+
+        if (verdict.Equals("approved", StringComparison.OrdinalIgnoreCase))
+        {
+            // Continue to Verifying
+            return await HandleSuccessAsync(entity);
+        }
+
+        if (verdict.Equals("changes_requested", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.SimplificationIterations++;
+
+            if (entity.SimplificationIterations >= _pipelineConfig.MaxSimplificationIterations)
+            {
+                // Escalate to human after max iterations
+                entity.HasPendingGate = true;
+                entity.HumanInputRequested = true;
+                entity.HumanInputReason = $"Simplification review still requesting changes after {entity.SimplificationIterations} iterations";
+                entity.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+
+                await CreateHumanGateAsync(entity);
+
+                logger.LogWarning("Task {TaskId} escalated to human after {Iterations} simplification iterations",
+                    taskId, entity.SimplificationIterations);
+
+                var escalatedDto = TaskDto.FromEntity(entity);
+                await sse.EmitTaskUpdatedAsync(escalatedDto);
+                return escalatedDto;
+            }
+
+            // Loop back to Implementing
+            var previousState = entity.State;
+            entity.State = PipelineState.Implementing;
+            entity.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("Task {TaskId} looping back to Implementing (simplification iteration {Iteration})",
+                taskId, entity.SimplificationIterations);
+
+            var dto = TaskDto.FromEntity(entity);
+            await sse.EmitTaskUpdatedAsync(dto);
+            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, entity.State);
+            return dto;
+        }
+
+        // escalate_to_human verdict
+        entity.HasPendingGate = true;
+        entity.HumanInputRequested = true;
+        entity.HumanInputReason = "Simplification review requested human escalation";
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        await CreateHumanGateAsync(entity);
+
+        var escalatedDto2 = TaskDto.FromEntity(entity);
+        await sse.EmitTaskUpdatedAsync(escalatedDto2);
+        return escalatedDto2;
+    }
+
+    private async Task<TaskDto> HandleErrorAsync(TaskEntity entity)
     {
         entity.RetryCount++;
         entity.UpdatedAt = DateTime.UtcNow;

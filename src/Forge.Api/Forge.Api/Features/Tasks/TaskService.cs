@@ -12,10 +12,13 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
     private static readonly PipelineState[] StateOrder =
     [
         PipelineState.Backlog,
+        PipelineState.Split,
+        PipelineState.Research,
         PipelineState.Planning,
         PipelineState.Implementing,
+        PipelineState.Simplifying,
+        PipelineState.Verifying,
         PipelineState.Reviewing,
-        PipelineState.Testing,
         PipelineState.PrReady,
         PipelineState.Done
     ];

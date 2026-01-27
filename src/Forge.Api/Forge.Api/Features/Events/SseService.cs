@@ -10,6 +10,7 @@ namespace Forge.Api.Features.Events;
 
 public interface ISseService
 {
+    // Task events
     Task EmitTaskCreatedAsync(TaskDto task);
     Task EmitTaskUpdatedAsync(TaskDto task);
     Task EmitTaskDeletedAsync(Guid taskId);
@@ -18,9 +19,33 @@ public interface ISseService
     Task EmitTaskResumedAsync(TaskDto task);
     Task EmitTaskSplitAsync(TaskDto parent, IReadOnlyList<TaskDto> children);
     Task EmitChildAddedAsync(Guid parentId, TaskDto child);
+
+    // Agent events
     Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt);
+
+    // Scheduler events
     Task EmitSchedulerTaskScheduledAsync(TaskDto task);
+
+    // Notification events
     Task EmitNotificationNewAsync(NotificationDto notification);
+
+    // Artifact events
+    Task EmitArtifactCreatedAsync(ArtifactDto artifact);
+
+    // Human gate events
+    Task EmitHumanGateRequestedAsync(HumanGateDto gate);
+    Task EmitHumanGateResolvedAsync(HumanGateDto gate);
+
+    // Subtask events
+    Task EmitSubtaskCreatedAsync(SubtaskDto subtask);
+    Task EmitSubtaskStartedAsync(SubtaskDto subtask);
+    Task EmitSubtaskCompletedAsync(SubtaskDto subtask);
+    Task EmitSubtaskFailedAsync(SubtaskDto subtask);
+
+    // Rollback events
+    Task EmitRollbackInitiatedAsync(RollbackDto rollback);
+    Task EmitRollbackCompletedAsync(RollbackDto rollback);
+
     IAsyncEnumerable<string> GetEventsAsync(CancellationToken ct);
 }
 
@@ -101,6 +126,60 @@ public sealed class SseService : ISseService
     public Task EmitNotificationNewAsync(NotificationDto notification)
     {
         var evt = new ServerEvent("notification:new", notification, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitArtifactCreatedAsync(ArtifactDto artifact)
+    {
+        var evt = new ServerEvent("artifact:created", artifact, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitHumanGateRequestedAsync(HumanGateDto gate)
+    {
+        var evt = new ServerEvent("humanGate:requested", gate, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitHumanGateResolvedAsync(HumanGateDto gate)
+    {
+        var evt = new ServerEvent("humanGate:resolved", gate, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSubtaskCreatedAsync(SubtaskDto subtask)
+    {
+        var evt = new ServerEvent("subtask:created", subtask, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSubtaskStartedAsync(SubtaskDto subtask)
+    {
+        var evt = new ServerEvent("subtask:started", subtask, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSubtaskCompletedAsync(SubtaskDto subtask)
+    {
+        var evt = new ServerEvent("subtask:completed", subtask, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSubtaskFailedAsync(SubtaskDto subtask)
+    {
+        var evt = new ServerEvent("subtask:failed", subtask, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitRollbackInitiatedAsync(RollbackDto rollback)
+    {
+        var evt = new ServerEvent("rollback:initiated", rollback, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitRollbackCompletedAsync(RollbackDto rollback)
+    {
+        var evt = new ServerEvent("rollback:completed", rollback, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

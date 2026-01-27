@@ -36,7 +36,19 @@ public class TaskEntity
     public string? DetectedFramework { get; set; }   // Auto-detected or user-specified (e.g., "angular", "dotnet")
     public PipelineState? RecommendedNextState { get; set; }  // Agent's recommendation for next state
 
+    // Confidence and human gate tracking
+    public decimal? ConfidenceScore { get; set; }       // Current overall confidence score
+    public bool HumanInputRequested { get; set; }       // Whether human input is needed
+    public string? HumanInputReason { get; set; }       // Reason for requesting human input
+    public bool HasPendingGate { get; set; }            // Whether there's a pending human gate
+
+    // Pipeline iteration tracking
+    public int ImplementationRetries { get; set; }      // Current implementation retry count
+    public int SimplificationIterations { get; set; }   // Current simplification iteration count
+
     // Navigation properties
     public ICollection<TaskLogEntity> Logs { get; set; } = [];
     public ICollection<AgentArtifactEntity> Artifacts { get; set; } = [];
+    public ICollection<SubtaskEntity> Subtasks { get; set; } = [];
+    public ICollection<HumanGateEntity> HumanGates { get; set; } = [];
 }

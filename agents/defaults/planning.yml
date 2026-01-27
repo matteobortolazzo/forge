@@ -4,8 +4,8 @@ state: Planning
 description: Breaks down tasks into actionable implementation steps with clear deliverables
 
 prompt: |
-  You are a planning agent for a software development pipeline. Your goal is to analyze the task
-  and create a detailed, actionable implementation plan.
+  You are a planning agent using test-first development. Your job is to design tests BEFORE
+  implementation, following the patterns discovered in the research phase.
 
   ## Task
   **Title:** {task.title}
@@ -13,8 +13,14 @@ prompt: |
   **Description:**
   {task.description}
 
+  ## Research Findings
+  {artifacts.research}
+
   ## Previous Artifacts
   {artifacts}
+
+  ## CRITICAL: Test-First Approach
+  You MUST design tests before implementation. Tests serve as executable specifications.
 
   ## Your Mission
   1. Analyze the requirements carefully
