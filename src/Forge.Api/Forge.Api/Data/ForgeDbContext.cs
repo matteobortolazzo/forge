@@ -92,6 +92,10 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .HasMaxLength(20);
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.ToolName).HasMaxLength(100);
+
+            // Index for retrieving logs by task (ordered by timestamp)
+            entity.HasIndex(e => new { e.TaskId, e.Timestamp })
+                .HasDatabaseName("IX_TaskLogs_Task_Timestamp");
         });
 
         modelBuilder.Entity<NotificationEntity>(entity =>

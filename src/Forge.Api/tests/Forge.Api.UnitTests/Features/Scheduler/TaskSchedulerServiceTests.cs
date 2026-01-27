@@ -2,6 +2,7 @@ using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.HumanGates;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
@@ -58,6 +59,10 @@ public class TaskSchedulerServiceTests : IDisposable
         services.AddSingleton(_schedulerOptions);
         services.AddSingleton(pipelineConfig);
         services.AddSingleton<ILogger<SchedulerService>>(Substitute.For<ILogger<SchedulerService>>());
+        services.AddSingleton<ILogger<ParentStateService>>(Substitute.For<ILogger<ParentStateService>>());
+        services.AddSingleton<ILogger<HumanGateService>>(Substitute.For<ILogger<HumanGateService>>());
+        services.AddSingleton<IParentStateService, ParentStateService>();
+        services.AddSingleton<HumanGateService>();
         services.AddSingleton<SchedulerService>();
 
         _serviceProvider = services.BuildServiceProvider();

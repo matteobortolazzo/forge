@@ -16,22 +16,20 @@ public class SubtaskService
     private readonly ForgeDbContext _db;
     private readonly ISseService _sseService;
     private readonly IWorktreeService _worktreeService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<SubtaskService> _logger;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
 
     public SubtaskService(
         ForgeDbContext db,
         ISseService sseService,
         IWorktreeService worktreeService,
+        IConfiguration configuration,
         ILogger<SubtaskService> logger)
     {
         _db = db;
         _sseService = sseService;
         _worktreeService = worktreeService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -69,9 +67,9 @@ public class SubtaskService
             ParentTaskId = taskId,
             Title = dto.Title,
             Description = dto.Description,
-            AcceptanceCriteriaJson = JsonSerializer.Serialize(dto.AcceptanceCriteria ?? [], JsonOptions),
+            AcceptanceCriteriaJson = JsonSerializer.Serialize(dto.AcceptanceCriteria ?? [], SharedJsonOptions.CamelCaseSimple),
             EstimatedScope = dto.EstimatedScope,
-            DependenciesJson = JsonSerializer.Serialize(dto.Dependencies ?? [], JsonOptions),
+            DependenciesJson = JsonSerializer.Serialize(dto.Dependencies ?? [], SharedJsonOptions.CamelCaseSimple),
             ExecutionOrder = executionOrder,
             Status = SubtaskStatus.Pending,
             CurrentStage = PipelineState.Research,
@@ -104,13 +102,13 @@ public class SubtaskService
             subtask.Description = dto.Description;
 
         if (dto.AcceptanceCriteria != null)
-            subtask.AcceptanceCriteriaJson = JsonSerializer.Serialize(dto.AcceptanceCriteria, JsonOptions);
+            subtask.AcceptanceCriteriaJson = JsonSerializer.Serialize(dto.AcceptanceCriteria, SharedJsonOptions.CamelCaseSimple);
 
         if (dto.EstimatedScope.HasValue)
             subtask.EstimatedScope = dto.EstimatedScope.Value;
 
         if (dto.Dependencies != null)
-            subtask.DependenciesJson = JsonSerializer.Serialize(dto.Dependencies, JsonOptions);
+            subtask.DependenciesJson = JsonSerializer.Serialize(dto.Dependencies, SharedJsonOptions.CamelCaseSimple);
 
         if (dto.ExecutionOrder.HasValue)
             subtask.ExecutionOrder = dto.ExecutionOrder.Value;
@@ -146,7 +144,7 @@ public class SubtaskService
         // Remove worktree if exists
         if (!string.IsNullOrEmpty(subtask.WorktreePath))
         {
-            var repoPath = Environment.GetEnvironmentVariable("REPOSITORY_PATH") ?? Environment.CurrentDirectory;
+            var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
             await _worktreeService.RemoveWorktreeAsync(repoPath, subtaskId);
         }
 
@@ -167,7 +165,7 @@ public class SubtaskService
             return null;
 
         // Check dependencies are completed
-        var dependencies = JsonSerializer.Deserialize<List<Guid>>(subtask.DependenciesJson, JsonOptions) ?? [];
+        var dependencies = JsonSerializer.Deserialize<List<Guid>>(subtask.DependenciesJson, SharedJsonOptions.CamelCaseSimple) ?? [];
         if (dependencies.Count > 0)
         {
             var incompleteCount = await _db.Subtasks
@@ -180,7 +178,7 @@ public class SubtaskService
         }
 
         // Create worktree
-        var repoPath = Environment.GetEnvironmentVariable("REPOSITORY_PATH") ?? Environment.CurrentDirectory;
+        var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
         var worktreeResult = await _worktreeService.CreateWorktreeAsync(repoPath, subtaskId);
 
         if (!worktreeResult.Success)
@@ -233,9 +231,9 @@ public class SubtaskService
     private static SubtaskDto MapToDto(SubtaskEntity entity)
     {
         var acceptanceCriteria = JsonSerializer.Deserialize<List<string>>(
-            entity.AcceptanceCriteriaJson, JsonOptions) ?? [];
+            entity.AcceptanceCriteriaJson, SharedJsonOptions.CamelCaseSimple) ?? [];
         var dependencies = JsonSerializer.Deserialize<List<Guid>>(
-            entity.DependenciesJson, JsonOptions) ?? [];
+            entity.DependenciesJson, SharedJsonOptions.CamelCaseSimple) ?? [];
 
         return new SubtaskDto(
             entity.Id,

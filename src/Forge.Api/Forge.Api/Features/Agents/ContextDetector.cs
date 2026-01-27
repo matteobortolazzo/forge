@@ -177,9 +177,9 @@ public class ContextDetector : IContextDetector
                                     return framework;
                                 }
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                // Ignore file read errors
+                                _logger.LogDebug(ex, "Could not read file {File} for framework detection", file);
                             }
                         }
                     }
@@ -218,9 +218,9 @@ public class ContextDetector : IContextDetector
                             return true;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore errors
+                    _logger.LogDebug(ex, "Error checking file pattern {Pattern} in {Path}", pattern, repositoryPath);
                 }
             }
 

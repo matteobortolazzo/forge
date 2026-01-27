@@ -2,6 +2,7 @@ using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
+using Forge.Api.Features.HumanGates;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
@@ -18,6 +19,8 @@ public class SchedulerServiceTests : IDisposable
     private readonly ISseService _sseMock;
     private readonly NotificationService _notificationService;
     private readonly SchedulerState _schedulerState;
+    private readonly IParentStateService _parentStateServiceMock;
+    private readonly HumanGateService _humanGateService;
     private readonly SchedulerService _sut;
 
     public SchedulerServiceTests()
@@ -43,9 +46,23 @@ public class SchedulerServiceTests : IDisposable
             ConfidenceThreshold = 0.7m
         });
 
+        _parentStateServiceMock = Substitute.For<IParentStateService>();
+
+        var humanGateLoggerMock = Substitute.For<ILogger<HumanGateService>>();
+        _humanGateService = new HumanGateService(_db, _sseMock, pipelineConfig, humanGateLoggerMock);
+
         var loggerMock = Substitute.For<ILogger<SchedulerService>>();
 
-        _sut = new SchedulerService(_db, _sseMock, _notificationService, _schedulerState, schedulerOptions, pipelineConfig, loggerMock);
+        _sut = new SchedulerService(
+            _db,
+            _sseMock,
+            _notificationService,
+            _schedulerState,
+            schedulerOptions,
+            pipelineConfig,
+            _parentStateServiceMock,
+            _humanGateService,
+            loggerMock);
     }
 
     public void Dispose()

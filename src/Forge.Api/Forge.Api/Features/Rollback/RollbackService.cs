@@ -5,6 +5,7 @@ using Forge.Api.Features.Events;
 using Forge.Api.Features.Worktree;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Forge.Api.Features.Rollback;
 
@@ -48,21 +49,20 @@ public class RollbackService : IRollbackService
     private readonly ForgeDbContext _db;
     private readonly IWorktreeService _worktreeService;
     private readonly ISseService _sseService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RollbackService> _logger;
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-    };
 
     public RollbackService(
         ForgeDbContext db,
         IWorktreeService worktreeService,
         ISseService sseService,
+        IConfiguration configuration,
         ILogger<RollbackService> logger)
     {
         _db = db;
         _worktreeService = worktreeService;
         _sseService = sseService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -105,9 +105,8 @@ public class RollbackService : IRollbackService
         // Remove worktree if it exists
         if (!string.IsNullOrEmpty(subtask.WorktreePath))
         {
-            // Get repository path from task context or environment
-            var repoPath = Environment.GetEnvironmentVariable("REPOSITORY_PATH")
-                ?? Environment.CurrentDirectory;
+            // Get repository path from configuration
+            var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
 
             var result = await _worktreeService.RemoveWorktreeAsync(repoPath, subtaskId, ct);
             actionTaken = actionTaken with
@@ -134,10 +133,10 @@ public class RollbackService : IRollbackService
             SubtaskId = subtaskId,
             Trigger = trigger,
             Timestamp = DateTime.UtcNow,
-            StateBeforeJson = JsonSerializer.Serialize(stateBefore, JsonOptions),
-            ActionTakenJson = JsonSerializer.Serialize(actionTaken, JsonOptions),
-            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, JsonOptions),
-            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), JsonOptions),
+            StateBeforeJson = JsonSerializer.Serialize(stateBefore, SharedJsonOptions.SnakeCaseLower),
+            ActionTakenJson = JsonSerializer.Serialize(actionTaken, SharedJsonOptions.SnakeCaseLower),
+            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, SharedJsonOptions.SnakeCaseLower),
+            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), SharedJsonOptions.SnakeCaseLower),
             Notes = notes
         };
 
@@ -207,10 +206,10 @@ public class RollbackService : IRollbackService
             SubtaskId = null,
             Trigger = trigger,
             Timestamp = DateTime.UtcNow,
-            StateBeforeJson = JsonSerializer.Serialize(stateBefore, JsonOptions),
-            ActionTakenJson = JsonSerializer.Serialize(actionTaken, JsonOptions),
-            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, JsonOptions),
-            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), JsonOptions),
+            StateBeforeJson = JsonSerializer.Serialize(stateBefore, SharedJsonOptions.SnakeCaseLower),
+            ActionTakenJson = JsonSerializer.Serialize(actionTaken, SharedJsonOptions.SnakeCaseLower),
+            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, SharedJsonOptions.SnakeCaseLower),
+            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), SharedJsonOptions.SnakeCaseLower),
             Notes = notes
         };
 
@@ -309,7 +308,7 @@ public class RollbackService : IRollbackService
                 actionTaken.CommitsReverted
             ),
             preservedArtifacts.Select(p => new PreservedArtifact(p.Stage, p.Path)).ToList(),
-            JsonSerializer.Deserialize<List<string>>(record.RecoveryOptionsJson, JsonOptions) ?? []
+            JsonSerializer.Deserialize<List<string>>(record.RecoveryOptionsJson, SharedJsonOptions.SnakeCaseLower) ?? []
         );
 
         await _sseService.EmitRollbackInitiatedAsync(dto);

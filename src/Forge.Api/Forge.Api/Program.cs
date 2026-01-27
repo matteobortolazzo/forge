@@ -52,6 +52,7 @@ else
 }
 
 builder.Services.AddSingleton<IAgentRunnerService, AgentRunnerService>();
+builder.Services.AddScoped<IParentStateService, ParentStateService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.Configure<SchedulerOptions>(builder.Configuration.GetSection(SchedulerOptions.SectionName));

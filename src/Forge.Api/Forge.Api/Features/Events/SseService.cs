@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Tasks;
+using Forge.Api.Shared;
 
 namespace Forge.Api.Features.Events;
 
@@ -53,12 +53,6 @@ public sealed class SseService : ISseService
 {
     private readonly Channel<ServerEvent> _channel = Channel.CreateUnbounded<ServerEvent>(
         new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
 
     public Task EmitTaskCreatedAsync(TaskDto task)
     {
@@ -187,7 +181,7 @@ public sealed class SseService : ISseService
     {
         await foreach (var evt in _channel.Reader.ReadAllAsync(ct))
         {
-            var json = JsonSerializer.Serialize(evt, JsonOptions);
+            var json = JsonSerializer.Serialize(evt, SharedJsonOptions.CamelCase);
             yield return $"data: {json}\n\n";
         }
     }

@@ -9,19 +9,27 @@ namespace Forge.Api.Features.Tasks;
 public record ArtifactDto(
     Guid Id,
     Guid TaskId,
+    Guid? SubtaskId,
     PipelineState ProducedInState,
     ArtifactType ArtifactType,
     string Content,
     DateTime CreatedAt,
-    string? AgentId)
+    string? AgentId,
+    decimal? ConfidenceScore,
+    bool HumanInputRequested,
+    string? HumanInputReason)
 {
     public static ArtifactDto FromEntity(AgentArtifactEntity entity) =>
         new(
             entity.Id,
             entity.TaskId,
+            entity.SubtaskId,
             entity.ProducedInState,
             entity.ArtifactType,
             entity.Content,
             entity.CreatedAt,
-            entity.AgentId);
+            entity.AgentId,
+            entity.ConfidenceScore,
+            entity.HumanInputRequested,
+            entity.HumanInputReason);
 }

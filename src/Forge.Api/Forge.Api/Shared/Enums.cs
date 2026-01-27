@@ -91,6 +91,8 @@ public enum ArtifactType
     VerificationReport,
     [JsonStringEnumMemberName("review")]
     Review,
+    [JsonStringEnumMemberName("documentation_update")]
+    DocumentationUpdate,
     [JsonStringEnumMemberName("test")]
     Test,
     [JsonStringEnumMemberName("general")]

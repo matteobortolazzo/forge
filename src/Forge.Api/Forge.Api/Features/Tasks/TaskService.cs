@@ -7,21 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Forge.Api.Features.Tasks;
 
-public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications)
+public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications, IParentStateService parentStateService)
 {
-    private static readonly PipelineState[] StateOrder =
-    [
-        PipelineState.Backlog,
-        PipelineState.Split,
-        PipelineState.Research,
-        PipelineState.Planning,
-        PipelineState.Implementing,
-        PipelineState.Simplifying,
-        PipelineState.Verifying,
-        PipelineState.Reviewing,
-        PipelineState.PrReady,
-        PipelineState.Done
-    ];
 
     /// <summary>
     /// Computes derived state from children states.
@@ -42,7 +29,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         if (nonDoneStates.Count == 0)
             return PipelineState.Done;
 
-        return nonDoneStates.MinBy(s => Array.IndexOf(StateOrder, s));
+        return nonDoneStates.MinBy(s => PipelineConstants.GetStateIndex(s));
     }
 
     /// <summary>
@@ -63,7 +50,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
 
     public async Task<IReadOnlyList<TaskDto>> GetAllAsync(bool rootOnly = false)
     {
-        var query = db.Tasks.AsQueryable();
+        var query = db.Tasks.AsNoTracking();
 
         if (rootOnly)
         {
@@ -112,6 +99,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
     public async Task<IReadOnlyList<TaskDto>> GetChildrenAsync(Guid parentId)
     {
         var children = await db.Tasks
+            .AsNoTracking()
             .Where(t => t.ParentId == parentId)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync();
@@ -183,10 +171,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         }
 
         // Validate adjacent state transition
-        var currentIndex = Array.IndexOf(StateOrder, entity.State);
-        var targetIndex = Array.IndexOf(StateOrder, dto.TargetState);
-
-        if (Math.Abs(targetIndex - currentIndex) != 1)
+        if (!PipelineConstants.IsValidTransition(entity.State, dto.TargetState))
         {
             throw new InvalidOperationException(
                 $"Cannot transition from {entity.State} to {dto.TargetState}. Only adjacent state transitions are allowed.");
@@ -204,7 +189,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         // Update parent's derived state if this is a child task
         if (entity.ParentId is not null)
         {
-            await UpdateParentDerivedStateAsync(id);
+            await parentStateService.UpdateFromChildAsync(id);
         }
 
         return result;
@@ -213,6 +198,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
     public async Task<IReadOnlyList<TaskLogDto>> GetLogsAsync(Guid taskId)
     {
         var logs = await db.TaskLogs
+            .AsNoTracking()
             .Where(l => l.TaskId == taskId)
             .OrderBy(l => l.Timestamp)
             .ToListAsync();
@@ -390,37 +376,6 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         await sse.EmitTaskUpdatedAsync(parentDto);
 
         return childDto;
-    }
-
-    /// <summary>
-    /// Updates parent's derived state when a child's state changes.
-    /// Should be called after any child state transition.
-    /// </summary>
-    public async Task UpdateParentDerivedStateAsync(Guid childId)
-    {
-        var child = await db.Tasks.FindAsync(childId);
-        if (child?.ParentId is null) return;
-
-        var parent = await db.Tasks
-            .Include(t => t.Children)
-            .FirstOrDefaultAsync(t => t.Id == child.ParentId);
-
-        if (parent is null) return;
-
-        var childStates = parent.Children.Select(c => c.State);
-        var newDerivedState = ComputeDerivedState(childStates);
-
-        if (parent.DerivedState != newDerivedState)
-        {
-            parent.DerivedState = newDerivedState;
-            parent.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-
-            var progress = ComputeProgress(childStates);
-            var childDtos = parent.Children.Select(c => TaskDto.FromEntity(c)).ToList();
-            var parentDto = TaskDto.FromEntity(parent, childDtos, progress);
-            await sse.EmitTaskUpdatedAsync(parentDto);
-        }
     }
 
     /// <summary>
