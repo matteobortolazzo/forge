@@ -54,6 +54,10 @@ forge/
 │           │   └── notifications/  # Notification panel
 │           ├── core/               # Stores, Services, Mocks
 │           ├── shared/             # Reusable components, models
+│           │   └── components/
+│           │       ├── repository-sidebar/           # Repository selection sidebar
+│           │       ├── add-repository-dialog/        # Add repository dialog
+│           │       └── repository-settings-dialog/   # Repository settings dialog
 │           └── app.routes.ts       # Route configuration
 ```
 
@@ -185,5 +189,11 @@ Forge supports managing multiple repositories. Key concepts:
 - **UI Selection**: Frontend persists selected repository in localStorage (`forge:selectedRepositoryId`)
 - **First-Run**: UI prompts to add a repository if none exist
 - **Default Repository**: One repository can be marked as default for new task creation
+
+### UI Components
+
+- **RepositorySidebarComponent**: Discord-style vertical sidebar for repository selection with initials display
+- **AddRepositoryDialogComponent**: Modal form for adding new repositories (name, path, set as default)
+- **RepositorySettingsDialogComponent**: Repository management (refresh git info, set default, delete with confirmation)
 
 See `rules/05-api-reference.md` for endpoint structure.

@@ -73,7 +73,7 @@ export class SseService {
 ## Quick Reference
 
 - **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
-- **10 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo
+- **13 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo, RepositorySidebar, AddRepositoryDialog, RepositorySettingsDialog
 - **7 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore
 - **6 services**: TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService (all with mock mode)
 
@@ -83,3 +83,6 @@ export class SseService {
 - **localStorage**: Selected repository ID persisted in `forge:selectedRepositoryId`
 - **TaskService**: All methods require repositoryId parameter, URLs use `/api/repositories/{repoId}/tasks`
 - **RepositoryInfo component**: Shows current repository with dropdown selector for multiple repos
+- **RepositorySidebarComponent**: Discord-style vertical sidebar with initials-based repository selection
+- **AddRepositoryDialogComponent**: Modal form for adding new repositories (name, path, set as default)
+- **RepositorySettingsDialogComponent**: Repository management (refresh, set default, delete with confirmation)

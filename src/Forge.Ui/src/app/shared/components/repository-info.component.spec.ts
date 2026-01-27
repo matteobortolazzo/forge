@@ -2,7 +2,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { RepositoryInfoComponent } from './repository-info.component';
 import { RepositoryStore } from '../../core/stores/repository.store';
 import { signal, Signal } from '@angular/core';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Repository } from '../models';
 
 // Helper to create a readonly signal from a value
@@ -29,23 +29,6 @@ describe('RepositoryInfoComponent', () => {
     taskCount: 5,
   };
 
-  const mockRepository2: Repository = {
-    id: 'repo-2',
-    name: 'other-repo',
-    path: '/home/user/repos/other-repo',
-    isDefault: false,
-    isActive: true,
-    branch: 'develop',
-    commitHash: 'def5678',
-    remoteUrl: 'git@github.com:user/other-repo.git',
-    isDirty: true,
-    isGitRepository: true,
-    lastRefreshedAt: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    taskCount: 3,
-  };
-
   const createMockStore = (overrides: Partial<{
     loading: boolean;
     hasRepositories: boolean;
@@ -55,9 +38,6 @@ describe('RepositoryInfoComponent', () => {
     displayBranch: string | null;
     isDirty: boolean;
     isGitRepository: boolean;
-    activeRepositories: Repository[];
-    selectedId: string | null;
-    setSelectedRepository: ReturnType<typeof vi.fn>;
   }> = {}) => {
     const defaults = {
       loading: false,
@@ -68,9 +48,6 @@ describe('RepositoryInfoComponent', () => {
       displayBranch: 'main',
       isDirty: false,
       isGitRepository: true,
-      activeRepositories: [mockRepository],
-      selectedId: 'repo-1',
-      setSelectedRepository: vi.fn(),
     };
     const values = { ...defaults, ...overrides };
 
@@ -83,9 +60,6 @@ describe('RepositoryInfoComponent', () => {
       displayBranch: createSignal(values.displayBranch),
       isDirty: createSignal(values.isDirty),
       isGitRepository: createSignal(values.isGitRepository),
-      activeRepositories: createSignal(values.activeRepositories),
-      selectedId: createSignal(values.selectedId),
-      setSelectedRepository: values.setSelectedRepository,
     } as unknown as RepositoryStore;
   };
 
@@ -145,14 +119,12 @@ describe('RepositoryInfoComponent', () => {
         name: '',
         path: '',
         displayBranch: null,
-        activeRepositories: [],
-        selectedId: null,
       }));
     });
 
-    it('should show add repository button', () => {
+    it('should show no repository message', () => {
       const compiled = fixture.nativeElement as HTMLElement;
-      expect(compiled.textContent).toContain('Add Repository');
+      expect(compiled.textContent).toContain('No repository selected');
     });
   });
 
@@ -171,64 +143,6 @@ describe('RepositoryInfoComponent', () => {
     it('should show loading indicator', () => {
       const compiled = fixture.nativeElement as HTMLElement;
       expect(compiled.textContent).toContain('Loading...');
-    });
-  });
-
-  describe('with multiple repositories', () => {
-    let mockStore: ReturnType<typeof createMockStore>;
-
-    beforeEach(async () => {
-      TestBed.resetTestingModule();
-      mockStore = createMockStore({
-        activeRepositories: [mockRepository, mockRepository2],
-      });
-      await setupComponent(mockStore);
-    });
-
-    it('should show dropdown arrow when multiple repos exist', () => {
-      // The dropdown arrow should be visible
-      const buttons = fixture.nativeElement.querySelectorAll('button');
-      expect(buttons.length).toBeGreaterThan(0);
-    });
-
-    it('should toggle dropdown on button click', () => {
-      const compiled = fixture.nativeElement as HTMLElement;
-      // Initially no dropdown menu
-      expect(compiled.querySelector('[role="listbox"]')).toBeFalsy();
-
-      // Click the main button to open
-      component.toggleDropdown();
-      fixture.detectChanges();
-
-      // Dropdown should now be visible
-      expect(compiled.querySelector('[role="listbox"]')).toBeTruthy();
-
-      // Click again to close
-      component.toggleDropdown();
-      fixture.detectChanges();
-      expect(compiled.querySelector('[role="listbox"]')).toBeFalsy();
-    });
-
-    it('should call setSelectedRepository when selecting different repo', () => {
-      component.selectRepository('repo-2');
-      expect(mockStore.setSelectedRepository).toHaveBeenCalledWith('repo-2');
-    });
-  });
-
-  describe('with single repository', () => {
-    beforeEach(async () => {
-      TestBed.resetTestingModule();
-      await setupComponent(createMockStore({
-        activeRepositories: [mockRepository],
-      }));
-    });
-
-    it('should not show dropdown when only one repo', () => {
-      const compiled = fixture.nativeElement as HTMLElement;
-      // With single repo, toggling shouldn't open dropdown
-      component.toggleDropdown();
-      fixture.detectChanges();
-      expect(compiled.querySelector('[role="listbox"]')).toBeFalsy();
     });
   });
 
@@ -251,8 +165,19 @@ describe('RepositoryInfoComponent', () => {
 
     it('should not display branch section when not a git repo', () => {
       const compiled = fixture.nativeElement as HTMLElement;
-      // Branch icon and separator should not be present
-      expect(compiled.textContent).not.toContain('/');
+      // Branch separator "/" should not be present between name and branch
+      const textContent = compiled.textContent || '';
+      // Should have the repo name but not the branch separator with a branch
+      expect(textContent).toContain('test-repo');
+      // The separator "/" only appears when isGitRepository is true
+      const separators = compiled.querySelectorAll('span');
+      let hasBranchSeparator = false;
+      separators.forEach(s => {
+        if (s.textContent?.trim() === '/') {
+          hasBranchSeparator = true;
+        }
+      });
+      expect(hasBranchSeparator).toBe(false);
     });
   });
 });

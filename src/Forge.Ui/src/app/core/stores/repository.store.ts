@@ -38,6 +38,14 @@ export class RepositoryStore {
     return this._repositories().filter(r => r.isActive);
   });
 
+  // Computed: active repositories with initials for sidebar display
+  readonly repositoriesWithInitials = computed(() =>
+    this.activeRepositories().map(repo => ({
+      ...repo,
+      initials: this.getInitials(repo.name),
+    }))
+  );
+
   // Computed: whether we have any repositories
   readonly hasRepositories = computed(() => this._repositories().length > 0);
 
@@ -232,5 +240,18 @@ export class RepositoryStore {
   private clearSelectedIdFromStorage(): void {
     if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(SELECTED_REPO_KEY);
+  }
+
+  /**
+   * Get 2-character initials from repository name.
+   * Single word: first letter (e.g., "Forge" → "F")
+   * Multiple words: first letter of first two words (e.g., "My Project" → "MP")
+   */
+  getInitials(name: string): string {
+    const words = name.trim().split(/\s+/);
+    if (words.length === 1) {
+      return words[0].charAt(0).toUpperCase();
+    }
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
   }
 }

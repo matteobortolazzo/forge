@@ -42,7 +42,11 @@ src/app/
 │   │   ├── artifact-type-badge.component.ts # Artifact type badge
 │   │   ├── artifact-panel.component.ts  # Artifact display panel
 │   │   ├── error-alert.component.ts     # Error alert display
-│   │   └── loading-spinner.component.ts # Loading spinner
+│   │   ├── loading-spinner.component.ts # Loading spinner
+│   │   ├── repository-info.component.ts # Repository info display
+│   │   ├── repository-sidebar/          # Repository selection sidebar
+│   │   ├── add-repository-dialog/       # Add repository dialog
+│   │   └── repository-settings-dialog/  # Repository settings dialog
 │   └── models/                    # TypeScript interfaces
 │       └── index.ts                     # All shared types
 ├── app.routes.ts                  # Route configuration
@@ -76,6 +80,10 @@ src/app/
 | `ArtifactPanelComponent` | `app-artifact-panel` | `artifact: Artifact` | - |
 | `ErrorAlertComponent` | `app-error-alert` | `title?: string`, `message: string` (required), `dismissible: boolean` | `dismiss: void` |
 | `LoadingSpinnerComponent` | `app-loading-spinner` | `size: 'sm'\|'md'\|'lg'`, `label?: string`, `inline: boolean` | - |
+| `RepositoryInfoComponent` | `app-repository-info` | - | - |
+| `RepositorySidebarComponent` | `app-repository-sidebar` | - | `addRepository`, `openSettings` |
+| `AddRepositoryDialogComponent` | `app-add-repository-dialog` | `isOpen: boolean` | `create`, `cancel` |
+| `RepositorySettingsDialogComponent` | `app-repository-settings-dialog` | `isOpen: boolean`, `repository: Repository` | `close`, `delete`, `refresh`, `setDefault` |
 
 ### Queue Features
 
@@ -183,6 +191,41 @@ All stores use Angular signals and are provided at root level.
 - `removeNotification(id)` - Remove notification
 - `clearAll()` - Clear all notifications
 
+### RepositoryStore (`core/stores/repository.store.ts`)
+
+**Signals:**
+- `repositories: Signal<Repository[]>` - All repositories
+- `selectedId: Signal<string | null>` - Selected repository ID
+- `loading: Signal<boolean>` - Loading state
+- `error: Signal<string | null>` - Error message
+- `selectedRepository: Signal<Repository | null>` - Currently selected repository
+- `defaultRepository: Signal<Repository | null>` - Default repository
+- `activeRepositories: Signal<Repository[]>` - Active (non-deleted) repositories
+- `repositoriesWithInitials: Signal<{...Repository, initials: string}[]>` - Repositories with computed initials for sidebar
+- `hasRepositories: Signal<boolean>` - Whether any repositories exist
+- `info: Signal<Repository | null>` - Selected or default repository (backward compat)
+- `name: Signal<string>` - Repository name
+- `path: Signal<string>` - Repository path
+- `branch: Signal<string | undefined>` - Current git branch
+- `commitHash: Signal<string | undefined>` - Current commit hash
+- `remoteUrl: Signal<string | undefined>` - Git remote URL
+- `isDirty: Signal<boolean>` - Has uncommitted changes
+- `isGitRepository: Signal<boolean>` - Is a git repository
+- `displayBranch: Signal<string | null>` - Truncated branch name (max 30 chars)
+
+**Actions:**
+- `loadRepositories()` - Load all repositories from API
+- `loadInfo()` - Alias for loadRepositories (backward compat)
+- `setSelectedRepository(id)` - Select a repository
+- `createRepository(dto)` - Create new repository
+- `updateRepository(id, dto)` - Update repository name
+- `deleteRepository(id)` - Soft delete repository
+- `refreshRepository(id)` - Refresh git info
+- `setDefaultRepository(id)` - Set as default repository
+- `updateRepositoryFromEvent(repo)` - Update from SSE event
+- `removeRepositoryFromEvent(id)` - Remove from SSE event
+- `getInitials(name)` - Get 2-char initials from name
+
 ## Services
 
 ### TaskService (`core/services/task.service.ts`)
@@ -236,6 +279,22 @@ Server-sent events connection management.
 **Methods:**
 - `connect(): Observable<ServerEvent>` - Connect to SSE stream
 - `disconnect(): void` - Disconnect from SSE stream
+
+### RepositoryService (`core/services/repository.service.ts`)
+
+HTTP service for repository operations.
+
+**Mock Mode:** Controlled by `useMocks` flag. Uses in-memory repository store with simulated delays.
+
+**Methods:**
+- `getAll(): Observable<Repository[]>` - Get all repositories
+- `getById(id): Observable<Repository>` - Get repository by ID
+- `create(dto): Observable<Repository>` - Create new repository
+- `update(id, dto): Observable<Repository>` - Update repository name
+- `delete(id): Observable<void>` - Soft delete repository
+- `refresh(id): Observable<Repository>` - Refresh cached git info
+- `setDefault(id): Observable<Repository>` - Set as default repository
+- `getInfo(): Observable<Repository>` - Get default repository (legacy)
 
 ## Routes
 

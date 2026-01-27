@@ -383,8 +383,7 @@ export class TaskQueueComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    // Load repositories first, tasks will load automatically when repository is selected
-    this.loadRepositories();
+    // Repositories are loaded in App component (sidebar), tasks load when repository is selected
     this.loadNotifications();
     this.loadSchedulerStatus();
     this.connectToSse();
@@ -401,10 +400,6 @@ export class TaskQueueComponent implements OnInit, OnDestroy {
 
   loadSchedulerStatus(): void {
     this.schedulerStore.loadStatus();
-  }
-
-  loadRepositories(): void {
-    this.repositoryStore.loadRepositories();
   }
 
   loadNotifications(): void {

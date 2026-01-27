@@ -5,6 +5,19 @@ import { of, throwError } from 'rxjs';
 import { Repository } from '../../shared/models';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
+// Mock localStorage for Node test environment
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => { store[key] = value; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+
+Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
+
 describe('RepositoryStore', () => {
   let store: RepositoryStore;
   let repositoryServiceMock: {
@@ -53,7 +66,7 @@ describe('RepositoryStore', () => {
 
   beforeEach(() => {
     // Clear localStorage before each test
-    localStorage.clear();
+    localStorageMock.clear();
 
     repositoryServiceMock = {
       getAll: vi.fn(),
@@ -76,7 +89,7 @@ describe('RepositoryStore', () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    localStorageMock.clear();
   });
 
   it('should be created', () => {
@@ -321,6 +334,53 @@ describe('RepositoryStore', () => {
       store.removeRepositoryFromEvent('repo-2');
 
       expect(store.selectedId()).toBe('repo-1');
+    });
+  });
+
+  describe('getInitials', () => {
+    it('should return single letter for single word name', () => {
+      expect(store.getInitials('Forge')).toBe('F');
+    });
+
+    it('should return two letters for two word name', () => {
+      expect(store.getInitials('My Project')).toBe('MP');
+    });
+
+    it('should return two letters for multiple word name', () => {
+      expect(store.getInitials('Very Long Project Name')).toBe('VL');
+    });
+
+    it('should handle leading/trailing whitespace', () => {
+      expect(store.getInitials('  Trimmed Name  ')).toBe('TN');
+    });
+
+    it('should handle uppercase input', () => {
+      expect(store.getInitials('UPPERCASE NAME')).toBe('UN');
+    });
+
+    it('should handle lowercase input', () => {
+      expect(store.getInitials('lowercase name')).toBe('LN');
+    });
+  });
+
+  describe('repositoriesWithInitials', () => {
+    beforeEach(async () => {
+      repositoryServiceMock.getAll.mockReturnValue(of([mockRepository, mockRepository2]));
+      await store.loadRepositories();
+    });
+
+    it('should include initials for each repository', () => {
+      const repos = store.repositoriesWithInitials();
+      expect(repos).toHaveLength(2);
+      expect(repos[0].initials).toBe('T'); // 'test-repo' -> 'T'
+      expect(repos[1].initials).toBe('O'); // 'other-repo' -> 'O'
+    });
+
+    it('should include all original repository properties', () => {
+      const repos = store.repositoriesWithInitials();
+      expect(repos[0].id).toBe('repo-1');
+      expect(repos[0].name).toBe('test-repo');
+      expect(repos[0].path).toBe('/home/user/repos/test-repo');
     });
   });
 });
