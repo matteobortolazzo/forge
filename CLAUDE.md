@@ -10,11 +10,22 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 
 ```
 forge/
+├── agents/                         # Agent configuration (YAML)
+│   ├── defaults/                   # Default agents for each pipeline state
+│   │   ├── planning.yml            # Planning agent (task breakdown)
+│   │   ├── implementing.yml        # Implementation agent (code generation)
+│   │   ├── reviewing.yml           # Review agent (code review)
+│   │   └── testing.yml             # Testing agent (test generation)
+│   └── variants/                   # Framework-specific variants
+│       ├── implementing.angular.yml
+│       ├── implementing.dotnet.yml
+│       └── reviewing.angular.yml
 ├── src/
 │   ├── Forge.Api/                  # .NET 10 API Solution
 │   │   ├── Forge.Api/              # Main API project
 │   │   │   ├── Features/           # Task, Agent, Events, Scheduler endpoints
-│   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start, pause/resume
+│   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start, pause/resume, artifacts
+│   │   │   │   ├── Agents/         # Agent orchestration, config loading, context detection
 │   │   │   │   ├── Agent/          # Agent status, runner service
 │   │   │   │   ├── Scheduler/      # Automatic task scheduling
 │   │   │   │   ├── Events/         # SSE endpoint
@@ -46,12 +57,14 @@ forge/
 | Feature       | Files                                                                       | Description                                            |
 |---------------|-----------------------------------------------------------------------------|--------------------------------------------------------|
 | Tasks         | `TaskEndpoints.cs`, `TaskService.cs`, `TaskModels.cs`                       | 11 endpoints for CRUD, transitions, logs, agent control, pause/resume |
+| Artifacts     | `TaskArtifactEndpoints.cs`, `TaskArtifactModels.cs`, `AgentArtifactEntity.cs` | 4 endpoints for structured agent output storage and retrieval |
+| Agents        | `OrchestratorService.cs`, `AgentConfigLoader.cs`, `ContextDetector.cs`, `PromptBuilder.cs`, `ArtifactParser.cs` | Agent orchestration, YAML config loading, context detection |
 | Agent         | `AgentEndpoints.cs`, `AgentRunnerService.cs`, `AgentModels.cs`              | Agent status, process lifecycle management             |
 | Scheduler     | `SchedulerEndpoints.cs`, `SchedulerService.cs`, `TaskSchedulerService.cs`, `SchedulerModels.cs` | Automatic task scheduling and pipeline progression |
 | Events        | `EventEndpoints.cs`, `SseService.cs`                                        | SSE event broadcasting via channels                    |
 | Notifications | `NotificationEndpoints.cs`, `NotificationService.cs`, `NotificationModels.cs` | Notification CRUD, SSE events                          |
 | Data          | `ForgeDbContext.cs`, `TaskEntity.cs`, `TaskLogEntity.cs`, `NotificationEntity.cs` | EF Core with SQLite                                    |
-| Shared        | `Enums.cs`                                                                  | TaskState, Priority, NotificationType enums            |
+| Shared        | `Enums.cs`                                                                  | TaskState, Priority, NotificationType, ArtifactType enums |
 
 ### Claude.CodeSdk (Fully Implemented)
 
@@ -135,9 +148,9 @@ For detailed Forge.Ui implementation documentation, see:
 
 **Quick Reference:**
 - **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
-- **7 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus
-- **5 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore
-- **4 services**: TaskService, AgentService, SseService, SchedulerService (all with mock mode)
+- **9 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel
+- **6 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore
+- **5 services**: TaskService, AgentService, SseService, SchedulerService, ArtifactService (all with mock mode)
 
 ## Backend Patterns
 
@@ -179,8 +192,17 @@ app.MapEventEndpoints();
 Features/
 ├── Tasks/
 │   ├── TaskEndpoints.cs        # 11 endpoints (CRUD, transition, logs, abort, start-agent, pause, resume)
+│   ├── TaskArtifactEndpoints.cs # 4 endpoints (list, get, latest, by-state)
+│   ├── TaskArtifactModels.cs   # DTOs: ArtifactDto
 │   ├── TaskService.cs          # Business logic (scoped)
 │   └── TaskModels.cs           # DTOs: TaskDto, CreateTaskDto, UpdateTaskDto, etc.
+├── Agents/
+│   ├── OrchestratorService.cs  # Agent selection, prompt assembly, artifact management (scoped)
+│   ├── AgentConfigLoader.cs    # Loads YAML configurations from agents/ directory (singleton)
+│   ├── AgentConfig.cs          # Configuration DTOs: AgentConfig, AgentMatchRules, ResolvedAgentConfig
+│   ├── ContextDetector.cs      # Repository language/framework detection (scoped)
+│   ├── PromptBuilder.cs        # Template variable substitution (scoped)
+│   └── ArtifactParser.cs       # Extracts structured content from agent output (scoped)
 ├── Agent/
 │   ├── AgentEndpoints.cs       # GET /status
 │   ├── AgentRunnerService.cs   # Claude Code process lifecycle (singleton)
@@ -333,6 +355,7 @@ public static void MapEventEndpoints(this IEndpointRouteBuilder app)
 | `task:log` | `TaskLogDto` | Agent output during execution |
 | `task:paused` | `TaskDto` | Task auto-paused after max retries or manual pause |
 | `task:resumed` | `TaskDto` | Task resumed from paused state |
+| `artifact:created` | `ArtifactDto` | Agent produces structured output |
 | `agent:statusChanged` | `AgentStatusDto` | Agent starts/stops |
 | `scheduler:taskScheduled` | `TaskDto` | Scheduler picks next task |
 | `notification:new` | `NotificationDto` | Notification created |
@@ -341,6 +364,7 @@ public static void MapEventEndpoints(this IEndpointRouteBuilder app)
 
 - **TaskService**: `task:created`, `task:updated`, `task:deleted`, `task:log`
 - **AgentRunnerService**: `agent:statusChanged`, logs via TaskService
+- **OrchestratorService**: `artifact:created` (via SseService)
 - **SchedulerService**: `task:paused`, `task:resumed`, auto-transitions
 - **TaskSchedulerService**: `scheduler:taskScheduled`
 - **NotificationService**: `notification:new`
@@ -350,6 +374,142 @@ public static void MapEventEndpoints(this IEndpointRouteBuilder app)
 - SseService connects to `/api/events`
 - BoardComponent and TaskDetailComponent subscribe to events
 - Signal stores (TaskStore, LogStore, NotificationStore) update from events
+
+## Agent Pipeline Architecture
+
+The agent pipeline uses state-specific agents with YAML configuration. Each pipeline state (Planning, Implementing, Reviewing, Testing) has a dedicated agent with specialized prompts and optional framework-specific variants.
+
+### How It Works
+
+1. **Task enters schedulable state** → Scheduler picks highest-priority task
+2. **Orchestrator selects agent** → Matches task state and detects repository context
+3. **Variant selection** → If a framework-specific variant exists (e.g., Angular), it's used
+4. **Prompt assembly** → Template variables filled with task data and previous artifacts
+5. **Agent execution** → Claude Code CLI runs with assembled prompt
+6. **Artifact storage** → Structured output saved and available to next stage
+7. **State transition** → Task moves to next state based on agent recommendation
+
+### YAML Configuration Schema
+
+Agent configurations are stored in `agents/defaults/` (required) and `agents/variants/` (optional).
+
+```yaml
+# agents/defaults/planning.yml
+id: planning-default
+name: Planning Agent
+state: Planning
+description: Breaks down tasks into actionable implementation steps
+
+prompt: |
+  You are a planning agent. Your goal is to analyze the task and create
+  a detailed implementation plan.
+
+  ## Task
+  **Title:** {task.title}
+  **Description:** {task.description}
+
+  ## Previous Artifacts
+  {artifacts}
+
+  ## Output Format
+  Provide your plan in structured markdown...
+
+output:
+  type: plan
+  schema: |
+    # Implementation Plan
+    ## Summary
+    ## Affected Files
+    ## Implementation Steps
+
+mcp_servers:
+  - context7
+
+max_turns: 30
+```
+
+### Variant Configuration
+
+Variants extend default agents with framework-specific prompts and matching rules:
+
+```yaml
+# agents/variants/implementing.angular.yml
+id: implementing-angular
+name: Angular Implementation Agent
+state: Implementing
+extends: implementing-default
+description: Implements features using Angular best practices
+
+match:
+  framework: angular        # Match by detected framework
+  # OR
+  language: typescript      # Match by detected language
+  # OR
+  files:                    # Match by file presence
+    - angular.json
+    - package.json
+
+prompt: |
+  You are an Angular implementation agent...
+  [Angular-specific instructions]
+
+mcp_servers:
+  - angular-cli
+  - primeng
+```
+
+### Template Variables
+
+Available placeholders in prompts:
+
+| Variable | Description |
+|----------|-------------|
+| `{task.title}` | Task title |
+| `{task.description}` | Task description |
+| `{task.state}` | Current pipeline state |
+| `{task.priority}` | Task priority |
+| `{artifacts}` | Formatted list of previous artifacts |
+| `{artifacts.plan}` | Most recent plan artifact content |
+| `{artifacts.implementation}` | Most recent implementation artifact content |
+| `{artifacts.review}` | Most recent review artifact content |
+
+### Artifact Types
+
+| Type | Produced By | Contains |
+|------|-------------|----------|
+| `plan` | Planning agent | Implementation steps, affected files, testing strategy |
+| `implementation` | Implementing agent | Code changes summary, files modified |
+| `review` | Reviewing agent | Review findings, suggested changes, approval status |
+| `test` | Testing agent | Test results, coverage report |
+| `general` | Any agent | Unstructured output |
+
+### Context Detection
+
+The `ContextDetector` service automatically identifies:
+
+- **Language**: Analyzes file extensions in repository (e.g., `.ts` → `typescript`, `.cs` → `csharp`)
+- **Framework**: Checks for framework markers (`angular.json` → `angular`, `*.csproj` → `dotnet`)
+
+Detection results are cached on the task entity and used for variant selection.
+
+### Creating New Agents
+
+1. **Default agent**: Create `agents/defaults/{state}.yml` with required fields
+2. **Variant**: Create `agents/variants/{state}.{framework}.yml` with `extends` and `match` fields
+3. **Register MCP servers**: Add server names to `mcp_servers` array if needed
+4. **Restart API**: Configurations are loaded at startup
+
+### Key Classes
+
+| Class | Purpose |
+|-------|---------|
+| `IOrchestratorService` | Agent selection, prompt assembly, artifact management |
+| `IAgentConfigLoader` | Loads and caches YAML configurations |
+| `IContextDetector` | Repository language/framework detection |
+| `IPromptBuilder` | Template variable substitution |
+| `IArtifactParser` | Extracts structured content from agent output |
+| `AgentConfig` | YAML configuration model |
+| `ResolvedAgentConfig` | Fully resolved config with assembled prompt |
 
 ## Frontend Patterns
 
@@ -553,6 +713,14 @@ POST   /api/tasks/{id}/pause        # Pause task from automatic scheduling
 POST   /api/tasks/{id}/resume       # Resume paused task
 ```
 
+### Task Artifacts
+```
+GET    /api/tasks/{id}/artifacts              # List all artifacts for task
+GET    /api/tasks/{id}/artifacts/{aid}        # Get specific artifact by ID
+GET    /api/tasks/{id}/artifacts/latest       # Get most recent artifact
+GET    /api/tasks/{id}/artifacts/by-state/{state}  # Filter artifacts by pipeline state
+```
+
 ### Agent
 ```
 GET    /api/agent/status          # Get current agent status
@@ -599,6 +767,19 @@ Backlog → Planning → Implementing → Reviewing → Testing → PrReady → 
 Low | Medium | High | Critical
 ```
 
+### Artifact Types
+```
+plan | implementation | review | test | general
+```
+
+### TaskEntity Fields (Agent Context)
+```csharp
+// Auto-detected or user-specified context
+public string? DetectedLanguage { get; set; }    // e.g., "csharp", "typescript"
+public string? DetectedFramework { get; set; }   // e.g., "angular", "dotnet"
+public PipelineState? RecommendedNextState { get; set; }  // Agent's recommendation
+```
+
 ## Important Notes
 
 ### Claude Code CLI Integration
@@ -610,7 +791,7 @@ Low | Medium | High | Critical
 ### Real-time Updates
 - Protocol: EventSource/SSE (not WebSocket)
 - Payload: Full state on each event (not deltas)
-- Event types: task:created, task:updated, task:deleted, task:log, task:paused, task:resumed, agent:statusChanged, scheduler:taskScheduled, notification:new
+- Event types: task:created, task:updated, task:deleted, task:log, task:paused, task:resumed, artifact:created, agent:statusChanged, scheduler:taskScheduled, notification:new
 
 ### Task Scheduling
 The scheduler automatically picks the highest-priority ready task and starts the agent:
@@ -627,4 +808,5 @@ CLAUDE_CODE_PATH="claude"
 REPOSITORY_PATH="/path/to/your/repo"
 ASPNETCORE_URLS="http://localhost:5000"
 CLAUDE_MOCK_MODE="true"         # Enable mock Claude client for E2E testing
+AGENTS_PATH="./agents"          # Optional: custom path to agents directory (default: ./agents)
 ```

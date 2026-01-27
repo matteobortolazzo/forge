@@ -1,10 +1,15 @@
+using System.Text;
 using Claude.CodeSdk;
 using Claude.CodeSdk.ContentBlocks;
 using Claude.CodeSdk.Messages;
+using Forge.Api.Data;
+using Forge.Api.Data.Entities;
+using Forge.Api.Features.Agents;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
 using Forge.Api.Shared;
+using Microsoft.EntityFrameworkCore;
 
 namespace Forge.Api.Features.Agent;
 
@@ -13,6 +18,8 @@ public class AgentRunnerService(
     ISseService sse,
     IConfiguration configuration,
     IClaudeAgentClientFactory clientFactory,
+    IOrchestratorService orchestrator,
+    IArtifactParser artifactParser,
     ILogger<AgentRunnerService> logger) : IAgentRunnerService
 {
     private readonly Lock _lock = new();
@@ -85,33 +92,67 @@ public class AgentRunnerService(
     private async Task RunAgentAsync(Guid taskId, string title, string description, CancellationToken ct)
     {
         var completionResult = AgentCompletionResult.Success;
+        var agentOutput = new StringBuilder();
+        ResolvedAgentConfig? resolvedConfig = null;
+        PipelineState? taskState = null;
 
         try
         {
             var workingDirectory = configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
             var cliPath = configuration["CLAUDE_CODE_PATH"];
 
+            // Load the task entity for orchestration
+            TaskEntity? task;
+            using (var scope = scopeFactory.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
+                task = await db.Tasks.FindAsync([taskId], ct);
+            }
+
+            if (task == null)
+            {
+                logger.LogError("Task {TaskId} not found", taskId);
+                completionResult = AgentCompletionResult.Error;
+                return;
+            }
+
+            taskState = task.State;
+
+            // Use orchestrator to select agent and build prompt
+            resolvedConfig = await orchestrator.SelectAgentAsync(task, workingDirectory);
+
+            logger.LogInformation(
+                "Using agent {AgentId} for task {TaskId} in state {State}",
+                resolvedConfig.Config.Id, taskId, task.State);
+
+            // Update task context if detected
+            var detectedLanguage = task.DetectedLanguage;
+            var detectedFramework = task.DetectedFramework;
+
             var options = new ClaudeAgentOptions
             {
                 WorkingDirectory = workingDirectory,
                 CliPath = cliPath,
                 DangerouslySkipPermissions = true,
-                MaxTurns = 50
+                MaxTurns = resolvedConfig.MaxTurns
             };
-
-            var prompt = $"""
-                Task: {title}
-
-                Description:
-                {description}
-
-                Please complete this task. Be thorough and provide updates on your progress.
-                """;
 
             await using var client = clientFactory.Create(options);
 
-            await foreach (var message in client.QueryStreamAsync(prompt, ct: ct))
+            await foreach (var message in client.QueryStreamAsync(resolvedConfig.ResolvedPrompt, ct: ct))
             {
+                // Capture text output for artifact parsing
+                if (message is AssistantMessage assistant)
+                {
+                    foreach (var block in assistant.Content)
+                    {
+                        if (block is TextBlock text && !string.IsNullOrWhiteSpace(text.Text))
+                        {
+                            agentOutput.AppendLine(text.Text);
+                        }
+                    }
+                }
+
                 await ProcessMessageAsync(taskId, message);
             }
 
@@ -138,7 +179,53 @@ public class AgentRunnerService(
         }
         finally
         {
+            // Store artifact if we have output and config
+            if (completionResult == AgentCompletionResult.Success &&
+                resolvedConfig != null &&
+                agentOutput.Length > 0 &&
+                taskState.HasValue)
+            {
+                await StoreArtifactAsync(taskId, taskState.Value, resolvedConfig, agentOutput.ToString());
+            }
+
             await CleanupAsync(taskId, completionResult);
+        }
+    }
+
+    private async Task StoreArtifactAsync(
+        Guid taskId,
+        PipelineState taskState,
+        ResolvedAgentConfig resolvedConfig,
+        string output)
+    {
+        try
+        {
+            // Parse artifact from output
+            var parsed = artifactParser.ParseArtifact(output, resolvedConfig.Config);
+            if (parsed != null)
+            {
+                // Store the artifact
+                await orchestrator.StoreArtifactAsync(
+                    taskId,
+                    taskState,
+                    parsed.Type,
+                    parsed.Content,
+                    resolvedConfig.Config.Id);
+
+                // Parse and store recommended next state
+                var recommendedState = artifactParser.ParseRecommendedNextState(output);
+                if (recommendedState.HasValue)
+                {
+                    await orchestrator.UpdateTaskContextAsync(taskId, null, null, recommendedState);
+                    logger.LogInformation(
+                        "Agent recommended next state {State} for task {TaskId}",
+                        recommendedState, taskId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to store artifact for task {TaskId}", taskId);
         }
     }
 

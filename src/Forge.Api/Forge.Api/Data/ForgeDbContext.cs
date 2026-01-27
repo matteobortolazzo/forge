@@ -9,6 +9,7 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
     public DbSet<TaskEntity> Tasks => Set<TaskEntity>();
     public DbSet<TaskLogEntity> TaskLogs => Set<TaskLogEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
+    public DbSet<AgentArtifactEntity> AgentArtifacts => Set<AgentArtifactEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +51,18 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .WithOne(l => l.Task)
                 .HasForeignKey(l => l.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Artifacts)
+                .WithOne(a => a.Task)
+                .HasForeignKey(a => a.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Agent context detection fields
+            entity.Property(e => e.DetectedLanguage).HasMaxLength(50);
+            entity.Property(e => e.DetectedFramework).HasMaxLength(50);
+            entity.Property(e => e.RecommendedNextState)
+                .HasConversion<string>()
+                .HasMaxLength(20);
         });
 
         modelBuilder.Entity<TaskLogEntity>(entity =>
@@ -78,6 +91,27 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .WithMany()
                 .HasForeignKey(e => e.TaskId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AgentArtifactEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Content).IsRequired();
+            entity.Property(e => e.ProducedInState)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.ArtifactType)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.AgentId).HasMaxLength(100);
+
+            // Index for retrieving artifacts by task (ordered by creation)
+            entity.HasIndex(e => new { e.TaskId, e.CreatedAt })
+                .HasDatabaseName("IX_AgentArtifacts_Task_CreatedAt");
+
+            // Index for retrieving artifacts by state
+            entity.HasIndex(e => new { e.TaskId, e.ProducedInState })
+                .HasDatabaseName("IX_AgentArtifacts_Task_State");
         });
     }
 }

@@ -31,6 +31,12 @@ public class TaskEntity
     public int ChildCount { get; set; } = 0;
     public PipelineState? DerivedState { get; set; }  // Computed for parents
 
-    // Navigation property
+    // Agent context detection
+    public string? DetectedLanguage { get; set; }    // Auto-detected or user-specified (e.g., "csharp", "typescript")
+    public string? DetectedFramework { get; set; }   // Auto-detected or user-specified (e.g., "angular", "dotnet")
+    public PipelineState? RecommendedNextState { get; set; }  // Agent's recommendation for next state
+
+    // Navigation properties
     public ICollection<TaskLogEntity> Logs { get; set; } = [];
+    public ICollection<AgentArtifactEntity> Artifacts { get; set; } = [];
 }

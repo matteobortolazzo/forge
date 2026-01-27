@@ -22,11 +22,13 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Set test database path via configuration to prevent forge.db creation in project directory
+        // Also skip migrations since we use EnsureCreated() for in-memory SQLite
         builder.ConfigureAppConfiguration((context, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["DATABASE_PATH"] = TestDatabasePath
+                ["DATABASE_PATH"] = TestDatabasePath,
+                ["SKIP_MIGRATIONS"] = "true"
             });
         });
 
@@ -80,6 +82,7 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
     public async Task ResetDatabaseAsync()
     {
         await using var db = CreateDbContext();
+        await db.AgentArtifacts.ExecuteDeleteAsync();
         await db.Notifications.ExecuteDeleteAsync();
         await db.TaskLogs.ExecuteDeleteAsync();
         await db.Tasks.ExecuteDeleteAsync();

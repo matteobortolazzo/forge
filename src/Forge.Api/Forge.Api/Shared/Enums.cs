@@ -66,3 +66,21 @@ public enum NotificationType
     [JsonStringEnumMemberName("error")]
     Error
 }
+
+/// <summary>
+/// Artifact types produced by agents at each pipeline stage. Serialized as lowercase.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ArtifactType>))]
+public enum ArtifactType
+{
+    [JsonStringEnumMemberName("plan")]
+    Plan,
+    [JsonStringEnumMemberName("implementation")]
+    Implementation,
+    [JsonStringEnumMemberName("review")]
+    Review,
+    [JsonStringEnumMemberName("test")]
+    Test,
+    [JsonStringEnumMemberName("general")]
+    General
+}

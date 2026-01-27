@@ -11,15 +11,17 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TaskStore } from '../../core/stores/task.store';
 import { LogStore } from '../../core/stores/log.store';
 import { NotificationStore } from '../../core/stores/notification.store';
+import { ArtifactStore } from '../../core/stores/artifact.store';
 import { SseService } from '../../core/services/sse.service';
 import { TaskService } from '../../core/services/task.service';
-import { Task, TaskLog, ServerEvent, PIPELINE_STATES, PipelineState, TaskSplitPayload, ChildAddedPayload } from '../../shared/models';
+import { Task, TaskLog, Artifact, ServerEvent, PIPELINE_STATES, PipelineState, TaskSplitPayload, ChildAddedPayload } from '../../shared/models';
 import { StateBadgeComponent } from '../../shared/components/state-badge.component';
 import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
 import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 import { ErrorAlertComponent } from '../../shared/components/error-alert.component';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner.component';
+import { ArtifactPanelComponent } from '../../shared/components/artifact-panel.component';
 import { AgentOutputComponent } from './agent-output.component';
 import { Subscription } from 'rxjs';
 
@@ -34,6 +36,7 @@ import { Subscription } from 'rxjs';
     PausedBadgeComponent,
     ErrorAlertComponent,
     LoadingSpinnerComponent,
+    ArtifactPanelComponent,
     AgentOutputComponent,
   ],
   template: `
@@ -346,9 +349,19 @@ import { Subscription } from 'rxjs';
             </div>
           </div>
 
-          <!-- Right Panel: Agent Output -->
-          <div class="flex-1 p-6">
-            <app-agent-output [logs]="logs()" />
+          <!-- Right Panel: Artifacts & Agent Output -->
+          <div class="flex flex-1 flex-col overflow-hidden">
+            <!-- Artifacts Section -->
+            @if (artifacts().length > 0 || task()!.state !== 'Backlog') {
+              <div class="h-64 shrink-0 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                <app-artifact-panel [artifacts]="artifacts()" />
+              </div>
+            }
+
+            <!-- Agent Output Section -->
+            <div class="flex-1 overflow-hidden p-6">
+              <app-agent-output [logs]="logs()" />
+            </div>
           </div>
         }
       </main>
@@ -366,6 +379,7 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly taskStore = inject(TaskStore);
   private readonly logStore = inject(LogStore);
+  private readonly artifactStore = inject(ArtifactStore);
   private readonly notificationStore = inject(NotificationStore);
   private readonly taskService = inject(TaskService);
   private readonly sseService = inject(SseService);
@@ -381,6 +395,7 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
 
   readonly task = computed(() => this.taskStore.getTaskById(this.taskId));
   readonly logs = computed(() => this.logStore.getLogsForTask(this.taskId));
+  readonly artifacts = computed(() => this.artifactStore.getArtifactsForTask(this.taskId));
 
   readonly nextState = computed(() => {
     const t = this.task();
@@ -451,8 +466,11 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
       await this.taskStore.loadTasks();
     }
 
-    // Load logs for this task
-    await this.logStore.loadLogsForTask(this.taskId);
+    // Load logs and artifacts for this task in parallel
+    await Promise.all([
+      this.logStore.loadLogsForTask(this.taskId),
+      this.artifactStore.loadArtifactsForTask(this.taskId),
+    ]);
 
     this.isLoading.set(false);
   }
@@ -487,6 +505,13 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
       case 'task:childAdded': {
         const childPayload = event.payload as ChildAddedPayload;
         this.taskStore.handleChildAddedEvent(childPayload.parentId, childPayload.child);
+        break;
+      }
+      case 'artifact:created': {
+        const artifact = event.payload as Artifact;
+        if (artifact.taskId === this.taskId) {
+          this.artifactStore.addArtifactFromEvent(artifact);
+        }
         break;
       }
     }

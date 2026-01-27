@@ -19,6 +19,10 @@ export type Priority = (typeof PRIORITIES)[number];
 export const LOG_TYPES = ['info', 'toolUse', 'toolResult', 'error', 'thinking'] as const;
 export type LogType = (typeof LOG_TYPES)[number];
 
+// Artifact Types produced by agents
+export const ARTIFACT_TYPES = ['plan', 'implementation', 'review', 'test', 'general'] as const;
+export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+
 // Task Progress for parent tasks
 export interface TaskProgress {
   completed: number;
@@ -49,6 +53,21 @@ export interface Task {
   derivedState?: PipelineState;
   children?: Task[];
   progress?: TaskProgress;
+  // Agent context detection
+  detectedLanguage?: string;
+  detectedFramework?: string;
+  recommendedNextState?: PipelineState;
+}
+
+// Agent Artifact Interface
+export interface Artifact {
+  id: string;
+  taskId: string;
+  producedInState: PipelineState;
+  artifactType: ArtifactType;
+  content: string;
+  createdAt: Date;
+  agentId?: string;
 }
 
 // Task Log Interface
@@ -117,7 +136,8 @@ export type ServerEventType =
   | 'task:childAdded'
   | 'agent:statusChanged'
   | 'scheduler:taskScheduled'
-  | 'notification:new';
+  | 'notification:new'
+  | 'artifact:created';
 
 // SSE Event Payloads
 export interface TaskSplitPayload {

@@ -9,6 +9,7 @@ using Forge.Api.Features.Mock;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Repository;
 using Forge.Api.Features.Scheduler;
+using Forge.Api.Features.Agents;
 using Forge.Api.Features.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +55,13 @@ builder.Services.AddScoped<SchedulerService>();
 builder.Services.AddHostedService<TaskSchedulerService>();
 builder.Services.AddSingleton<RepositoryService>();
 
+// Agent orchestration services
+builder.Services.AddSingleton<IAgentConfigLoader, AgentConfigLoader>();
+builder.Services.AddSingleton<IContextDetector, ContextDetector>();
+builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
+builder.Services.AddSingleton<IArtifactParser, ArtifactParser>();
+builder.Services.AddSingleton<IOrchestratorService, OrchestratorService>();
+
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
 {
@@ -69,8 +77,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Apply pending migrations (creates database if not exists)
-using (var scope = app.Services.CreateScope())
+// Skip migrations if SKIP_MIGRATIONS is set (used in integration tests)
+var skipMigrations = builder.Configuration.GetValue<bool>("SKIP_MIGRATIONS");
+if (!skipMigrations)
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
     await db.Database.MigrateAsync();
 }
@@ -85,6 +96,7 @@ app.UseCors();
 
 // Map endpoints
 app.MapTaskEndpoints();
+app.MapTaskArtifactEndpoints();
 app.MapAgentEndpoints();
 app.MapEventEndpoints();
 app.MapNotificationEndpoints();
