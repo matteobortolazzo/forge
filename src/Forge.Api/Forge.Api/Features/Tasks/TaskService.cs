@@ -48,9 +48,10 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         return new TaskProgressDto(completed, total, percent);
     }
 
-    public async Task<IReadOnlyList<TaskDto>> GetAllAsync(bool rootOnly = false)
+    public async Task<IReadOnlyList<TaskDto>> GetAllAsync(Guid repositoryId, bool rootOnly = false)
     {
-        var query = db.Tasks.AsNoTracking();
+        var query = db.Tasks.AsNoTracking()
+            .Where(t => t.RepositoryId == repositoryId);
 
         if (rootOnly)
         {
@@ -107,7 +108,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         return children.Select(e => TaskDto.FromEntity(e)).ToList();
     }
 
-    public async Task<TaskDto> CreateAsync(CreateTaskDto dto)
+    public async Task<TaskDto> CreateAsync(Guid repositoryId, CreateTaskDto dto)
     {
         var entity = new TaskEntity
         {
@@ -118,7 +119,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
             State = PipelineState.Backlog,
             HasError = false,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            RepositoryId = repositoryId
         };
 
         db.Tasks.Add(entity);
@@ -302,6 +304,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
                 Priority = subtask.Priority,
                 State = PipelineState.Backlog,
                 ParentId = parent.Id,
+                RepositoryId = parent.RepositoryId, // Inherit from parent
                 HasError = false,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -352,6 +355,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
             Priority = dto.Priority,
             State = PipelineState.Backlog,
             ParentId = parent.Id,
+            RepositoryId = parent.RepositoryId, // Inherit from parent
             HasError = false,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow

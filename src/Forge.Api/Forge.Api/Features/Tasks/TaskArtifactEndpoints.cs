@@ -1,4 +1,5 @@
 using Forge.Api.Data;
+using Forge.Api.Features.Repositories;
 using Forge.Api.Shared;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ public static class TaskArtifactEndpoints
 {
     public static void MapTaskArtifactEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/tasks/{taskId:guid}/artifacts")
+        var group = app.MapGroup("/api/repositories/{repoId:guid}/tasks/{taskId:guid}/artifacts")
             .WithTags("Task Artifacts");
 
         group.MapGet("/", GetArtifacts)
@@ -29,14 +30,19 @@ public static class TaskArtifactEndpoints
             .WithSummary("Get artifacts produced in a specific pipeline state");
     }
 
-    private static async Task<Results<Ok<List<ArtifactDto>>, NotFound>> GetArtifacts(
+    private static async Task<IResult> GetArtifacts(
+        Guid repoId,
         Guid taskId,
-        ForgeDbContext db)
+        ForgeDbContext db,
+        IRepositoryService repositoryService)
     {
-        var taskExists = await db.Tasks.AnyAsync(t => t.Id == taskId);
-        if (!taskExists)
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        if (task is null || task.RepositoryId != repoId)
         {
-            return TypedResults.NotFound();
+            return Results.NotFound();
         }
 
         var artifacts = await db.AgentArtifacts
@@ -45,30 +51,52 @@ public static class TaskArtifactEndpoints
             .Select(a => ArtifactDto.FromEntity(a))
             .ToListAsync();
 
-        return TypedResults.Ok(artifacts);
+        return Results.Ok(artifacts);
     }
 
-    private static async Task<Results<Ok<ArtifactDto>, NotFound>> GetArtifact(
+    private static async Task<IResult> GetArtifact(
+        Guid repoId,
         Guid taskId,
         Guid artifactId,
-        ForgeDbContext db)
+        ForgeDbContext db,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var artifact = await db.AgentArtifacts
             .Where(a => a.TaskId == taskId && a.Id == artifactId)
             .FirstOrDefaultAsync();
 
         if (artifact == null)
         {
-            return TypedResults.NotFound();
+            return Results.NotFound();
         }
 
-        return TypedResults.Ok(ArtifactDto.FromEntity(artifact));
+        return Results.Ok(ArtifactDto.FromEntity(artifact));
     }
 
-    private static async Task<Results<Ok<ArtifactDto>, NotFound>> GetLatestArtifact(
+    private static async Task<IResult> GetLatestArtifact(
+        Guid repoId,
         Guid taskId,
-        ForgeDbContext db)
+        ForgeDbContext db,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var artifact = await db.AgentArtifacts
             .Where(a => a.TaskId == taskId)
             .OrderByDescending(a => a.CreatedAt)
@@ -76,21 +104,26 @@ public static class TaskArtifactEndpoints
 
         if (artifact == null)
         {
-            return TypedResults.NotFound();
+            return Results.NotFound();
         }
 
-        return TypedResults.Ok(ArtifactDto.FromEntity(artifact));
+        return Results.Ok(ArtifactDto.FromEntity(artifact));
     }
 
-    private static async Task<Results<Ok<List<ArtifactDto>>, NotFound>> GetArtifactsByState(
+    private static async Task<IResult> GetArtifactsByState(
+        Guid repoId,
         Guid taskId,
         PipelineState state,
-        ForgeDbContext db)
+        ForgeDbContext db,
+        IRepositoryService repositoryService)
     {
-        var taskExists = await db.Tasks.AnyAsync(t => t.Id == taskId);
-        if (!taskExists)
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        if (task is null || task.RepositoryId != repoId)
         {
-            return TypedResults.NotFound();
+            return Results.NotFound();
         }
 
         var artifacts = await db.AgentArtifacts
@@ -99,6 +132,6 @@ public static class TaskArtifactEndpoints
             .Select(a => ArtifactDto.FromEntity(a))
             .ToListAsync();
 
-        return TypedResults.Ok(artifacts);
+        return Results.Ok(artifacts);
     }
 }

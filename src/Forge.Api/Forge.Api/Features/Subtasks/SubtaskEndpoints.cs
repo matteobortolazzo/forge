@@ -1,3 +1,6 @@
+using Forge.Api.Features.Repositories;
+using Forge.Api.Features.Tasks;
+
 namespace Forge.Api.Features.Subtasks;
 
 /// <summary>
@@ -7,7 +10,7 @@ public static class SubtaskEndpoints
 {
     public static void MapSubtaskEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/tasks/{taskId:guid}/subtasks")
+        var group = app.MapGroup("/api/repositories/{repoId:guid}/tasks/{taskId:guid}/subtasks")
             .WithTags("Subtasks");
 
         group.MapGet("/", GetSubtasks)
@@ -40,18 +43,42 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> GetSubtasks(
+        Guid repoId,
         Guid taskId,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         var subtasks = await service.GetSubtasksAsync(taskId);
         return Results.Ok(subtasks);
     }
 
     private static async Task<IResult> GetSubtask(
+        Guid repoId,
         Guid taskId,
         Guid subtaskId,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         var subtask = await service.GetSubtaskAsync(taskId, subtaskId);
         return subtask == null
             ? Results.NotFound(new { message = $"Subtask {subtaskId} not found" })
@@ -59,14 +86,26 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> CreateSubtask(
+        Guid repoId,
         Guid taskId,
         CreateSubtaskDto dto,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         try
         {
             var subtask = await service.CreateSubtaskAsync(taskId, dto);
-            return Results.Created($"/api/tasks/{taskId}/subtasks/{subtask.Id}", subtask);
+            return Results.Created($"/api/repositories/{repoId}/tasks/{taskId}/subtasks/{subtask.Id}", subtask);
         }
         catch (InvalidOperationException ex)
         {
@@ -75,11 +114,23 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> UpdateSubtask(
+        Guid repoId,
         Guid taskId,
         Guid subtaskId,
         UpdateSubtaskDto dto,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         var subtask = await service.UpdateSubtaskAsync(taskId, subtaskId, dto);
         return subtask == null
             ? Results.NotFound(new { message = $"Subtask {subtaskId} not found" })
@@ -87,10 +138,22 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> DeleteSubtask(
+        Guid repoId,
         Guid taskId,
         Guid subtaskId,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         var deleted = await service.DeleteSubtaskAsync(taskId, subtaskId);
         return deleted
             ? Results.NoContent()
@@ -98,10 +161,22 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> StartSubtask(
+        Guid repoId,
         Guid taskId,
         Guid subtaskId,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         try
         {
             var subtask = await service.StartSubtaskAsync(taskId, subtaskId);
@@ -116,10 +191,22 @@ public static class SubtaskEndpoints
     }
 
     private static async Task<IResult> RetrySubtask(
+        Guid repoId,
         Guid taskId,
         Guid subtaskId,
-        SubtaskService service)
+        SubtaskService service,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.GetByIdAsync(taskId);
+        if (task is null || task.RepositoryId != repoId)
+        {
+            return Results.NotFound(new { error = "Task not found" });
+        }
+
         try
         {
             var subtask = await service.RetrySubtaskAsync(taskId, subtaskId);

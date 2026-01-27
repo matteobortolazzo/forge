@@ -15,6 +15,10 @@ public class TaskEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    // Repository association
+    public Guid RepositoryId { get; set; }
+    public RepositoryEntity Repository { get; set; } = null!;
+
     // Scheduling fields
     public bool IsPaused { get; set; }
     public string? PauseReason { get; set; }

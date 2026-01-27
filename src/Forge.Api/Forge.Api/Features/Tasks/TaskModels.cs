@@ -10,6 +10,7 @@ public record TaskProgressDto(
 
 public record TaskDto(
     Guid Id,
+    Guid RepositoryId,
     string Title,
     string Description,
     PipelineState State,
@@ -33,6 +34,7 @@ public record TaskDto(
 {
     public static TaskDto FromEntity(TaskEntity entity, IReadOnlyList<TaskDto>? children = null, TaskProgressDto? progress = null) => new(
         entity.Id,
+        entity.RepositoryId,
         entity.Title,
         entity.Description,
         entity.State,

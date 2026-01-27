@@ -1,4 +1,5 @@
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.Repositories;
 using Forge.Api.Features.Scheduler;
 
 namespace Forge.Api.Features.Tasks;
@@ -7,7 +8,7 @@ public static class TaskEndpoints
 {
     public static void MapTaskEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/tasks")
+        var group = app.MapGroup("/api/repositories/{repoId:guid}/tasks")
             .WithTags("Tasks");
 
         group.MapGet("/", GetAllTasks)
@@ -54,42 +55,110 @@ public static class TaskEndpoints
     }
 
     private static async Task<IResult> GetAllTasks(
+        Guid repoId,
         TaskService taskService,
+        IRepositoryService repositoryService,
         bool rootOnly = false)
     {
-        var tasks = await taskService.GetAllAsync(rootOnly);
+        // Verify repository exists
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var tasks = await taskService.GetAllAsync(repoId, rootOnly);
         return Results.Ok(tasks);
     }
 
     private static async Task<IResult> GetTask(
+        Guid repoId,
         Guid id,
         TaskService taskService,
+        IRepositoryService repositoryService,
         bool includeChildren = true)
     {
+        // Verify repository exists
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
         var task = await taskService.GetByIdAsync(id, includeChildren);
+
+        // Verify task belongs to this repository
+        if (task is not null && task.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         return task is null ? Results.NotFound() : Results.Ok(task);
     }
 
-    private static async Task<IResult> CreateTask(CreateTaskDto dto, TaskService taskService)
+    private static async Task<IResult> CreateTask(
+        Guid repoId,
+        CreateTaskDto dto,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
-        var task = await taskService.CreateAsync(dto);
-        return Results.Created($"/api/tasks/{task.Id}", task);
+        // Verify repository exists
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var task = await taskService.CreateAsync(repoId, dto);
+        return Results.Created($"/api/repositories/{repoId}/tasks/{task.Id}", task);
     }
 
-    private static async Task<IResult> UpdateTask(Guid id, UpdateTaskDto dto, TaskService taskService)
+    private static async Task<IResult> UpdateTask(
+        Guid repoId,
+        Guid id,
+        UpdateTaskDto dto,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var task = await taskService.UpdateAsync(id, dto);
         return task is null ? Results.NotFound() : Results.Ok(task);
     }
 
-    private static async Task<IResult> DeleteTask(Guid id, TaskService taskService)
+    private static async Task<IResult> DeleteTask(
+        Guid repoId,
+        Guid id,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var deleted = await taskService.DeleteAsync(id);
         return deleted ? Results.NoContent() : Results.NotFound();
     }
 
-    private static async Task<IResult> TransitionTask(Guid id, TransitionTaskDto dto, TaskService taskService)
+    private static async Task<IResult> TransitionTask(
+        Guid repoId,
+        Guid id,
+        TransitionTaskDto dto,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         try
         {
             var task = await taskService.TransitionAsync(id, dto);
@@ -101,19 +170,36 @@ public static class TaskEndpoints
         }
     }
 
-    private static async Task<IResult> GetTaskLogs(Guid id, TaskService taskService)
+    private static async Task<IResult> GetTaskLogs(
+        Guid repoId,
+        Guid id,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
+        if (task.RepositoryId != repoId) return Results.NotFound();
 
         var logs = await taskService.GetLogsAsync(id);
         return Results.Ok(logs);
     }
 
-    private static async Task<IResult> AbortAgent(Guid id, TaskService taskService, IAgentRunnerService agentRunner)
+    private static async Task<IResult> AbortAgent(
+        Guid repoId,
+        Guid id,
+        TaskService taskService,
+        IAgentRunnerService agentRunner,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
+        if (task.RepositoryId != repoId) return Results.NotFound();
 
         var status = agentRunner.GetStatus();
         if (!status.IsRunning || status.CurrentTaskId != id)
@@ -132,10 +218,19 @@ public static class TaskEndpoints
         return Results.Ok(updatedTask);
     }
 
-    private static async Task<IResult> StartAgent(Guid id, TaskService taskService, IAgentRunnerService agentRunner)
+    private static async Task<IResult> StartAgent(
+        Guid repoId,
+        Guid id,
+        TaskService taskService,
+        IAgentRunnerService agentRunner,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
+        if (task.RepositoryId != repoId) return Results.NotFound();
 
         var started = await agentRunner.StartAgentAsync(id, task.Title, task.Description);
         if (!started)
@@ -148,20 +243,63 @@ public static class TaskEndpoints
         return Results.Ok(updatedTask);
     }
 
-    private static async Task<IResult> PauseTask(Guid id, PauseTaskDto dto, SchedulerService schedulerService)
+    private static async Task<IResult> PauseTask(
+        Guid repoId,
+        Guid id,
+        PauseTaskDto dto,
+        SchedulerService schedulerService,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var task = await schedulerService.PauseTaskAsync(id, dto.Reason);
         return task is null ? Results.NotFound() : Results.Ok(task);
     }
 
-    private static async Task<IResult> ResumeTask(Guid id, SchedulerService schedulerService)
+    private static async Task<IResult> ResumeTask(
+        Guid repoId,
+        Guid id,
+        SchedulerService schedulerService,
+        IRepositoryService repositoryService,
+        TaskService taskService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         var task = await schedulerService.ResumeTaskAsync(id);
         return task is null ? Results.NotFound() : Results.Ok(task);
     }
 
-    private static async Task<IResult> SplitTask(Guid id, SplitTaskDto dto, TaskService taskService)
+    private static async Task<IResult> SplitTask(
+        Guid repoId,
+        Guid id,
+        SplitTaskDto dto,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         try
         {
             var result = await taskService.SplitTaskAsync(id, dto);
@@ -173,14 +311,28 @@ public static class TaskEndpoints
         }
     }
 
-    private static async Task<IResult> AddChild(Guid id, CreateSubtaskDto dto, TaskService taskService)
+    private static async Task<IResult> AddChild(
+        Guid repoId,
+        Guid id,
+        CreateSubtaskDto dto,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await taskService.GetByIdAsync(id);
+        if (existing is not null && existing.RepositoryId != repoId)
+        {
+            return Results.NotFound();
+        }
+
         try
         {
             var child = await taskService.AddChildAsync(id, dto);
             return child is null
                 ? Results.NotFound()
-                : Results.Created($"/api/tasks/{child.Id}", child);
+                : Results.Created($"/api/repositories/{repoId}/tasks/{child.Id}", child);
         }
         catch (InvalidOperationException ex)
         {
@@ -188,10 +340,18 @@ public static class TaskEndpoints
         }
     }
 
-    private static async Task<IResult> GetChildren(Guid id, TaskService taskService)
+    private static async Task<IResult> GetChildren(
+        Guid repoId,
+        Guid id,
+        TaskService taskService,
+        IRepositoryService repositoryService)
     {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
         var task = await taskService.GetByIdAsync(id);
         if (task is null) return Results.NotFound();
+        if (task.RepositoryId != repoId) return Results.NotFound();
 
         var children = await taskService.GetChildrenAsync(id);
         return Results.Ok(children);
