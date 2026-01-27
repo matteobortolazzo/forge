@@ -16,14 +16,14 @@ public class TransitionTaskTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task TransitionTask_FromBacklogToPlanning_Succeeds()
+    public async Task TransitionTask_FromBacklogToSplit_Succeeds()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
         var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Transition Test", state: PipelineState.Backlog);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Split)
             .Build();
 
         // Act
@@ -32,7 +32,7 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Planning);
+        task!.State.Should().Be(PipelineState.Split);
     }
 
     [Fact]
@@ -44,10 +44,13 @@ public class TransitionTaskTests : IAsyncLifetime
 
         var states = new[]
         {
+            PipelineState.Split,
+            PipelineState.Research,
             PipelineState.Planning,
             PipelineState.Implementing,
+            PipelineState.Simplifying,
+            PipelineState.Verifying,
             PipelineState.Reviewing,
-            PipelineState.Testing,
             PipelineState.PrReady,
             PipelineState.Done
         };
@@ -68,10 +71,10 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Implementing);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Research);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Split)
             .Build();
 
         // Act
@@ -80,7 +83,7 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Planning);
+        task!.State.Should().Be(PipelineState.Split);
     }
 
     [Fact]
@@ -143,7 +146,7 @@ public class TransitionTaskTests : IAsyncLifetime
         var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Transition", state: PipelineState.Backlog);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Split)
             .Build();
 
         // Act
@@ -151,7 +154,7 @@ public class TransitionTaskTests : IAsyncLifetime
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskUpdatedAsync(
-            Arg.Is<TaskDto>(t => t.State == PipelineState.Planning));
+            Arg.Is<TaskDto>(t => t.State == PipelineState.Split));
     }
 
     [Fact]
@@ -164,7 +167,7 @@ public class TransitionTaskTests : IAsyncLifetime
         await Task.Delay(10);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Split)
             .Build();
 
         // Act
@@ -183,7 +186,7 @@ public class TransitionTaskTests : IAsyncLifetime
         var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persist Transition", state: PipelineState.Backlog);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Split)
             .Build();
 
         // Act
@@ -192,7 +195,7 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
         var updated = await verifyDb.Tasks.FindAsync(entity.Id);
-        updated!.State.Should().Be(PipelineState.Planning);
+        updated!.State.Should().Be(PipelineState.Split);
     }
 
     [Fact]

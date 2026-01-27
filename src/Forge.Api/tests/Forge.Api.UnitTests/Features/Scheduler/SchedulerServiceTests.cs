@@ -36,9 +36,16 @@ public class SchedulerServiceTests : IDisposable
             DefaultMaxRetries = 3
         });
 
+        var pipelineConfig = Options.Create(new PipelineConfiguration
+        {
+            MaxImplementationRetries = 3,
+            MaxSimplificationIterations = 2,
+            ConfidenceThreshold = 0.7m
+        });
+
         var loggerMock = Substitute.For<ILogger<SchedulerService>>();
 
-        _sut = new SchedulerService(_db, _sseMock, _notificationService, _schedulerState, schedulerOptions, loggerMock);
+        _sut = new SchedulerService(_db, _sseMock, _notificationService, _schedulerState, schedulerOptions, pipelineConfig, loggerMock);
     }
 
     public void Dispose()
@@ -68,7 +75,7 @@ public class SchedulerServiceTests : IDisposable
     public async Task GetNextSchedulableTask_WithSamePriority_OrdersByState_PlanningFirst()
     {
         // Arrange
-        await CreateTaskAsync("Testing task", Priority.High, PipelineState.Testing);
+        await CreateTaskAsync("Testing task", Priority.High, PipelineState.Verifying);
         await CreateTaskAsync("Planning task", Priority.High, PipelineState.Planning);
         await CreateTaskAsync("Implementing task", Priority.High, PipelineState.Implementing);
 
@@ -161,7 +168,7 @@ public class SchedulerServiceTests : IDisposable
     [InlineData(PipelineState.Planning)]
     [InlineData(PipelineState.Implementing)]
     [InlineData(PipelineState.Reviewing)]
-    [InlineData(PipelineState.Testing)]
+    [InlineData(PipelineState.Verifying)]
     public async Task GetNextSchedulableTask_IncludesSchedulableStates(PipelineState state)
     {
         // Arrange
@@ -206,10 +213,13 @@ public class SchedulerServiceTests : IDisposable
     #region HandleAgentCompletionAsync
 
     [Theory]
+    [InlineData(PipelineState.Split, PipelineState.Research)]
+    [InlineData(PipelineState.Research, PipelineState.Planning)]
     [InlineData(PipelineState.Planning, PipelineState.Implementing)]
-    [InlineData(PipelineState.Implementing, PipelineState.Reviewing)]
-    [InlineData(PipelineState.Reviewing, PipelineState.Testing)]
-    [InlineData(PipelineState.Testing, PipelineState.PrReady)]
+    [InlineData(PipelineState.Implementing, PipelineState.Simplifying)]
+    [InlineData(PipelineState.Simplifying, PipelineState.Verifying)]
+    [InlineData(PipelineState.Verifying, PipelineState.Reviewing)]
+    // Note: Reviewing -> PrReady triggers mandatory human gate, tested separately
     public async Task HandleAgentCompletion_OnSuccess_TransitionsToCorrectNextState(PipelineState from, PipelineState to)
     {
         // Arrange

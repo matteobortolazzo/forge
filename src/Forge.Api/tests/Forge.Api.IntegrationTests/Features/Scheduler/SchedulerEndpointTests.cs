@@ -114,8 +114,9 @@ public class SchedulerEndpointTests : IAsyncLifetime
         var taskId = task!.Id;
 
         // Transition to target state (if not backlog)
-        var states = new[] { PipelineState.Backlog, PipelineState.Planning, PipelineState.Implementing,
-                           PipelineState.Reviewing, PipelineState.Testing, PipelineState.PrReady, PipelineState.Done };
+        var states = new[] { PipelineState.Backlog, PipelineState.Split, PipelineState.Research,
+                           PipelineState.Planning, PipelineState.Implementing, PipelineState.Simplifying,
+                           PipelineState.Verifying, PipelineState.Reviewing, PipelineState.PrReady, PipelineState.Done };
         var currentIndex = 0;
         var targetIndex = Array.IndexOf(states, targetState);
 

@@ -40,6 +40,14 @@ public class TaskSchedulerServiceTests : IDisposable
             DefaultMaxRetries = 3
         });
 
+        // Create pipeline configuration
+        var pipelineConfig = Options.Create(new PipelineConfiguration
+        {
+            MaxImplementationRetries = 3,
+            MaxSimplificationIterations = 2,
+            ConfidenceThreshold = 0.7m
+        });
+
         // Build a service provider with real services
         var services = new ServiceCollection();
         services.AddSingleton(_db);
@@ -48,6 +56,7 @@ public class TaskSchedulerServiceTests : IDisposable
         services.AddSingleton<SchedulerState>();
         services.AddSingleton<NotificationService>();
         services.AddSingleton(_schedulerOptions);
+        services.AddSingleton(pipelineConfig);
         services.AddSingleton<ILogger<SchedulerService>>(Substitute.For<ILogger<SchedulerService>>());
         services.AddSingleton<SchedulerService>();
 
