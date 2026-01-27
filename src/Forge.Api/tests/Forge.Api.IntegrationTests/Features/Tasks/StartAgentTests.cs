@@ -1,5 +1,4 @@
-using Claude.CodeSdk;
-using Claude.CodeSdk.Messages;
+using Forge.Api.Features.Agent;
 
 namespace Forge.Api.IntegrationTests.Features.Tasks;
 
@@ -36,12 +35,6 @@ public class StartAgentTests : IAsyncLifetime
         await using var db = _factory.CreateDbContext();
         var task = await TestDatabaseHelper.SeedTaskAsync(db, "Agent Task", "Implement feature");
 
-        // Setup mock to return empty stream
-        var mockClient = Substitute.For<IClaudeAgentClient>();
-        mockClient.QueryStreamAsync(Arg.Any<string>(), Arg.Any<ClaudeAgentOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AsyncEnumerable.Empty<IMessage>());
-        _factory.ClientFactoryMock.Create(Arg.Any<ClaudeAgentOptions?>()).Returns(mockClient);
-
         // Act
         var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
 
@@ -53,48 +46,20 @@ public class StartAgentTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAgent_EmitsAgentStatusChangedEvent()
+    public async Task StartAgent_CallsAgentRunnerService()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Agent Task");
-
-        var mockClient = Substitute.For<IClaudeAgentClient>();
-        mockClient.QueryStreamAsync(Arg.Any<string>(), Arg.Any<ClaudeAgentOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AsyncEnumerable.Empty<IMessage>());
-        _factory.ClientFactoryMock.Create(Arg.Any<ClaudeAgentOptions?>()).Returns(mockClient);
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Agent Task", "Description");
 
         // Act
         await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
 
         // Assert
-        await _factory.SseServiceMock.Received().EmitAgentStatusChangedAsync(
-            true,
+        await _factory.AgentRunnerServiceMock.Received(1).StartAgentAsync(
             task.Id,
-            Arg.Any<DateTime?>());
-    }
-
-    [Fact]
-    public async Task StartAgent_AssignsAgentToTask()
-    {
-        // Arrange
-        await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Assign Agent Task");
-
-        var mockClient = Substitute.For<IClaudeAgentClient>();
-        mockClient.QueryStreamAsync(Arg.Any<string>(), Arg.Any<ClaudeAgentOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AsyncEnumerable.Empty<IMessage>());
-        _factory.ClientFactoryMock.Create(Arg.Any<ClaudeAgentOptions?>()).Returns(mockClient);
-
-        // Act
-        await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
-
-        // Allow some time for the assignment to occur
-        await Task.Delay(100);
-
-        // Assert - Check that task was updated
-        await _factory.SseServiceMock.Received().EmitTaskUpdatedAsync(
-            Arg.Is<TaskDto>(t => t.Id == task.Id && t.AssignedAgentId == "claude-agent"));
+            task.Title,
+            task.Description);
     }
 
     [Fact]
@@ -102,57 +67,36 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "First Task");
-        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "Second Task");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "First Task");
 
-        // Setup mock with a long-running task to simulate an agent that doesn't complete
-        var mockClient = Substitute.For<IClaudeAgentClient>();
-        var tcs = new TaskCompletionSource<bool>();
-        mockClient.QueryStreamAsync(Arg.Any<string>(), Arg.Any<ClaudeAgentOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(LongRunningStream(tcs.Task));
-        _factory.ClientFactoryMock.Create(Arg.Any<ClaudeAgentOptions?>()).Returns(mockClient);
+        // Setup mock to indicate agent already running
+        _factory.AgentRunnerServiceMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.FromResult(false));
 
-        // Start first agent
-        var response1 = await _client.PostAsync($"/api/tasks/{task1.Id}/start-agent", null);
-        response1.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        // Act - Try to start second agent
-        var response2 = await _client.PostAsync($"/api/tasks/{task2.Id}/start-agent", null);
+        // Act
+        var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
 
         // Assert
-        response2.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var content = await response2.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var content = await response.Content.ReadAsStringAsync();
         content.Should().Contain("Agent is already running");
-
-        // Cleanup
-        tcs.SetResult(true);
     }
 
     [Fact]
-    public async Task StartAgent_CreatesClientWithCorrectOptions()
+    public async Task StartAgent_ReturnsUpdatedTask()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
         var task = await TestDatabaseHelper.SeedTaskAsync(db, "Options Test");
 
-        var mockClient = Substitute.For<IClaudeAgentClient>();
-        mockClient.QueryStreamAsync(Arg.Any<string>(), Arg.Any<ClaudeAgentOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AsyncEnumerable.Empty<IMessage>());
-        _factory.ClientFactoryMock.Create(Arg.Any<ClaudeAgentOptions?>()).Returns(mockClient);
-
         // Act
-        await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
+        var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
 
         // Assert
-        _factory.ClientFactoryMock.Received().Create(Arg.Is<ClaudeAgentOptions?>(opt =>
-            opt != null &&
-            opt.DangerouslySkipPermissions == true &&
-            opt.MaxTurns == 50));
-    }
-
-    private static async IAsyncEnumerable<IMessage> LongRunningStream(Task waitTask)
-    {
-        await waitTask;
-        yield break;
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var returnedTask = await response.ReadAsAsync<TaskDto>();
+        returnedTask.Should().NotBeNull();
+        returnedTask!.Id.Should().Be(task.Id);
+        returnedTask.Title.Should().Be("Options Test");
     }
 }

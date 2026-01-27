@@ -1,4 +1,5 @@
 using Claude.CodeSdk;
+using Forge.Api.Features.Agent;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Scheduler;
 using Microsoft.AspNetCore.Hosting;
@@ -15,20 +16,35 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
 {
     private SqliteConnection? _connection;
     private static readonly string TestDatabasePath = Path.Combine(Path.GetTempPath(), $"forge_test_{Guid.NewGuid()}.db");
+    private static readonly string ProjectRoot = GetProjectRoot();
 
     public ISseService SseServiceMock { get; private set; } = null!;
     public IClaudeAgentClientFactory ClientFactoryMock { get; private set; } = null!;
+    public IAgentRunnerService AgentRunnerServiceMock { get; private set; } = null!;
+
+    private static string GetProjectRoot()
+    {
+        // Find the repository root by looking for .git folder
+        var dir = AppContext.BaseDirectory;
+        while (dir != null && !Directory.Exists(Path.Combine(dir, ".git")))
+        {
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        return dir ?? AppContext.BaseDirectory;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Set test database path via configuration to prevent forge.db creation in project directory
         // Also skip migrations since we use EnsureCreated() for in-memory SQLite
+        // Set REPOSITORY_PATH to the actual git repo for repository info tests
         builder.ConfigureAppConfiguration((context, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["DATABASE_PATH"] = TestDatabasePath,
-                ["SKIP_MIGRATIONS"] = "true"
+                ["SKIP_MIGRATIONS"] = "true",
+                ["REPOSITORY_PATH"] = ProjectRoot
             });
         });
 
@@ -51,6 +67,13 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
             // Create mocks
             SseServiceMock = Substitute.For<ISseService>();
             ClientFactoryMock = Substitute.For<IClaudeAgentClientFactory>();
+            AgentRunnerServiceMock = Substitute.For<IAgentRunnerService>();
+
+            // Default mock behavior - agent is not running
+            AgentRunnerServiceMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+            AgentRunnerServiceMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>())
+                .Returns(Task.FromResult(true));
+            AgentRunnerServiceMock.AbortAsync().Returns(Task.FromResult(false));
 
             // Replace ISseService with mock
             services.RemoveAll<ISseService>();
@@ -59,6 +82,10 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
             // Replace IClaudeAgentClientFactory with mock
             services.RemoveAll<IClaudeAgentClientFactory>();
             services.AddSingleton(ClientFactoryMock);
+
+            // Replace IAgentRunnerService with mock
+            services.RemoveAll<IAgentRunnerService>();
+            services.AddSingleton(AgentRunnerServiceMock);
 
             // Remove TaskSchedulerService background service during tests
             services.RemoveAll<IHostedService>();
@@ -89,6 +116,14 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
 
         // Reset mock call history
         SseServiceMock.ClearReceivedCalls();
+        ClientFactoryMock.ClearReceivedCalls();
+        AgentRunnerServiceMock.ClearReceivedCalls();
+
+        // Reset agent mock default behavior
+        AgentRunnerServiceMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        AgentRunnerServiceMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.FromResult(true));
+        AgentRunnerServiceMock.AbortAsync().Returns(Task.FromResult(false));
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
