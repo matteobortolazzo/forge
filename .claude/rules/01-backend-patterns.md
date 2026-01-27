@@ -10,7 +10,8 @@ public static class TaskEndpoints
 {
     public static void MapTaskEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/tasks");
+        // Tasks are scoped under repositories
+        var group = app.MapGroup("/api/repositories/{repositoryId:guid}/tasks");
 
         group.MapGet("/", GetAllTasks);
         group.MapGet("/{id:guid}", GetTask);
@@ -27,6 +28,7 @@ public static class TaskEndpoints
 
 Register in Program.cs:
 ```csharp
+app.MapRepositoryEndpoints();
 app.MapTaskEndpoints();
 app.MapAgentEndpoints();
 app.MapEventEndpoints();
@@ -36,6 +38,10 @@ app.MapEventEndpoints();
 
 ```
 Features/
+├── Repositories/
+│   ├── RepositoryEndpoints.cs  # 7 endpoints (list, get, create, update, delete, refresh, set-default)
+│   ├── RepositoryService.cs    # Repository CRUD with git info caching (scoped)
+│   └── RepositoryModels.cs     # DTOs: RepositoryDto, CreateRepositoryDto, UpdateRepositoryDto
 ├── Tasks/
 │   ├── TaskEndpoints.cs        # 13 endpoints (CRUD, transition, logs, abort, start-agent, pause, resume, split)
 │   ├── TaskArtifactEndpoints.cs # 4 endpoints (list, get, latest, by-state)
@@ -86,7 +92,7 @@ Features/
 
 ## Service Organization
 
-- **Scoped Services**: DbContext-dependent (TaskService, SubtaskService, HumanGateService)
+- **Scoped Services**: DbContext-dependent (TaskService, SubtaskService, HumanGateService, RepositoryService)
 - **Singleton Services**: Stateless or managing global state (SseService, AgentRunnerService, OrchestratorService)
 - **Hosted Services**: Background processing (TaskSchedulerService)
 

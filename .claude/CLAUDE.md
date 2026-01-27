@@ -170,8 +170,20 @@ npm run e2e                        # Run Playwright tests
 ```env
 DATABASE_PATH="forge.db"
 CLAUDE_CODE_PATH="claude"
-REPOSITORY_PATH="/path/to/your/repo"
 ASPNETCORE_URLS="http://localhost:5000"
 CLAUDE_MOCK_MODE="true"         # Enable mock Claude client for E2E testing
 AGENTS_PATH="./agents"          # Optional: custom path to agents directory
 ```
+
+## Multi-Repository Support
+
+Forge supports managing multiple repositories. Key concepts:
+
+- **Repository Entity**: Each repository has a name, path, and cached git info (branch, commit, dirty state)
+- **Task Association**: All tasks belong to a repository (required `RepositoryId`)
+- **API Structure**: Task endpoints are scoped under `/api/repositories/{repoId}/tasks`
+- **UI Selection**: Frontend persists selected repository in localStorage (`forge:selectedRepositoryId`)
+- **First-Run**: UI prompts to add a repository if none exist
+- **Default Repository**: One repository can be marked as default for new task creation
+
+See `rules/05-api-reference.md` for endpoint structure.

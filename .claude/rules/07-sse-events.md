@@ -28,6 +28,9 @@
 | `agent:statusChanged` | `AgentStatusDto` | Agent starts/stops |
 | `scheduler:taskScheduled` | `TaskDto` | Scheduler picks next task |
 | `notification:new` | `NotificationDto` | Notification created |
+| `repository:created` | `RepositoryDto` | Repository added |
+| `repository:updated` | `RepositoryDto` | Repository modified (name, git info refresh) |
+| `repository:deleted` | `{ id: Guid }` | Repository soft-deleted |
 
 ## Backend Emission Points
 
@@ -42,9 +45,10 @@
 | `RollbackService` | `rollback:*` events |
 | `TaskSchedulerService` | `scheduler:taskScheduled` |
 | `NotificationService` | `notification:new` |
+| `RepositoryService` | `repository:created`, `repository:updated`, `repository:deleted` |
 
 ## Frontend Consumption
 
 - SseService connects to `/api/events`
 - BoardComponent and TaskDetailComponent subscribe to events
-- Signal stores (TaskStore, LogStore, NotificationStore) update from events
+- Signal stores (TaskStore, LogStore, NotificationStore, RepositoryStore) update from events

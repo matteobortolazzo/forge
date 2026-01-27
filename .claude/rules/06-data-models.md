@@ -39,9 +39,36 @@ split (conditional) | planning (conditional) | pr (mandatory)
 pending | in_progress | completed | failed | skipped
 ```
 
+## RepositoryEntity Fields
+
+```csharp
+public Guid Id { get; set; }
+public required string Name { get; set; }          // Display name (max 200)
+public required string Path { get; set; }          // Absolute path (max 1000, unique)
+public bool IsDefault { get; set; }                // Default for new tasks
+public bool IsActive { get; set; } = true;         // Soft delete
+public DateTime CreatedAt { get; set; }
+public DateTime UpdatedAt { get; set; }
+
+// Cached git info (refreshed on demand)
+public string? Branch { get; set; }
+public string? CommitHash { get; set; }
+public string? RemoteUrl { get; set; }
+public bool? IsDirty { get; set; }
+public bool IsGitRepository { get; set; }
+public DateTime? LastRefreshedAt { get; set; }
+
+// Navigation
+public ICollection<TaskEntity> Tasks { get; set; } = [];
+```
+
 ## TaskEntity Fields (Agent Context)
 
 ```csharp
+// Repository association (required)
+public Guid RepositoryId { get; set; }
+public RepositoryEntity Repository { get; set; } = null!;
+
 // Auto-detected or user-specified context
 public string? DetectedLanguage { get; set; }    // e.g., "csharp", "typescript"
 public string? DetectedFramework { get; set; }   // e.g., "angular", "dotnet"

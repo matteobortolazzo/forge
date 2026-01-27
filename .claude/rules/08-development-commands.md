@@ -65,8 +65,9 @@ npm run e2e:headed
 ```env
 DATABASE_PATH="forge.db"
 CLAUDE_CODE_PATH="claude"
-REPOSITORY_PATH="/path/to/your/repo"
 ASPNETCORE_URLS="http://localhost:5000"
 CLAUDE_MOCK_MODE="true"         # Enable mock Claude client for E2E testing
 AGENTS_PATH="./agents"          # Optional: custom path to agents directory (default: ./agents)
 ```
+
+Note: Repository paths are now managed through the API. Use `POST /api/repositories` to add repositories.
