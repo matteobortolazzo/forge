@@ -16,11 +16,16 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
 {
     private SqliteConnection? _connection;
     private static readonly string TestDatabasePath = Path.Combine(Path.GetTempPath(), $"forge_test_{Guid.NewGuid()}.db");
-    private static readonly string ProjectRoot = GetProjectRoot();
 
     public ISseService SseServiceMock { get; private set; } = null!;
     public IClaudeAgentClientFactory ClientFactoryMock { get; private set; } = null!;
     public IAgentRunnerService AgentRunnerServiceMock { get; private set; } = null!;
+
+    /// <summary>
+    /// Returns the repository root directory (containing .git folder).
+    /// Useful for tests that need to create a repository entity with a real path.
+    /// </summary>
+    public static string ProjectRoot => GetProjectRoot();
 
     private static string GetProjectRoot()
     {
@@ -37,14 +42,12 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
     {
         // Set test database path via configuration to prevent forge.db creation in project directory
         // Also skip migrations since we use EnsureCreated() for in-memory SQLite
-        // Set REPOSITORY_PATH to the actual git repo for repository info tests
         builder.ConfigureAppConfiguration((context, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["DATABASE_PATH"] = TestDatabasePath,
-                ["SKIP_MIGRATIONS"] = "true",
-                ["REPOSITORY_PATH"] = ProjectRoot
+                ["SKIP_MIGRATIONS"] = "true"
             });
         });
 
@@ -113,6 +116,7 @@ public class ForgeWebApplicationFactory : WebApplicationFactory<Program>, IAsync
         await db.Notifications.ExecuteDeleteAsync();
         await db.TaskLogs.ExecuteDeleteAsync();
         await db.Tasks.ExecuteDeleteAsync();
+        await db.Repositories.ExecuteDeleteAsync();
 
         // Reset mock call history
         SseServiceMock.ClearReceivedCalls();

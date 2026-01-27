@@ -7,6 +7,7 @@ public class StartAgentTests : IAsyncLifetime
 {
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
+    private Guid _repositoryId;
 
     public StartAgentTests(ForgeWebApplicationFactory factory)
     {
@@ -14,7 +15,15 @@ public class StartAgentTests : IAsyncLifetime
         _client = factory.CreateClient();
     }
 
-    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.ResetDatabaseAsync();
+        // Create a repository for all tests
+        await using var db = _factory.CreateDbContext();
+        var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
+        _repositoryId = repo.Id;
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
@@ -22,7 +31,7 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.PostAsync($"/api/tasks/{nonExistentId}/start-agent", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}/start-agent", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -33,10 +42,10 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Agent Task", "Implement feature");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Agent Task", "Implement feature", repositoryId: _repositoryId);
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/start-agent", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -50,10 +59,10 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Agent Task", "Description");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Agent Task", "Description", repositoryId: _repositoryId);
 
         // Act
-        await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
+        await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/start-agent", null);
 
         // Assert
         await _factory.AgentRunnerServiceMock.Received(1).StartAgentAsync(
@@ -67,14 +76,14 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "First Task");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "First Task", repositoryId: _repositoryId);
 
         // Setup mock to indicate agent already running
         _factory.AgentRunnerServiceMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(Task.FromResult(false));
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/start-agent", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -87,10 +96,10 @@ public class StartAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Options Test");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Options Test", repositoryId: _repositoryId);
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task.Id}/start-agent", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/start-agent", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -98,5 +107,21 @@ public class StartAgentTests : IAsyncLifetime
         returnedTask.Should().NotBeNull();
         returnedTask!.Id.Should().Be(task.Id);
         returnedTask.Title.Should().Be("Options Test");
+    }
+
+    [Fact]
+    public async Task StartAgent_WithWrongRepository_ReturnsNotFound()
+    {
+        // Arrange
+        await using var db = _factory.CreateDbContext();
+        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
+        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath, isDefault: false);
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
+
+        // Act - Try to start agent from wrong repository
+        var response = await _client.PostAsync($"/api/repositories/{otherRepo.Id}/tasks/{task.Id}/start-agent", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

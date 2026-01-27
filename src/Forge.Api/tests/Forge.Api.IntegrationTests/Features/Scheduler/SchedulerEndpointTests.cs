@@ -7,6 +7,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
 {
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
+    private Guid _repositoryId;
 
     public SchedulerEndpointTests(ForgeWebApplicationFactory factory)
     {
@@ -14,7 +15,19 @@ public class SchedulerEndpointTests : IAsyncLifetime
         _client = factory.CreateClient();
     }
 
-    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.ResetDatabaseAsync();
+        // Create a repository for all tests via HTTP
+        var repoDto = new CreateRepositoryDtoBuilder()
+            .WithName("Test Repository")
+            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
+            .Build();
+        var response = await _client.PostAsJsonAsync("/api/repositories", repoDto, HttpClientExtensions.JsonOptions);
+        var repo = await response.ReadAsAsync<RepositoryDto>();
+        _repositoryId = repo!.Id;
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
@@ -52,7 +65,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
     {
         // Arrange - Create a task and pause it
         var taskId = await CreateTaskInStateAsync(PipelineState.Planning);
-        await _client.PostAsJsonAsync($"/api/tasks/{taskId}/pause",
+        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
             new PauseTaskDto("Test pause"), HttpClientExtensions.JsonOptions);
 
         // Act
@@ -109,7 +122,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
     {
         // Create in backlog
         var createDto = new CreateTaskDtoBuilder().Build();
-        var createResponse = await _client.PostAsJsonAsync("/api/tasks", createDto, HttpClientExtensions.JsonOptions);
+        var createResponse = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks", createDto, HttpClientExtensions.JsonOptions);
         var task = await createResponse.ReadAsAsync<TaskDto>();
         var taskId = task!.Id;
 
@@ -123,7 +136,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
         while (currentIndex < targetIndex)
         {
             currentIndex++;
-            await _client.PostAsJsonAsync($"/api/tasks/{taskId}/transition",
+            await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/transition",
                 new TransitionTaskDto(states[currentIndex]), HttpClientExtensions.JsonOptions);
         }
 

@@ -5,6 +5,7 @@ public class AbortAgentTests : IAsyncLifetime
 {
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
+    private Guid _repositoryId;
 
     public AbortAgentTests(ForgeWebApplicationFactory factory)
     {
@@ -12,7 +13,15 @@ public class AbortAgentTests : IAsyncLifetime
         _client = factory.CreateClient();
     }
 
-    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.ResetDatabaseAsync();
+        // Create a repository for all tests
+        await using var db = _factory.CreateDbContext();
+        var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
+        _repositoryId = repo.Id;
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
@@ -20,7 +29,7 @@ public class AbortAgentTests : IAsyncLifetime
     {
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.PostAsync($"/api/tasks/{nonExistentId}/abort", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}/abort", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -31,10 +40,10 @@ public class AbortAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task without Agent");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task without Agent", repositoryId: _repositoryId);
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task.Id}/abort", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/abort", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -47,15 +56,15 @@ public class AbortAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 1 with Agent", state: PipelineState.Implementing);
-        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 2 without Agent", state: PipelineState.Implementing);
+        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 1 with Agent", state: PipelineState.Implementing, repositoryId: _repositoryId);
+        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 2 without Agent", state: PipelineState.Implementing, repositoryId: _repositoryId);
 
         // Note: We can't easily simulate a running agent without mocking AgentRunnerService.
         // The default state is no agent running, so we verify the expected behavior
         // when trying to abort a task that has no agent.
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task2.Id}/abort", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task2.Id}/abort", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -68,13 +77,29 @@ public class AbortAgentTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Abort Test", state: PipelineState.Implementing);
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Abort Test", state: PipelineState.Implementing, repositoryId: _repositoryId);
 
         // Act
-        var response = await _client.PostAsync($"/api/tasks/{task.Id}/abort", null);
+        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/abort", null);
 
         // Assert
         // When no agent is running, we get BadRequest
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task AbortAgent_WithWrongRepository_ReturnsNotFound()
+    {
+        // Arrange
+        await using var db = _factory.CreateDbContext();
+        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
+        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath, isDefault: false);
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", state: PipelineState.Implementing, repositoryId: _repositoryId);
+
+        // Act - Try to abort task from wrong repository
+        var response = await _client.PostAsync($"/api/repositories/{otherRepo.Id}/tasks/{task.Id}/abort", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

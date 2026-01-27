@@ -5,6 +5,7 @@ public class GetTaskLogsTests : IAsyncLifetime
 {
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
+    private Guid _repositoryId;
 
     public GetTaskLogsTests(ForgeWebApplicationFactory factory)
     {
@@ -12,7 +13,15 @@ public class GetTaskLogsTests : IAsyncLifetime
         _client = factory.CreateClient();
     }
 
-    public Task InitializeAsync() => _factory.ResetDatabaseAsync();
+    public async Task InitializeAsync()
+    {
+        await _factory.ResetDatabaseAsync();
+        // Create a repository for all tests
+        await using var db = _factory.CreateDbContext();
+        var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
+        _repositoryId = repo.Id;
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
@@ -20,13 +29,13 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task with Logs");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task with Logs", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Log 1");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.ToolUse, "Log 2", "ReadFile");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Error, "Log 3");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -39,10 +48,10 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task without Logs");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task without Logs", repositoryId: _repositoryId);
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -55,7 +64,7 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.GetAsync($"/api/tasks/{nonExistentId}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}/logs");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -66,7 +75,7 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Ordered Logs Task");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Ordered Logs Task", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "First log");
         await Task.Delay(10);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Second log");
@@ -74,7 +83,7 @@ public class GetTaskLogsTests : IAsyncLifetime
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Third log");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         var logs = await response.ReadAsAsync<List<TaskLogDto>>();
@@ -88,7 +97,7 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Log Types Task");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Log Types Task", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Info log");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.ToolUse, "Tool use", "Bash");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.ToolResult, "Tool result");
@@ -96,7 +105,7 @@ public class GetTaskLogsTests : IAsyncLifetime
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Thinking, "Thinking log");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         var logs = await response.ReadAsAsync<List<TaskLogDto>>();
@@ -112,12 +121,12 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Tool Name Task");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Tool Name Task", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.ToolUse, "Reading file", "ReadFile");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.ToolUse, "Running command", "Bash");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         var logs = await response.ReadAsAsync<List<TaskLogDto>>();
@@ -130,13 +139,13 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 1");
-        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 2");
+        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 1", repositoryId: _repositoryId);
+        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "Task 2", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task1.Id, LogType.Info, "Task 1 Log");
         await TestDatabaseHelper.SeedTaskLogAsync(db, task2.Id, LogType.Info, "Task 2 Log");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task1.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task1.Id}/logs");
 
         // Assert
         var logs = await response.ReadAsAsync<List<TaskLogDto>>();
@@ -150,14 +159,31 @@ public class GetTaskLogsTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task ID Test");
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task ID Test", repositoryId: _repositoryId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Test log");
 
         // Act
-        var response = await _client.GetAsync($"/api/tasks/{task.Id}/logs");
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{task.Id}/logs");
 
         // Assert
         var logs = await response.ReadAsAsync<List<TaskLogDto>>();
         logs![0].TaskId.Should().Be(task.Id);
+    }
+
+    [Fact]
+    public async Task GetTaskLogs_WithWrongRepository_ReturnsNotFound()
+    {
+        // Arrange
+        await using var db = _factory.CreateDbContext();
+        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
+        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath, isDefault: false);
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
+        await TestDatabaseHelper.SeedTaskLogAsync(db, task.Id, LogType.Info, "Test log");
+
+        // Act - Try to get logs from wrong repository
+        var response = await _client.GetAsync($"/api/repositories/{otherRepo.Id}/tasks/{task.Id}/logs");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

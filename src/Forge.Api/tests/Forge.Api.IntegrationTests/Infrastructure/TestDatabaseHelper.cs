@@ -2,13 +2,54 @@ namespace Forge.Api.IntegrationTests.Infrastructure;
 
 public static class TestDatabaseHelper
 {
+    /// <summary>
+    /// Creates a repository in the database. Required before creating tasks.
+    /// </summary>
+    public static async Task<RepositoryEntity> SeedRepositoryAsync(
+        ForgeDbContext db,
+        string name = "Test Repository",
+        string? path = null,
+        bool isDefault = true)
+    {
+        var entity = new RepositoryEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Path = path ?? ForgeWebApplicationFactory.ProjectRoot,
+            IsDefault = isDefault,
+            IsActive = true,
+            IsGitRepository = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Repositories.Add(entity);
+        await db.SaveChangesAsync();
+        return entity;
+    }
+
     public static async Task<TaskEntity> SeedTaskAsync(
         ForgeDbContext db,
         string title = "Test Task",
         string description = "Test Description",
         PipelineState state = PipelineState.Backlog,
-        Priority priority = Priority.Medium)
+        Priority priority = Priority.Medium,
+        Guid? repositoryId = null)
     {
+        // If no repository provided, create or get a default one
+        if (repositoryId is null)
+        {
+            var existingRepo = await db.Repositories
+                .FirstOrDefaultAsync(r => r.IsDefault && r.IsActive);
+
+            if (existingRepo is null)
+            {
+                existingRepo = await SeedRepositoryAsync(db);
+            }
+
+            repositoryId = existingRepo.Id;
+        }
+
         var entity = new TaskEntity
         {
             Id = Guid.NewGuid(),
@@ -17,6 +58,7 @@ public static class TestDatabaseHelper
             State = state,
             Priority = priority,
             HasError = false,
+            RepositoryId = repositoryId.Value,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
