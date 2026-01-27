@@ -44,9 +44,6 @@ import { Repository } from '../../models';
               role="tooltip"
             >
               <div class="whitespace-nowrap">{{ repo.name }}</div>
-              @if (repo.isDefault) {
-                <div class="text-xs text-gray-400">Default</div>
-              }
               <div class="mt-1 text-xs text-gray-500">Right-click for settings</div>
               <!-- Arrow -->
               <div class="absolute left-0 top-1/2 -ml-1 h-2 w-2 -translate-y-1/2 rotate-45 bg-gray-950" aria-hidden="true"></div>

@@ -115,7 +115,7 @@ public class StartAgentTests : IAsyncLifetime
         // Arrange
         await using var db = _factory.CreateDbContext();
         var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath, isDefault: false);
+        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
         var task = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
 
         // Act - Try to start agent from wrong repository

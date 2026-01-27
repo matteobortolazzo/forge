@@ -14,8 +14,6 @@ public interface IRepositoryService
     Task<RepositoryDto?> UpdateAsync(Guid id, UpdateRepositoryDto dto);
     Task<bool> DeleteAsync(Guid id);
     Task<RepositoryDto?> RefreshAsync(Guid id);
-    Task<RepositoryDto?> SetDefaultAsync(Guid id);
-    Task<RepositoryDto?> GetDefaultAsync();
 }
 
 public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<RepositoryService> logger) : IRepositoryService
@@ -25,8 +23,7 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
         var entities = await db.Repositories
             .AsNoTracking()
             .Where(r => r.IsActive)
-            .OrderByDescending(r => r.IsDefault)
-            .ThenByDescending(r => r.CreatedAt)
+            .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
         // Get task counts for each repository
@@ -78,12 +75,6 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
             existing.UpdatedAt = DateTime.UtcNow;
             RefreshGitInfo(existing);
 
-            if (dto.SetAsDefault)
-            {
-                await ClearDefaultAsync();
-                existing.IsDefault = true;
-            }
-
             await db.SaveChangesAsync();
 
             var reactivatedDto = RepositoryDto.FromEntity(existing, 0);
@@ -102,7 +93,6 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
             Id = Guid.NewGuid(),
             Name = dto.Name,
             Path = normalizedPath,
-            IsDefault = dto.SetAsDefault,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -110,11 +100,6 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
 
         // Refresh git info
         RefreshGitInfo(entity);
-
-        if (dto.SetAsDefault)
-        {
-            await ClearDefaultAsync();
-        }
 
         db.Repositories.Add(entity);
         await db.SaveChangesAsync();
@@ -162,7 +147,6 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
 
         // Soft delete
         entity.IsActive = false;
-        entity.IsDefault = false;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
@@ -185,47 +169,6 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
         var result = RepositoryDto.FromEntity(entity, entity.Tasks.Count);
         await sse.EmitRepositoryUpdatedAsync(result);
         return result;
-    }
-
-    public async Task<RepositoryDto?> SetDefaultAsync(Guid id)
-    {
-        var entity = await db.Repositories
-            .Include(r => r.Tasks)
-            .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
-
-        if (entity is null) return null;
-
-        // Clear any existing default
-        await ClearDefaultAsync();
-
-        entity.IsDefault = true;
-        entity.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-
-        var result = RepositoryDto.FromEntity(entity, entity.Tasks.Count);
-        await sse.EmitRepositoryUpdatedAsync(result);
-        return result;
-    }
-
-    public async Task<RepositoryDto?> GetDefaultAsync()
-    {
-        var entity = await db.Repositories
-            .Include(r => r.Tasks)
-            .FirstOrDefaultAsync(r => r.IsDefault && r.IsActive);
-
-        return entity is null ? null : RepositoryDto.FromEntity(entity, entity.Tasks.Count);
-    }
-
-    private async Task ClearDefaultAsync()
-    {
-        var currentDefault = await db.Repositories
-            .FirstOrDefaultAsync(r => r.IsDefault && r.IsActive);
-
-        if (currentDefault is not null)
-        {
-            currentDefault.IsDefault = false;
-            currentDefault.UpdatedAt = DateTime.UtcNow;
-        }
     }
 
     private void RefreshGitInfo(RepositoryEntity entity)

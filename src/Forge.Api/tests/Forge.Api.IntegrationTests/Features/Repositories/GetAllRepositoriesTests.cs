@@ -70,36 +70,35 @@ public class GetAllRepositoriesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetAllRepositories_OrdersDefaultFirst()
+    public async Task GetAllRepositories_OrdersByCreatedAtDescending()
     {
-        // Arrange - Create non-default first
-        var nonDefaultDto = new CreateRepositoryDtoBuilder()
-            .WithName("Non-Default Repo")
+        // Arrange - Create first repository
+        var firstDto = new CreateRepositoryDtoBuilder()
+            .WithName("First Repo")
             .WithPath(ForgeWebApplicationFactory.ProjectRoot)
             .Build();
-        await _client.PostAsJsonAsync("/api/repositories", nonDefaultDto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync("/api/repositories", firstDto, HttpClientExtensions.JsonOptions);
 
-        // Create temp directory for default
+        // Create temp directory for second
         var tempDir = Path.Combine(Path.GetTempPath(), $"forge_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
-            var defaultDto = new CreateRepositoryDtoBuilder()
-                .WithName("Default Repo")
+            var secondDto = new CreateRepositoryDtoBuilder()
+                .WithName("Second Repo")
                 .WithPath(tempDir)
-                .AsDefault()
                 .Build();
-            await _client.PostAsJsonAsync("/api/repositories", defaultDto, HttpClientExtensions.JsonOptions);
+            await _client.PostAsJsonAsync("/api/repositories", secondDto, HttpClientExtensions.JsonOptions);
 
             // Act
             var response = await _client.GetAsync("/api/repositories");
 
-            // Assert
+            // Assert - Newest first
             var repos = await response.ReadAsAsync<List<RepositoryDto>>();
             repos.Should().HaveCount(2);
-            repos![0].Name.Should().Be("Default Repo");
-            repos[0].IsDefault.Should().BeTrue();
+            repos![0].Name.Should().Be("Second Repo"); // Created second, so newest
+            repos[1].Name.Should().Be("First Repo");
         }
         finally
         {

@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Repository, CreateRepositoryDto, UpdateRepositoryDto } from '../../shared/models';
 import { RepositoryService } from '../services/repository.service';
 import { firstValueFrom } from 'rxjs';
@@ -28,9 +29,9 @@ export class RepositoryStore {
     return this._repositories().find(r => r.id === id) ?? null;
   });
 
-  // Computed: default repository
-  readonly defaultRepository = computed(() => {
-    return this._repositories().find(r => r.isDefault) ?? this._repositories()[0] ?? null;
+  // Computed: first repository (for auto-selection)
+  readonly firstRepository = computed(() => {
+    return this._repositories()[0] ?? null;
   });
 
   // Computed: active repositories only
@@ -50,7 +51,7 @@ export class RepositoryStore {
   readonly hasRepositories = computed(() => this._repositories().length > 0);
 
   // Computed: info from selected repository (for backward compatibility)
-  readonly info = computed(() => this.selectedRepository() ?? this.defaultRepository());
+  readonly info = computed(() => this.selectedRepository() ?? this.firstRepository());
   readonly name = computed(() => this.info()?.name ?? '');
   readonly path = computed(() => this.info()?.path ?? '');
   readonly branch = computed(() => this.info()?.branch);
@@ -80,8 +81,8 @@ export class RepositoryStore {
       const currentId = this._selectedId();
       const validSelection = currentId && repos.some(r => r.id === currentId);
       if (!validSelection && repos.length > 0) {
-        const defaultRepo = repos.find(r => r.isDefault) ?? repos[0];
-        this.setSelectedRepository(defaultRepo.id);
+        // Select first repo (newest, as backend sorts by createdAt desc)
+        this.setSelectedRepository(repos[0].id);
       }
     } catch (err) {
       this._error.set(err instanceof Error ? err.message : 'Failed to load repositories');
@@ -106,21 +107,26 @@ export class RepositoryStore {
     try {
       const newRepo = await firstValueFrom(this.repositoryService.create(dto));
       this._repositories.update(repos => {
-        // If new repo is default, update others
-        if (newRepo.isDefault) {
-          return [...repos.map(r => ({ ...r, isDefault: false })), newRepo];
-        }
-        return [...repos, newRepo];
+        // New repo goes at the beginning (newest first, consistent with backend)
+        return [newRepo, ...repos];
       });
 
-      // Auto-select if it's the first one or is default
-      if (this._repositories().length === 1 || newRepo.isDefault) {
+      // Auto-select if it's the first one
+      if (this._repositories().length === 1) {
         this.setSelectedRepository(newRepo.id);
       }
 
       return newRepo;
     } catch (err) {
-      this._error.set(err instanceof Error ? err.message : 'Failed to create repository');
+      // Extract error message from API response
+      let message = 'Failed to create repository';
+      if (err instanceof HttpErrorResponse) {
+        // API returns { error: "message" } on 400
+        message = err.error?.error || err.message || message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      this._error.set(message);
       return null;
     }
   }
@@ -151,8 +157,8 @@ export class RepositoryStore {
       if (this._selectedId() === id) {
         const remaining = this._repositories();
         if (remaining.length > 0) {
-          const defaultRepo = remaining.find(r => r.isDefault) ?? remaining[0];
-          this.setSelectedRepository(defaultRepo.id);
+          // Select first remaining repo
+          this.setSelectedRepository(remaining[0].id);
         } else {
           this._selectedId.set(null);
           this.clearSelectedIdFromStorage();
@@ -161,7 +167,14 @@ export class RepositoryStore {
 
       return true;
     } catch (err) {
-      this._error.set(err instanceof Error ? err.message : 'Failed to delete repository');
+      // Extract error message from API response
+      let message = 'Failed to delete repository';
+      if (err instanceof HttpErrorResponse) {
+        message = err.error?.error || err.message || message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      this._error.set(message);
       return false;
     }
   }
@@ -177,24 +190,6 @@ export class RepositoryStore {
       return refreshed;
     } catch (err) {
       this._error.set(err instanceof Error ? err.message : 'Failed to refresh repository');
-      return null;
-    }
-  }
-
-  async setDefaultRepository(id: string): Promise<Repository | null> {
-    this._error.set(null);
-
-    try {
-      const updated = await firstValueFrom(this.repositoryService.setDefault(id));
-      this._repositories.update(repos =>
-        repos.map(r => ({
-          ...r,
-          isDefault: r.id === id,
-        }))
-      );
-      return updated;
-    } catch (err) {
-      this._error.set(err instanceof Error ? err.message : 'Failed to set default repository');
       return null;
     }
   }
@@ -217,8 +212,8 @@ export class RepositoryStore {
     if (this._selectedId() === id) {
       const remaining = this._repositories();
       if (remaining.length > 0) {
-        const defaultRepo = remaining.find(r => r.isDefault) ?? remaining[0];
-        this.setSelectedRepository(defaultRepo.id);
+        // Select first remaining repo
+        this.setSelectedRepository(remaining[0].id);
       } else {
         this._selectedId.set(null);
         this.clearSelectedIdFromStorage();

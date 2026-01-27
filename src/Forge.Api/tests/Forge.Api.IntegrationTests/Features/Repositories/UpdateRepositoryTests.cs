@@ -135,7 +135,6 @@ public class UpdateRepositoryTests : IAsyncLifetime
         var createDto = new CreateRepositoryDtoBuilder()
             .WithName("Original")
             .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .AsDefault()
             .Build();
         var createResponse = await _client.PostAsJsonAsync("/api/repositories", createDto, HttpClientExtensions.JsonOptions);
         var created = await createResponse.ReadAsAsync<RepositoryDto>();
@@ -150,7 +149,6 @@ public class UpdateRepositoryTests : IAsyncLifetime
         // Assert
         var updated = await response.ReadAsAsync<RepositoryDto>();
         updated!.Path.Should().Be(ForgeWebApplicationFactory.ProjectRoot);
-        updated.IsDefault.Should().BeTrue();
         updated.IsActive.Should().BeTrue();
     }
 }

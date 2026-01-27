@@ -48,11 +48,6 @@ import { Repository } from '../../models';
                         <h3 class="font-medium text-gray-900 dark:text-gray-100">
                           {{ repo.name }}
                         </h3>
-                        @if (repo.isDefault) {
-                          <span class="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                            Default
-                          </span>
-                        }
                       </div>
                       <p class="mt-1 truncate font-mono text-sm text-gray-500 dark:text-gray-400" [title]="repo.path">
                         {{ repo.path }}
@@ -120,21 +115,6 @@ import { Repository } from '../../models';
                     Refresh Git Info
                   }
                 </button>
-
-                <!-- Set as Default -->
-                @if (!repo.isDefault) {
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                    [disabled]="isSettingDefault()"
-                    (click)="onSetDefault()"
-                  >
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401z" clip-rule="evenodd" />
-                    </svg>
-                    Set as Default
-                  </button>
-                }
 
                 <div class="flex-1"></div>
 
@@ -228,12 +208,10 @@ export class RepositorySettingsDialogComponent {
   readonly close = output<void>();
   readonly delete = output<string>();
   readonly refresh = output<string>();
-  readonly setDefault = output<string>();
 
   readonly showDeleteConfirm = signal(false);
   readonly isDeleting = signal(false);
   readonly isRefreshing = signal(false);
-  readonly isSettingDefault = signal(false);
 
   onClose(): void {
     this.showDeleteConfirm.set(false);
@@ -256,18 +234,9 @@ export class RepositorySettingsDialogComponent {
     }
   }
 
-  onSetDefault(): void {
-    const repo = this.repository();
-    if (repo) {
-      this.isSettingDefault.set(true);
-      this.setDefault.emit(repo.id);
-    }
-  }
-
   resetState(): void {
     this.showDeleteConfirm.set(false);
     this.isDeleting.set(false);
     this.isRefreshing.set(false);
-    this.isSettingDefault.set(false);
   }
 }

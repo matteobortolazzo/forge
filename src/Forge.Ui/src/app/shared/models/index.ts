@@ -186,7 +186,6 @@ export interface Repository {
   id: string;
   name: string;
   path: string;
-  isDefault: boolean;
   isActive: boolean;
   branch?: string;
   commitHash?: string;
@@ -203,7 +202,6 @@ export interface Repository {
 export interface CreateRepositoryDto {
   name: string;
   path: string;
-  setAsDefault?: boolean;
 }
 
 export interface UpdateRepositoryDto {

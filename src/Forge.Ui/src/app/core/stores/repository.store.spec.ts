@@ -27,14 +27,12 @@ describe('RepositoryStore', () => {
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
     refresh: ReturnType<typeof vi.fn>;
-    setDefault: ReturnType<typeof vi.fn>;
   };
 
   const mockRepository: Repository = {
     id: 'repo-1',
     name: 'test-repo',
     path: '/home/user/repos/test-repo',
-    isDefault: true,
     isActive: true,
     branch: 'main',
     commitHash: 'abc1234',
@@ -51,7 +49,6 @@ describe('RepositoryStore', () => {
     id: 'repo-2',
     name: 'other-repo',
     path: '/home/user/repos/other-repo',
-    isDefault: false,
     isActive: true,
     branch: 'develop',
     commitHash: 'def5678',
@@ -75,7 +72,6 @@ describe('RepositoryStore', () => {
       update: vi.fn(),
       delete: vi.fn(),
       refresh: vi.fn(),
-      setDefault: vi.fn(),
     };
 
     TestBed.configureTestingModule({
@@ -123,17 +119,8 @@ describe('RepositoryStore', () => {
       expect(store.repositories()).toEqual([]);
     });
 
-    it('should auto-select default repository when no selection exists', async () => {
+    it('should auto-select first repository when no selection exists', async () => {
       repositoryServiceMock.getAll.mockReturnValue(of([mockRepository, mockRepository2]));
-
-      await store.loadRepositories();
-
-      expect(store.selectedId()).toBe('repo-1');
-    });
-
-    it('should auto-select first repository when no default exists', async () => {
-      const nonDefaultRepo = { ...mockRepository, isDefault: false };
-      repositoryServiceMock.getAll.mockReturnValue(of([nonDefaultRepo]));
 
       await store.loadRepositories();
 
@@ -180,8 +167,8 @@ describe('RepositoryStore', () => {
       expect(store.selectedRepository()).toEqual(mockRepository);
     });
 
-    it('should return default repository', () => {
-      expect(store.defaultRepository()).toEqual(mockRepository);
+    it('should return first repository', () => {
+      expect(store.firstRepository()).toEqual(mockRepository);
     });
 
     it('should return active repositories', () => {

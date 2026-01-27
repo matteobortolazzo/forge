@@ -33,9 +33,9 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .IsUnique()
                 .HasDatabaseName("IX_Repositories_Path");
 
-            // Index for queries on IsDefault and IsActive
-            entity.HasIndex(e => new { e.IsDefault, e.IsActive })
-                .HasDatabaseName("IX_Repositories_Default_Active");
+            // Index for queries on IsActive
+            entity.HasIndex(e => e.IsActive)
+                .HasDatabaseName("IX_Repositories_Active");
 
             entity.HasMany(e => e.Tasks)
                 .WithOne(t => t.Repository)

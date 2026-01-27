@@ -6,7 +6,6 @@ public record RepositoryDto(
     Guid Id,
     string Name,
     string Path,
-    bool IsDefault,
     bool IsActive,
     string? Branch,
     string? CommitHash,
@@ -22,7 +21,6 @@ public record RepositoryDto(
         entity.Id,
         entity.Name,
         entity.Path,
-        entity.IsDefault,
         entity.IsActive,
         entity.Branch,
         entity.CommitHash,
@@ -37,8 +35,7 @@ public record RepositoryDto(
 
 public record CreateRepositoryDto(
     string Name,
-    string Path,
-    bool SetAsDefault = false);
+    string Path);
 
 public record UpdateRepositoryDto(
     string? Name = null);

@@ -105,26 +105,6 @@ public class DeleteRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeleteRepository_ClearsDefaultStatus()
-    {
-        // Arrange
-        var createDto = new CreateRepositoryDtoBuilder()
-            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .AsDefault()
-            .Build();
-        var createResponse = await _client.PostAsJsonAsync("/api/repositories", createDto, HttpClientExtensions.JsonOptions);
-        var created = await createResponse.ReadAsAsync<RepositoryDto>();
-
-        // Act
-        await _client.DeleteAsync($"/api/repositories/{created!.Id}");
-
-        // Assert
-        await using var db = _factory.CreateDbContext();
-        var entity = await db.Repositories.FindAsync(created.Id);
-        entity!.IsDefault.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task DeleteRepository_AlreadyDeleted_ReturnsNotFound()
     {
         // Arrange

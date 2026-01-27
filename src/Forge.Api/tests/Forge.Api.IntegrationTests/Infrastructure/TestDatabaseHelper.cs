@@ -8,15 +8,13 @@ public static class TestDatabaseHelper
     public static async Task<RepositoryEntity> SeedRepositoryAsync(
         ForgeDbContext db,
         string name = "Test Repository",
-        string? path = null,
-        bool isDefault = true)
+        string? path = null)
     {
         var entity = new RepositoryEntity
         {
             Id = Guid.NewGuid(),
             Name = name,
             Path = path ?? ForgeWebApplicationFactory.ProjectRoot,
-            IsDefault = isDefault,
             IsActive = true,
             IsGitRepository = true,
             CreatedAt = DateTime.UtcNow,
@@ -36,11 +34,11 @@ public static class TestDatabaseHelper
         Priority priority = Priority.Medium,
         Guid? repositoryId = null)
     {
-        // If no repository provided, create or get a default one
+        // If no repository provided, create or get an existing one
         if (repositoryId is null)
         {
             var existingRepo = await db.Repositories
-                .FirstOrDefaultAsync(r => r.IsDefault && r.IsActive);
+                .FirstOrDefaultAsync(r => r.IsActive);
 
             if (existingRepo is null)
             {

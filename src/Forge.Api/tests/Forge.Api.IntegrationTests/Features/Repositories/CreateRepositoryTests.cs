@@ -34,7 +34,6 @@ public class CreateRepositoryTests : IAsyncLifetime
         repo!.Id.Should().NotBeEmpty();
         repo.Name.Should().Be("Test Repo");
         repo.Path.Should().Be(ForgeWebApplicationFactory.ProjectRoot);
-        repo.IsDefault.Should().BeFalse();
         repo.IsActive.Should().BeTrue();
         repo.TaskCount.Should().Be(0);
     }
@@ -58,63 +57,6 @@ public class CreateRepositoryTests : IAsyncLifetime
         entity.Should().NotBeNull();
         entity!.Name.Should().Be("Persisted Repo");
         entity.Path.Should().Be(ForgeWebApplicationFactory.ProjectRoot);
-    }
-
-    [Fact]
-    public async Task CreateRepository_WithSetAsDefault_SetsAsDefault()
-    {
-        // Arrange
-        var dto = new CreateRepositoryDtoBuilder()
-            .WithName("Default Repo")
-            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .AsDefault()
-            .Build();
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/repositories", dto, HttpClientExtensions.JsonOptions);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var repo = await response.ReadAsAsync<RepositoryDto>();
-        repo!.IsDefault.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task CreateRepository_WithSetAsDefault_ClearsPreviousDefault()
-    {
-        // Arrange - Create first default repository
-        var firstDto = new CreateRepositoryDtoBuilder()
-            .WithName("First Default")
-            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .AsDefault()
-            .Build();
-        await _client.PostAsJsonAsync("/api/repositories", firstDto, HttpClientExtensions.JsonOptions);
-
-        // Create temp directory for second repository
-        var tempDir = Path.Combine(Path.GetTempPath(), $"forge_test_{Guid.NewGuid()}");
-        Directory.CreateDirectory(tempDir);
-
-        try
-        {
-            var secondDto = new CreateRepositoryDtoBuilder()
-                .WithName("Second Default")
-                .WithPath(tempDir)
-                .AsDefault()
-                .Build();
-
-            // Act
-            await _client.PostAsJsonAsync("/api/repositories", secondDto, HttpClientExtensions.JsonOptions);
-
-            // Assert - First should no longer be default
-            await using var db = _factory.CreateDbContext();
-            var repos = await db.Repositories.Where(r => r.IsDefault && r.IsActive).ToListAsync();
-            repos.Should().HaveCount(1);
-            repos[0].Name.Should().Be("Second Default");
-        }
-        finally
-        {
-            Directory.Delete(tempDir, true);
-        }
     }
 
     [Fact]

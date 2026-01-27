@@ -24,9 +24,6 @@ public static class RepositoryEndpoints
 
         group.MapPost("/{id:guid}/refresh", RefreshRepository)
             .WithName("RefreshRepository");
-
-        group.MapPost("/{id:guid}/set-default", SetDefaultRepository)
-            .WithName("SetDefaultRepository");
     }
 
     private static async Task<IResult> GetAllRepositories(IRepositoryService service)
@@ -82,14 +79,6 @@ public static class RepositoryEndpoints
     private static async Task<IResult> RefreshRepository(Guid id, IRepositoryService service)
     {
         var repository = await service.RefreshAsync(id);
-        return repository is null
-            ? Results.NotFound()
-            : Results.Ok(repository);
-    }
-
-    private static async Task<IResult> SetDefaultRepository(Guid id, IRepositoryService service)
-    {
-        var repository = await service.SetDefaultAsync(id);
         return repository is null
             ? Results.NotFound()
             : Results.Ok(repository);

@@ -44,7 +44,6 @@ import { CreateRepositoryDto, Repository } from './shared/models';
       (close)="closeSettingsDialog()"
       (delete)="onDeleteRepository($event)"
       (refresh)="onRefreshRepository($event)"
-      (setDefault)="onSetDefaultRepository($event)"
     />
   `,
   styles: `
@@ -107,14 +106,6 @@ export class App implements OnInit {
 
   async onRefreshRepository(id: string): Promise<void> {
     const updated = await this.repositoryStore.refreshRepository(id);
-    if (updated) {
-      this.settingsRepository.set(updated);
-    }
-    this.settingsDialogRef?.resetState();
-  }
-
-  async onSetDefaultRepository(id: string): Promise<void> {
-    const updated = await this.repositoryStore.setDefaultRepository(id);
     if (updated) {
       this.settingsRepository.set(updated);
     }

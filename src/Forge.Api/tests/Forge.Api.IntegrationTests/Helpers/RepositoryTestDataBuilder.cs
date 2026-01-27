@@ -4,7 +4,6 @@ public class CreateRepositoryDtoBuilder
 {
     private string _name = "Test Repository";
     private string _path = ForgeWebApplicationFactory.ProjectRoot;
-    private bool _setAsDefault = false;
 
     public CreateRepositoryDtoBuilder WithName(string name)
     {
@@ -18,13 +17,7 @@ public class CreateRepositoryDtoBuilder
         return this;
     }
 
-    public CreateRepositoryDtoBuilder AsDefault()
-    {
-        _setAsDefault = true;
-        return this;
-    }
-
-    public CreateRepositoryDto Build() => new(_name, _path, _setAsDefault);
+    public CreateRepositoryDto Build() => new(_name, _path);
 }
 
 public class UpdateRepositoryDtoBuilder

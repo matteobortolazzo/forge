@@ -15,7 +15,6 @@ export class RepositoryService {
       id: 'repo-1',
       name: 'forge',
       path: '/home/user/repos/forge',
-      isDefault: true,
       isActive: true,
       branch: 'feature/repo-info',
       commitHash: 'abc1234',
@@ -53,17 +52,14 @@ export class RepositoryService {
         id: `repo-${Date.now()}`,
         name: dto.name,
         path: dto.path,
-        isDefault: dto.setAsDefault ?? false,
         isActive: true,
         isGitRepository: true,
         createdAt: new Date(),
         updatedAt: new Date(),
         taskCount: 0,
       };
-      if (dto.setAsDefault) {
-        this.mockRepositories = this.mockRepositories.map(r => ({ ...r, isDefault: false }));
-      }
-      this.mockRepositories.push(newRepo);
+      // Add to beginning (newest first)
+      this.mockRepositories.unshift(newRepo);
       return of({ ...newRepo }).pipe(delay(300));
     }
     return this.http.post<Repository>(this.apiUrl, dto);
@@ -111,29 +107,13 @@ export class RepositoryService {
     return this.http.post<Repository>(`${this.apiUrl}/${id}/refresh`, {});
   }
 
-  setDefault(id: string): Observable<Repository> {
-    if (this.useMocks) {
-      const index = this.mockRepositories.findIndex(r => r.id === id);
-      if (index === -1) {
-        throw new Error('Repository not found');
-      }
-      this.mockRepositories = this.mockRepositories.map(r => ({
-        ...r,
-        isDefault: r.id === id,
-        updatedAt: new Date(),
-      }));
-      return of({ ...this.mockRepositories[index] }).pipe(delay(200));
-    }
-    return this.http.post<Repository>(`${this.apiUrl}/${id}/set-default`, {});
-  }
-
   // Legacy method for backward compatibility
   getInfo(): Observable<Repository> {
     if (this.useMocks) {
-      const defaultRepo = this.mockRepositories.find(r => r.isDefault);
-      return of(defaultRepo ? { ...defaultRepo } : this.mockRepositories[0]).pipe(delay(200));
+      // Return first repository
+      return of(this.mockRepositories[0] ? { ...this.mockRepositories[0] } : this.mockRepositories[0]).pipe(delay(200));
     }
-    // Get default repository or first one
+    // Get first repository
     return this.http.get<Repository[]>(this.apiUrl).pipe(
       delay(0), // Don't actually delay for this derived observable
     ) as unknown as Observable<Repository>;

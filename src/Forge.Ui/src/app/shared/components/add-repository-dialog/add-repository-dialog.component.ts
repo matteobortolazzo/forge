@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, input, output, inject, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, output, inject, signal, computed } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CreateRepositoryDto } from '../../models';
 
@@ -31,64 +31,31 @@ import { CreateRepositoryDto } from '../../models';
           </h2>
 
           <form [formGroup]="form" (ngSubmit)="onSubmit()" class="mt-4 space-y-4">
-            <!-- Name -->
-            <div>
-              <label
-                for="repo-name"
-                class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Name
-              </label>
-              <input
-                id="repo-name"
-                type="text"
-                formControlName="name"
-                class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="My Project"
-              />
-              @if (form.controls.name.invalid && form.controls.name.touched) {
-                <p class="mt-1 text-sm text-red-600 dark:text-red-400">
-                  Name is required
-                </p>
-              }
-            </div>
-
             <!-- Path -->
             <div>
               <label
                 for="repo-path"
                 class="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                Path
+                Repository Path
               </label>
               <input
                 id="repo-path"
                 type="text"
                 formControlName="path"
                 class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="/path/to/repository"
+                placeholder="/home/user/projects/my-repo"
               />
               @if (form.controls.path.invalid && form.controls.path.touched) {
                 <p class="mt-1 text-sm text-red-600 dark:text-red-400">
                   Path is required
                 </p>
               }
-            </div>
-
-            <!-- Set as Default -->
-            <div class="flex items-center gap-2">
-              <input
-                id="set-default"
-                type="checkbox"
-                formControlName="setAsDefault"
-                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-              />
-              <label
-                for="set-default"
-                class="text-sm text-gray-700 dark:text-gray-300"
-              >
-                Set as default repository
-              </label>
+              @if (derivedName()) {
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Will be added as: <span class="font-medium text-gray-700 dark:text-gray-300">"{{ derivedName() }}"</span>
+                </p>
+              }
             </div>
 
             <!-- Error Message -->
@@ -112,7 +79,7 @@ import { CreateRepositoryDto } from '../../models';
               </button>
               <button
                 type="submit"
-                [disabled]="form.invalid || isSubmitting()"
+                [disabled]="form.invalid || isSubmitting() || !derivedName()"
                 class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 @if (isSubmitting()) {
@@ -139,19 +106,29 @@ export class AddRepositoryDialogComponent {
   readonly errorMessage = signal<string | null>(null);
 
   readonly form = this.fb.nonNullable.group({
-    name: ['', [Validators.required, Validators.minLength(1)]],
     path: ['', [Validators.required, Validators.minLength(1)]],
-    setAsDefault: [false],
+  });
+
+  /**
+   * Derives the repository name from the path.
+   * Extracts the last folder name from the path.
+   */
+  readonly derivedName = computed(() => {
+    const path = this.form.value.path?.trim();
+    if (!path) return null;
+    // Handle both Unix and Windows paths
+    const segments = path.split(/[/\\]/).filter(Boolean);
+    return segments[segments.length - 1] || null;
   });
 
   onSubmit(): void {
-    if (this.form.valid) {
+    const name = this.derivedName();
+    if (this.form.valid && name) {
       this.isSubmitting.set(true);
       this.errorMessage.set(null);
       const dto: CreateRepositoryDto = {
-        name: this.form.value.name!,
+        name,
         path: this.form.value.path!,
-        setAsDefault: this.form.value.setAsDefault,
       };
       this.create.emit(dto);
     }
@@ -169,9 +146,7 @@ export class AddRepositoryDialogComponent {
 
   resetForm(): void {
     this.form.reset({
-      name: '',
       path: '',
-      setAsDefault: false,
     });
     this.isSubmitting.set(false);
     this.errorMessage.set(null);

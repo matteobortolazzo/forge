@@ -16,7 +16,6 @@ describe('RepositoryInfoComponent', () => {
     id: 'repo-1',
     name: 'test-repo',
     path: '/home/user/repos/test-repo',
-    isDefault: true,
     isActive: true,
     branch: 'main',
     commitHash: 'abc1234',

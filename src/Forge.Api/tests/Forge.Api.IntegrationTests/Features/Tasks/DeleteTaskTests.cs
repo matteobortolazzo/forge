@@ -122,7 +122,7 @@ public class DeleteTaskTests : IAsyncLifetime
         // Arrange
         await using var db = _factory.CreateDbContext();
         var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath, isDefault: false);
+        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
         var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
 
         // Act - Try to delete task from wrong repository
