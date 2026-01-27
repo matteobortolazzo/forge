@@ -98,15 +98,16 @@ public class AgentRunnerService(
 
         try
         {
-            var workingDirectory = configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
             var cliPath = configuration["CLAUDE_CODE_PATH"];
 
-            // Load the task entity for orchestration
+            // Load the task entity with repository for orchestration
             TaskEntity? task;
             using (var scope = scopeFactory.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
-                task = await db.Tasks.FindAsync([taskId], ct);
+                task = await db.Tasks
+                    .Include(t => t.Repository)
+                    .FirstOrDefaultAsync(t => t.Id == taskId, ct);
             }
 
             if (task == null)
@@ -115,6 +116,9 @@ public class AgentRunnerService(
                 completionResult = AgentCompletionResult.Error;
                 return;
             }
+
+            // Get working directory from task's repository
+            var workingDirectory = task.Repository.Path;
 
             taskState = task.State;
 

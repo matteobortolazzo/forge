@@ -74,10 +74,12 @@ public class RollbackService : IRollbackService
     {
         var subtask = await _db.Subtasks
             .Include(s => s.Artifacts)
+            .Include(s => s.ParentTask)
+            .ThenInclude(t => t.Repository)
             .FirstOrDefaultAsync(s => s.Id == subtaskId, ct)
             ?? throw new InvalidOperationException($"Subtask {subtaskId} not found");
 
-        var task = await _db.Tasks.FindAsync([subtask.ParentTaskId], ct)
+        var task = subtask.ParentTask
             ?? throw new InvalidOperationException($"Parent task {subtask.ParentTaskId} not found");
 
         _logger.LogInformation("Rolling back subtask {SubtaskId} due to {Trigger}", subtaskId, trigger);
@@ -105,8 +107,8 @@ public class RollbackService : IRollbackService
         // Remove worktree if it exists
         if (!string.IsNullOrEmpty(subtask.WorktreePath))
         {
-            // Get repository path from configuration
-            var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
+            // Get repository path from parent task's repository
+            var repoPath = task.Repository.Path;
 
             var result = await _worktreeService.RemoveWorktreeAsync(repoPath, subtaskId, ct);
             actionTaken = actionTaken with

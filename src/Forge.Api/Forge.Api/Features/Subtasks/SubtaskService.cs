@@ -136,6 +136,8 @@ public class SubtaskService
     public async Task<bool> DeleteSubtaskAsync(Guid taskId, Guid subtaskId)
     {
         var subtask = await _db.Subtasks
+            .Include(s => s.ParentTask)
+            .ThenInclude(t => t.Repository)
             .FirstOrDefaultAsync(s => s.ParentTaskId == taskId && s.Id == subtaskId);
 
         if (subtask == null)
@@ -144,7 +146,7 @@ public class SubtaskService
         // Remove worktree if exists
         if (!string.IsNullOrEmpty(subtask.WorktreePath))
         {
-            var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
+            var repoPath = subtask.ParentTask.Repository.Path;
             await _worktreeService.RemoveWorktreeAsync(repoPath, subtaskId);
         }
 
@@ -159,6 +161,8 @@ public class SubtaskService
     public async Task<SubtaskDto?> StartSubtaskAsync(Guid taskId, Guid subtaskId)
     {
         var subtask = await _db.Subtasks
+            .Include(s => s.ParentTask)
+            .ThenInclude(t => t.Repository)
             .FirstOrDefaultAsync(s => s.ParentTaskId == taskId && s.Id == subtaskId);
 
         if (subtask == null)
@@ -177,8 +181,8 @@ public class SubtaskService
             }
         }
 
-        // Create worktree
-        var repoPath = _configuration["REPOSITORY_PATH"] ?? Environment.CurrentDirectory;
+        // Create worktree using repository path from parent task
+        var repoPath = subtask.ParentTask.Repository.Path;
         var worktreeResult = await _worktreeService.CreateWorktreeAsync(repoPath, subtaskId);
 
         if (!worktreeResult.Success)
