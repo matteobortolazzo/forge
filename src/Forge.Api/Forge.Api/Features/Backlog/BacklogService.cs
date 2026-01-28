@@ -231,6 +231,19 @@ public class BacklogService(ForgeDbContext db, ISseService sse, NotificationServ
     }
 
     /// <summary>
+    /// Gets all logs for a backlog item.
+    /// </summary>
+    public async Task<IReadOnlyList<Events.BacklogItemLogDto>> GetLogsAsync(Guid backlogItemId)
+    {
+        var logs = await db.TaskLogs
+            .AsNoTracking()
+            .Where(l => l.BacklogItemId == backlogItemId)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
+        return logs.Select(Events.BacklogItemLogDto.FromEntity).ToList();
+    }
+
+    /// <summary>
     /// Creates tasks from split agent output.
     /// </summary>
     public async Task<IReadOnlyList<TaskDto>> CreateTasksFromSplitAsync(

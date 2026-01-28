@@ -40,6 +40,9 @@ public static class BacklogEndpoints
 
         group.MapPost("/{id:guid}/resume", ResumeBacklogItem)
             .WithName("ResumeBacklogItem");
+
+        group.MapGet("/{id:guid}/logs", GetBacklogItemLogs)
+            .WithName("GetBacklogItemLogs");
     }
 
     private static async Task<IResult> GetAllBacklogItems(
@@ -272,5 +275,22 @@ public static class BacklogEndpoints
         {
             return Results.BadRequest(new { error = ex.Message });
         }
+    }
+
+    private static async Task<IResult> GetBacklogItemLogs(
+        Guid repoId,
+        Guid id,
+        BacklogService backlogService,
+        IRepositoryService repositoryService)
+    {
+        var repo = await repositoryService.GetByIdAsync(repoId);
+        if (repo is null) return Results.NotFound(new { error = "Repository not found" });
+
+        var existing = await backlogService.GetByIdAsync(id);
+        if (existing is null) return Results.NotFound();
+        if (existing.RepositoryId != repoId) return Results.NotFound();
+
+        var logs = await backlogService.GetLogsAsync(id);
+        return Results.Ok(logs);
     }
 }

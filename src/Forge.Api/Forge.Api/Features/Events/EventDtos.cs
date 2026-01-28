@@ -1,3 +1,4 @@
+using Forge.Api.Data.Entities;
 using Forge.Api.Shared;
 
 namespace Forge.Api.Features.Events;
@@ -45,7 +46,16 @@ public record BacklogItemLogDto(
     string Content,
     string? ToolName,
     DateTime Timestamp
-);
+)
+{
+    public static BacklogItemLogDto FromEntity(TaskLogEntity entity) => new(
+        entity.Id,
+        entity.BacklogItemId ?? Guid.Empty,
+        entity.Type,
+        entity.Content,
+        entity.ToolName,
+        entity.Timestamp);
+}
 
 /// <summary>
 /// DTO for rollback events.

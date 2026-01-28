@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { NotificationPanelComponent } from '../../../features/notifications/notification-panel.component';
 import { SchedulerStatusComponent } from '../scheduler-status.component';
 import { RepositoryInfoComponent } from '../repository-info.component';
+import { AgentWorkingIndicatorComponent } from '../agent-working-indicator/agent-working-indicator.component';
 
 @Component({
   selector: 'app-header',
@@ -10,6 +11,7 @@ import { RepositoryInfoComponent } from '../repository-info.component';
     NotificationPanelComponent,
     SchedulerStatusComponent,
     RepositoryInfoComponent,
+    AgentWorkingIndicatorComponent,
   ],
   template: `
     <header
@@ -25,6 +27,7 @@ import { RepositoryInfoComponent } from '../repository-info.component';
           aria-hidden="true"
         ></div>
         <app-repository-info />
+        <app-agent-working-indicator />
       </div>
 
       <div class="flex items-center gap-4">

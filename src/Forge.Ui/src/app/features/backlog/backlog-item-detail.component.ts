@@ -340,11 +340,11 @@ export class BacklogItemDetailComponent implements OnInit, OnDestroy {
     return !item.isPaused && item.state !== 'Done';
   });
 
-  // Logs for backlog item - for now, returns empty array as we don't have backlog-level logs yet
+  // Logs for backlog item - connects to LogStore
   readonly backlogItemLogs = computed(() => {
-    // In the future, this could be extended to show backlog item-level logs
-    // For now, agent output is shown on individual tasks
-    return [] as TaskLog[];
+    const item = this.item();
+    if (!item) return [];
+    return this.logStore.getLogsForBacklogItem(item.id);
   });
 
   async ngOnInit(): Promise<void> {
@@ -360,8 +360,12 @@ export class BacklogItemDetailComponent implements OnInit, OnDestroy {
       this.isLoading.set(false);
 
       // If item not found after loading, show error
-      if (!this.item()) {
+      const item = this.item();
+      if (!item) {
         this.error.set('Backlog item not found');
+      } else {
+        // Load historical logs for this backlog item
+        await this.logStore.loadLogsForBacklogItem(itemId, item.repositoryId);
       }
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load item');
@@ -377,6 +381,11 @@ export class BacklogItemDetailComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.sseSubscription?.unsubscribe();
     this.taskStore.setBacklogItemContext(null);
+    // Clear logs for this backlog item to free memory
+    const item = this.item();
+    if (item) {
+      this.logStore.clearLogsForBacklogItem(item.id);
+    }
   }
 
   private handleSseEvent(event: { type: string; payload: unknown }): void {
@@ -392,6 +401,9 @@ export class BacklogItemDetailComponent implements OnInit, OnDestroy {
         this.taskStore.removeTaskFromEvent((event.payload as { id: string }).id);
         break;
       case 'task:log':
+        this.logStore.addLog(event.payload as TaskLog);
+        break;
+      case 'backlogItem:log':
         this.logStore.addLog(event.payload as TaskLog);
         break;
     }
