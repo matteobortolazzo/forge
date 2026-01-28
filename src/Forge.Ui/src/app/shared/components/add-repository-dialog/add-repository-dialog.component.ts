@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, input, output, inject, signal, computed } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CreateRepositoryDto } from '../../models';
 
@@ -109,12 +110,15 @@ export class AddRepositoryDialogComponent {
     path: ['', [Validators.required, Validators.minLength(1)]],
   });
 
+  /** Signal that tracks form value changes for reactivity with computed signals */
+  private readonly formValue = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+
   /**
    * Derives the repository name from the path.
    * Extracts the last folder name from the path.
    */
   readonly derivedName = computed(() => {
-    const path = this.form.value.path?.trim();
+    const path = this.formValue().path?.trim();
     if (!path) return null;
     // Handle both Unix and Windows paths
     const segments = path.split(/[/\\]/).filter(Boolean);
