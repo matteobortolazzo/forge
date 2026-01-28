@@ -25,6 +25,7 @@ import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner
 import { ArtifactPanelComponent } from '../../shared/components/artifact-panel.component';
 import { AgentOutputComponent } from './agent-output.component';
 import { Subscription } from 'rxjs';
+import { formatDateTime } from '../../shared/utils/date-utils';
 
 @Component({
   selector: 'app-task-detail',
@@ -499,12 +500,6 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   }
 
   formatDate(date: Date): string {
-    return new Date(date).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatDateTime(date);
   }
 }

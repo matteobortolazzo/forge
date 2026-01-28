@@ -23,16 +23,7 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
 import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 import { CreateBacklogItemDialogComponent } from './create-backlog-item-dialog.component';
-
-/** Human-readable labels for backlog item states */
-const STATE_LABELS: Record<BacklogItemState, string> = {
-  New: 'New',
-  Refining: 'Refining',
-  Ready: 'Ready',
-  Splitting: 'Splitting',
-  Executing: 'In Progress',
-  Done: 'Done',
-};
+import { STATE_LABELS } from '../../shared/constants/state-labels';
 
 @Component({
   selector: 'app-backlog-list',

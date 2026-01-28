@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/cor
 import { Router } from '@angular/router';
 import { NotificationStore } from '../../core/stores/notification.store';
 import { Notification } from '../../shared/models';
+import { formatRelativeTime } from '../../shared/utils/date-utils';
 
 @Component({
   selector: 'app-notification-panel',
@@ -110,7 +111,7 @@ import { Notification } from '../../shared/models';
                       {{ notification.message }}
                     </p>
                     <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                      {{ formatTime(notification.createdAt) }}
+                      {{ formatNotificationTime(notification.createdAt) }}
                     </p>
                   </div>
                   @if (!notification.read) {
@@ -187,17 +188,7 @@ export class NotificationPanelComponent {
     }
   }
 
-  formatTime(date: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+  formatNotificationTime(date: Date): string {
+    return formatRelativeTime(date);
   }
 }

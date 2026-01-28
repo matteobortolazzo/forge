@@ -17,8 +17,6 @@ import {
   BacklogItem,
   Task,
   TaskLog,
-  BACKLOG_ITEM_STATES,
-  BacklogItemState,
 } from '../../shared/models';
 import { BacklogStateBadgeComponent } from '../../shared/components/backlog-state-badge/backlog-state-badge.component';
 import { StateBadgeComponent } from '../../shared/components/state-badge.component';
@@ -29,16 +27,6 @@ import { AgentIndicatorComponent } from '../../shared/components/agent-indicator
 import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 import { AgentOutputComponent } from '../task-detail/agent-output.component';
 import { Subscription } from 'rxjs';
-
-/** Human-readable labels for backlog item states */
-const STATE_LABELS: Record<BacklogItemState, string> = {
-  New: 'New',
-  Refining: 'Refining',
-  Ready: 'Ready',
-  Splitting: 'Splitting',
-  Executing: 'In Progress',
-  Done: 'Done',
-};
 
 @Component({
   selector: 'app-backlog-item-detail',

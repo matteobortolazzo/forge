@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, input, computed, ElementRef, viewChild, effect, signal, afterRenderEffect } from '@angular/core';
 import { TaskLog, LogType } from '../../shared/models';
+import { formatTime } from '../../shared/utils/date-utils';
 
 @Component({
   selector: 'app-agent-output',
@@ -69,7 +70,7 @@ import { TaskLog, LogType } from '../../shared/models';
                     }
                     <pre class="whitespace-pre-wrap break-words">{{ log.content }}</pre>
                     <span class="mt-1 block text-xs text-gray-600">
-                      {{ formatTime(log.timestamp) }}
+                      {{ formatTimestamp(log.timestamp) }}
                     </span>
                   </div>
                 </div>
@@ -153,11 +154,7 @@ export class AgentOutputComponent {
     }
   }
 
-  formatTime(date: Date): string {
-    return new Date(date).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+  formatTimestamp(date: Date): string {
+    return formatTime(date);
   }
 }
