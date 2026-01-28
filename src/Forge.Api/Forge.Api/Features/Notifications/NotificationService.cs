@@ -26,6 +26,7 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             Message = dto.Message,
             Type = dto.Type,
             TaskId = dto.TaskId,
+            BacklogItemId = dto.BacklogItemId,
             Read = false,
             CreatedAt = DateTime.UtcNow
         };
@@ -61,6 +62,8 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
         return await db.Notifications.CountAsync(n => !n.Read);
     }
 
+    #region Task Notifications
+
     public async Task NotifyTaskStateChangedAsync(Guid taskId, string taskTitle, PipelineState fromState, PipelineState toState)
     {
         var type = toState == PipelineState.Done ? NotificationType.Success : NotificationType.Info;
@@ -69,7 +72,7 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             ? $"\"{taskTitle}\" completed"
             : $"\"{taskTitle}\" moved to {toState}";
 
-        await CreateAsync(new CreateNotificationDto(title, message, type, taskId));
+        await CreateAsync(new CreateNotificationDto(title, message, type, taskId, null));
     }
 
     public async Task NotifyTaskErrorAsync(Guid taskId, string taskTitle, string errorMessage)
@@ -78,7 +81,8 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             "Task Error",
             $"Error on \"{taskTitle}\": {errorMessage}",
             NotificationType.Error,
-            taskId));
+            taskId,
+            null));
     }
 
     public async Task NotifyTaskPausedAsync(Guid taskId, string taskTitle, string reason)
@@ -87,6 +91,44 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             "Task Paused",
             $"\"{taskTitle}\" was paused: {reason}",
             NotificationType.Warning,
-            taskId));
+            taskId,
+            null));
     }
+
+    #endregion
+
+    #region Backlog Item Notifications
+
+    public async Task NotifyBacklogItemStateChangedAsync(Guid backlogItemId, string title, BacklogItemState fromState, BacklogItemState toState)
+    {
+        var type = toState == BacklogItemState.Done ? NotificationType.Success : NotificationType.Info;
+        var notificationTitle = toState == BacklogItemState.Done ? "Backlog Item Completed" : "Backlog Item State Changed";
+        var message = toState == BacklogItemState.Done
+            ? $"\"{title}\" completed"
+            : $"\"{title}\" moved to {toState}";
+
+        await CreateAsync(new CreateNotificationDto(notificationTitle, message, type, null, backlogItemId));
+    }
+
+    public async Task NotifyBacklogItemErrorAsync(Guid backlogItemId, string title, string errorMessage)
+    {
+        await CreateAsync(new CreateNotificationDto(
+            "Backlog Item Error",
+            $"Error on \"{title}\": {errorMessage}",
+            NotificationType.Error,
+            null,
+            backlogItemId));
+    }
+
+    public async Task NotifyBacklogItemPausedAsync(Guid backlogItemId, string title, string reason)
+    {
+        await CreateAsync(new CreateNotificationDto(
+            "Backlog Item Paused",
+            $"\"{title}\" was paused: {reason}",
+            NotificationType.Warning,
+            null,
+            backlogItemId));
+    }
+
+    #endregion
 }

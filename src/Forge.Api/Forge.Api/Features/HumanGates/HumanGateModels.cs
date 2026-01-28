@@ -7,8 +7,8 @@ namespace Forge.Api.Features.HumanGates;
 /// </summary>
 public record HumanGateDto(
     Guid Id,
-    Guid TaskId,
-    Guid? SubtaskId,
+    Guid? TaskId,
+    Guid? BacklogItemId,
     HumanGateType GateType,
     HumanGateStatus Status,
     decimal ConfidenceScore,

@@ -21,10 +21,16 @@ public class AgentConfig
     public required string Name { get; set; }
 
     /// <summary>
-    /// The pipeline state this agent handles.
+    /// The pipeline state this agent handles (for task agents).
     /// </summary>
     [YamlMember(Alias = "state")]
-    public PipelineState State { get; set; }
+    public PipelineState? TaskState { get; set; }
+
+    /// <summary>
+    /// The backlog item state this agent handles (for backlog agents).
+    /// </summary>
+    [YamlMember(Alias = "backlog_state")]
+    public BacklogItemState? BacklogState { get; set; }
 
     /// <summary>
     /// Description of what this agent does.

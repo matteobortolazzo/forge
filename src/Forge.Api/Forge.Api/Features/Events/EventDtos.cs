@@ -7,8 +7,10 @@ namespace Forge.Api.Features.Events;
 /// </summary>
 public record ArtifactDto(
     Guid Id,
-    Guid TaskId,
-    PipelineState ProducedInState,
+    Guid? TaskId,
+    Guid? BacklogItemId,
+    PipelineState? ProducedInState,
+    BacklogItemState? ProducedInBacklogState,
     ArtifactType ArtifactType,
     string Content,
     DateTime CreatedAt,
@@ -21,8 +23,8 @@ public record ArtifactDto(
 /// </summary>
 public record HumanGateDto(
     Guid Id,
-    Guid TaskId,
-    Guid? SubtaskId,
+    Guid? TaskId,
+    Guid? BacklogItemId,
     HumanGateType GateType,
     HumanGateStatus Status,
     decimal ConfidenceScore,
@@ -34,24 +36,15 @@ public record HumanGateDto(
 );
 
 /// <summary>
-/// DTO for subtask events.
+/// DTO for backlog item log events.
 /// </summary>
-public record SubtaskDto(
+public record BacklogItemLogDto(
     Guid Id,
-    Guid ParentTaskId,
-    string Title,
-    string Description,
-    IReadOnlyList<string> AcceptanceCriteria,
-    EstimatedScope EstimatedScope,
-    IReadOnlyList<Guid> Dependencies,
-    int ExecutionOrder,
-    SubtaskStatus Status,
-    string? WorktreePath,
-    decimal? ConfidenceScore,
-    DateTime CreatedAt,
-    DateTime? StartedAt,
-    DateTime? CompletedAt,
-    string? FailureReason
+    Guid BacklogItemId,
+    LogType Type,
+    string Content,
+    string? ToolName,
+    DateTime Timestamp
 );
 
 /// <summary>
@@ -60,7 +53,7 @@ public record SubtaskDto(
 public record RollbackDto(
     Guid Id,
     Guid? TaskId,
-    Guid? SubtaskId,
+    Guid? BacklogItemId,
     RollbackTrigger Trigger,
     DateTime Timestamp,
     RollbackStateBefore StateBefore,

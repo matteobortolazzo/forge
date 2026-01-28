@@ -14,6 +14,7 @@ public interface IRepositoryService
     Task<RepositoryDto?> UpdateAsync(Guid id, UpdateRepositoryDto dto);
     Task<bool> DeleteAsync(Guid id);
     Task<RepositoryDto?> RefreshAsync(Guid id);
+    Task<RepositoryDto?> SetDefaultAsync(Guid id);
 }
 
 public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<RepositoryService> logger) : IRepositoryService
@@ -26,20 +27,20 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
-        // Get task counts for each repository
-        var taskCounts = await db.Tasks
-            .Where(t => t.Repository.IsActive)
-            .GroupBy(t => t.RepositoryId)
+        // Get backlog item counts for each repository
+        var backlogCounts = await db.BacklogItems
+            .Where(b => b.Repository.IsActive)
+            .GroupBy(b => b.RepositoryId)
             .Select(g => new { RepositoryId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.RepositoryId, x => x.Count);
 
-        return entities.Select(e => RepositoryDto.FromEntity(e, taskCounts.GetValueOrDefault(e.Id, 0))).ToList();
+        return entities.Select(e => RepositoryDto.FromEntity(e, backlogCounts.GetValueOrDefault(e.Id, 0))).ToList();
     }
 
     public async Task<RepositoryDto?> GetByIdAsync(Guid id)
     {
         var entity = await db.Repositories
-            .Include(r => r.Tasks)
+            .Include(r => r.BacklogItems)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (entity is null) return null;
@@ -51,7 +52,7 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
             await db.SaveChangesAsync();
         }
 
-        return RepositoryDto.FromEntity(entity, entity.Tasks.Count);
+        return RepositoryDto.FromEntity(entity, entity.BacklogItems.Count);
     }
 
     public async Task<RepositoryDto> CreateAsync(CreateRepositoryDto dto)
@@ -88,12 +89,25 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
             throw new InvalidOperationException($"Directory '{normalizedPath}' does not exist.");
         }
 
+        // If this is the first repository or marked as default, handle default setting
+        var isFirstRepo = !await db.Repositories.AnyAsync(r => r.IsActive);
+        var shouldBeDefault = dto.IsDefault || isFirstRepo;
+
+        if (shouldBeDefault)
+        {
+            // Clear default from other repositories
+            await db.Repositories
+                .Where(r => r.IsDefault)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsDefault, false));
+        }
+
         var entity = new RepositoryEntity
         {
             Id = Guid.NewGuid(),
             Name = dto.Name,
             Path = normalizedPath,
             IsActive = true,
+            IsDefault = shouldBeDefault,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -112,7 +126,7 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
     public async Task<RepositoryDto?> UpdateAsync(Guid id, UpdateRepositoryDto dto)
     {
         var entity = await db.Repositories
-            .Include(r => r.Tasks)
+            .Include(r => r.BacklogItems)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (entity is null) return null;
@@ -125,7 +139,7 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var result = RepositoryDto.FromEntity(entity, entity.Tasks.Count);
+        var result = RepositoryDto.FromEntity(entity, entity.BacklogItems.Count);
         await sse.EmitRepositoryUpdatedAsync(result);
         return result;
     }
@@ -133,16 +147,16 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
     public async Task<bool> DeleteAsync(Guid id)
     {
         var entity = await db.Repositories
-            .Include(r => r.Tasks)
+            .Include(r => r.BacklogItems)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (entity is null) return false;
 
-        // Check if there are any tasks
-        if (entity.Tasks.Count > 0)
+        // Check if there are any backlog items
+        if (entity.BacklogItems.Count > 0)
         {
             throw new InvalidOperationException(
-                $"Cannot delete repository with {entity.Tasks.Count} task(s). Delete tasks first or move them to another repository.");
+                $"Cannot delete repository with {entity.BacklogItems.Count} backlog item(s). Delete items first or move them to another repository.");
         }
 
         // Soft delete
@@ -157,7 +171,7 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
     public async Task<RepositoryDto?> RefreshAsync(Guid id)
     {
         var entity = await db.Repositories
-            .Include(r => r.Tasks)
+            .Include(r => r.BacklogItems)
             .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
 
         if (entity is null) return null;
@@ -166,7 +180,30 @@ public class RepositoryService(ForgeDbContext db, ISseService sse, ILogger<Repos
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var result = RepositoryDto.FromEntity(entity, entity.Tasks.Count);
+        var result = RepositoryDto.FromEntity(entity, entity.BacklogItems.Count);
+        await sse.EmitRepositoryUpdatedAsync(result);
+        return result;
+    }
+
+    public async Task<RepositoryDto?> SetDefaultAsync(Guid id)
+    {
+        var entity = await db.Repositories
+            .Include(r => r.BacklogItems)
+            .FirstOrDefaultAsync(r => r.Id == id && r.IsActive);
+
+        if (entity is null) return null;
+
+        // Clear default from all repositories
+        await db.Repositories
+            .Where(r => r.IsDefault)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.IsDefault, false));
+
+        // Set this one as default
+        entity.IsDefault = true;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var result = RepositoryDto.FromEntity(entity, entity.BacklogItems.Count);
         await sse.EmitRepositoryUpdatedAsync(result);
         return result;
     }

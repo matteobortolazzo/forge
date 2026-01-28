@@ -14,33 +14,45 @@ public interface IOrchestratorService
     /// <summary>
     /// Selects the best agent configuration for a task based on state and context.
     /// </summary>
-    Task<ResolvedAgentConfig> SelectAgentAsync(TaskEntity task, string repositoryPath);
+    Task<ResolvedAgentConfig> SelectAgentForTaskAsync(TaskEntity task, string repositoryPath);
 
     /// <summary>
-    /// Selects the best agent configuration for a subtask.
+    /// Selects the best agent configuration for a backlog item based on state and context.
     /// </summary>
-    Task<ResolvedAgentConfig> SelectAgentForSubtaskAsync(SubtaskEntity subtask, TaskEntity parentTask, string repositoryPath);
+    Task<ResolvedAgentConfig> SelectAgentForBacklogItemAsync(BacklogItemEntity backlogItem, string repositoryPath);
 
     /// <summary>
     /// Gets all artifacts for a task.
     /// </summary>
-    Task<IReadOnlyList<AgentArtifactEntity>> GetArtifactsAsync(Guid taskId);
+    Task<IReadOnlyList<AgentArtifactEntity>> GetTaskArtifactsAsync(Guid taskId);
 
     /// <summary>
-    /// Gets all artifacts for a subtask.
+    /// Gets all artifacts for a backlog item.
     /// </summary>
-    Task<IReadOnlyList<AgentArtifactEntity>> GetSubtaskArtifactsAsync(Guid subtaskId);
+    Task<IReadOnlyList<AgentArtifactEntity>> GetBacklogArtifactsAsync(Guid backlogItemId);
 
     /// <summary>
-    /// Stores an artifact produced by an agent.
+    /// Stores an artifact produced by an agent for a task.
     /// </summary>
-    Task<AgentArtifactEntity> StoreArtifactAsync(
+    Task<AgentArtifactEntity> StoreTaskArtifactAsync(
         Guid taskId,
         PipelineState producedInState,
         ArtifactType artifactType,
         string content,
         string? agentId,
-        Guid? subtaskId = null,
+        decimal? confidenceScore = null,
+        bool humanInputRequested = false,
+        string? humanInputReason = null);
+
+    /// <summary>
+    /// Stores an artifact produced by an agent for a backlog item.
+    /// </summary>
+    Task<AgentArtifactEntity> StoreBacklogArtifactAsync(
+        Guid backlogItemId,
+        BacklogItemState producedInState,
+        ArtifactType artifactType,
+        string content,
+        string? agentId,
         decimal? confidenceScore = null,
         bool humanInputRequested = false,
         string? humanInputReason = null);
@@ -84,10 +96,10 @@ public class OrchestratorService : IOrchestratorService
         _logger = logger;
     }
 
-    public async Task<ResolvedAgentConfig> SelectAgentAsync(TaskEntity task, string repositoryPath)
+    public async Task<ResolvedAgentConfig> SelectAgentForTaskAsync(TaskEntity task, string repositoryPath)
     {
         // 1. Get the default agent for this state
-        var defaultConfig = _configLoader.GetDefaultForState(task.State);
+        var defaultConfig = _configLoader.GetDefaultForTaskState(task.State);
         if (defaultConfig == null)
         {
             throw new InvalidOperationException($"No default agent configuration found for state: {task.State}");
@@ -114,7 +126,7 @@ public class OrchestratorService : IOrchestratorService
         }
 
         // 3. Try to find a matching variant
-        var selectedConfig = await SelectVariantAsync(task.State, language, framework, repositoryPath)
+        var selectedConfig = await SelectTaskVariantAsync(task.State, language, framework, repositoryPath)
                             ?? defaultConfig;
 
         _logger.LogInformation(
@@ -122,10 +134,10 @@ public class OrchestratorService : IOrchestratorService
             selectedConfig.Id, task.Id, task.State);
 
         // 4. Get artifacts from previous stages
-        var artifacts = await GetArtifactsAsync(task.Id);
+        var artifacts = await GetTaskArtifactsAsync(task.Id);
 
         // 5. Build the prompt
-        var resolvedPrompt = _promptBuilder.BuildPrompt(selectedConfig.Prompt, task, artifacts);
+        var resolvedPrompt = _promptBuilder.BuildTaskPrompt(selectedConfig.Prompt, task, artifacts);
 
         // 6. Merge MCP servers from variant and default
         var mcpServers = selectedConfig.McpServers?.ToList() ?? [];
@@ -141,7 +153,7 @@ public class OrchestratorService : IOrchestratorService
         }
 
         // 7. Determine artifact type
-        var artifactType = DetermineArtifactType(selectedConfig);
+        var artifactType = DetermineArtifactTypeForTask(selectedConfig);
 
         return new ResolvedAgentConfig
         {
@@ -153,40 +165,18 @@ public class OrchestratorService : IOrchestratorService
         };
     }
 
-    public async Task<IReadOnlyList<AgentArtifactEntity>> GetArtifactsAsync(Guid taskId)
+    public async Task<ResolvedAgentConfig> SelectAgentForBacklogItemAsync(BacklogItemEntity backlogItem, string repositoryPath)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
-
-        return await db.AgentArtifacts
-            .Where(a => a.TaskId == taskId && a.SubtaskId == null)
-            .OrderBy(a => a.CreatedAt)
-            .ToListAsync();
-    }
-
-    public async Task<IReadOnlyList<AgentArtifactEntity>> GetSubtaskArtifactsAsync(Guid subtaskId)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
-
-        return await db.AgentArtifacts
-            .Where(a => a.SubtaskId == subtaskId)
-            .OrderBy(a => a.CreatedAt)
-            .ToListAsync();
-    }
-
-    public async Task<ResolvedAgentConfig> SelectAgentForSubtaskAsync(SubtaskEntity subtask, TaskEntity parentTask, string repositoryPath)
-    {
-        // For subtasks, use the subtask's current stage to select the agent
-        var defaultConfig = _configLoader.GetDefaultForState(subtask.CurrentStage);
+        // 1. Get the default agent for this backlog item state
+        var defaultConfig = _configLoader.GetDefaultForBacklogState(backlogItem.State);
         if (defaultConfig == null)
         {
-            throw new InvalidOperationException($"No default agent configuration found for state: {subtask.CurrentStage}");
+            throw new InvalidOperationException($"No default agent configuration found for backlog state: {backlogItem.State}");
         }
 
-        // Use parent task's detected context
-        var language = parentTask.DetectedLanguage;
-        var framework = parentTask.DetectedFramework;
+        // 2. Detect context if not already set
+        var language = backlogItem.DetectedLanguage;
+        var framework = backlogItem.DetectedFramework;
 
         if (string.IsNullOrEmpty(language) || string.IsNullOrEmpty(framework))
         {
@@ -198,25 +188,27 @@ public class OrchestratorService : IOrchestratorService
             {
                 framework = await _contextDetector.DetectFrameworkAsync(repositoryPath);
             }
+
+            _logger.LogInformation(
+                "Detected context for backlog item {BacklogItemId}: language={Language}, framework={Framework}",
+                backlogItem.Id, language ?? "unknown", framework ?? "unknown");
         }
 
-        // Try to find a matching variant
-        var selectedConfig = await SelectVariantAsync(subtask.CurrentStage, language, framework, repositoryPath)
+        // 3. Try to find a matching variant
+        var selectedConfig = await SelectBacklogVariantAsync(backlogItem.State, language, framework, repositoryPath)
                             ?? defaultConfig;
 
         _logger.LogInformation(
-            "Selected agent {AgentId} for subtask {SubtaskId} in stage {Stage}",
-            selectedConfig.Id, subtask.Id, subtask.CurrentStage);
+            "Selected agent {AgentId} for backlog item {BacklogItemId} in state {State}",
+            selectedConfig.Id, backlogItem.Id, backlogItem.State);
 
-        // Get artifacts from parent task and this subtask
-        var taskArtifacts = await GetArtifactsAsync(parentTask.Id);
-        var subtaskArtifacts = await GetSubtaskArtifactsAsync(subtask.Id);
-        var allArtifacts = taskArtifacts.Concat(subtaskArtifacts).OrderBy(a => a.CreatedAt).ToList();
+        // 4. Get artifacts from previous stages
+        var artifacts = await GetBacklogArtifactsAsync(backlogItem.Id);
 
-        // Build prompt with subtask context
-        var resolvedPrompt = _promptBuilder.BuildPrompt(selectedConfig.Prompt, parentTask, subtask, allArtifacts, repositoryPath);
+        // 5. Build the prompt
+        var resolvedPrompt = _promptBuilder.BuildBacklogPrompt(selectedConfig.Prompt, backlogItem, artifacts);
 
-        // Merge MCP servers
+        // 6. Merge MCP servers
         var mcpServers = selectedConfig.McpServers?.ToList() ?? [];
         if (selectedConfig.IsVariant && defaultConfig.McpServers != null)
         {
@@ -229,7 +221,8 @@ public class OrchestratorService : IOrchestratorService
             }
         }
 
-        var artifactType = DetermineArtifactType(selectedConfig);
+        // 7. Determine artifact type
+        var artifactType = DetermineArtifactTypeForBacklog(backlogItem.State);
 
         return new ResolvedAgentConfig
         {
@@ -241,13 +234,34 @@ public class OrchestratorService : IOrchestratorService
         };
     }
 
-    public async Task<AgentArtifactEntity> StoreArtifactAsync(
+    public async Task<IReadOnlyList<AgentArtifactEntity>> GetTaskArtifactsAsync(Guid taskId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
+
+        return await db.AgentArtifacts
+            .Where(a => a.TaskId == taskId)
+            .OrderBy(a => a.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<IReadOnlyList<AgentArtifactEntity>> GetBacklogArtifactsAsync(Guid backlogItemId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
+
+        return await db.AgentArtifacts
+            .Where(a => a.BacklogItemId == backlogItemId)
+            .OrderBy(a => a.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<AgentArtifactEntity> StoreTaskArtifactAsync(
         Guid taskId,
         PipelineState producedInState,
         ArtifactType artifactType,
         string content,
         string? agentId,
-        Guid? subtaskId = null,
         decimal? confidenceScore = null,
         bool humanInputRequested = false,
         string? humanInputReason = null)
@@ -264,7 +278,6 @@ public class OrchestratorService : IOrchestratorService
             Content = content,
             CreatedAt = DateTime.UtcNow,
             AgentId = agentId,
-            SubtaskId = subtaskId,
             ConfidenceScore = confidenceScore,
             HumanInputRequested = humanInputRequested,
             HumanInputReason = humanInputReason
@@ -281,7 +294,61 @@ public class OrchestratorService : IOrchestratorService
         var artifactDto = new ArtifactDto(
             artifact.Id,
             artifact.TaskId,
+            artifact.BacklogItemId,
             artifact.ProducedInState,
+            artifact.ProducedInBacklogState,
+            artifact.ArtifactType,
+            artifact.Content,
+            artifact.CreatedAt,
+            artifact.AgentId,
+            artifact.ConfidenceScore
+        );
+        await _sseService.EmitArtifactCreatedAsync(artifactDto);
+
+        return artifact;
+    }
+
+    public async Task<AgentArtifactEntity> StoreBacklogArtifactAsync(
+        Guid backlogItemId,
+        BacklogItemState producedInState,
+        ArtifactType artifactType,
+        string content,
+        string? agentId,
+        decimal? confidenceScore = null,
+        bool humanInputRequested = false,
+        string? humanInputReason = null)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ForgeDbContext>();
+
+        var artifact = new AgentArtifactEntity
+        {
+            Id = Guid.NewGuid(),
+            BacklogItemId = backlogItemId,
+            ProducedInBacklogState = producedInState,
+            ArtifactType = artifactType,
+            Content = content,
+            CreatedAt = DateTime.UtcNow,
+            AgentId = agentId,
+            ConfidenceScore = confidenceScore,
+            HumanInputRequested = humanInputRequested,
+            HumanInputReason = humanInputReason
+        };
+
+        db.AgentArtifacts.Add(artifact);
+        await db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Stored artifact {ArtifactId} of type {Type} for backlog item {BacklogItemId}, confidence: {Confidence}",
+            artifact.Id, artifactType, backlogItemId, confidenceScore);
+
+        // Emit SSE event
+        var artifactDto = new ArtifactDto(
+            artifact.Id,
+            artifact.TaskId,
+            artifact.BacklogItemId,
+            artifact.ProducedInState,
+            artifact.ProducedInBacklogState,
             artifact.ArtifactType,
             artifact.Content,
             artifact.CreatedAt,
@@ -368,13 +435,13 @@ public class OrchestratorService : IOrchestratorService
             taskId, confidenceScore, humanInputRequested);
     }
 
-    private async Task<AgentConfig?> SelectVariantAsync(
+    private async Task<AgentConfig?> SelectTaskVariantAsync(
         PipelineState state,
         string? language,
         string? framework,
         string repositoryPath)
     {
-        var variants = _configLoader.GetVariantsForState(state);
+        var variants = _configLoader.GetVariantsForTaskState(state);
         if (variants.Count == 0)
             return null;
 
@@ -421,7 +488,52 @@ public class OrchestratorService : IOrchestratorService
         return null;
     }
 
-    private static ArtifactType DetermineArtifactType(AgentConfig config)
+    private async Task<AgentConfig?> SelectBacklogVariantAsync(
+        BacklogItemState state,
+        string? language,
+        string? framework,
+        string repositoryPath)
+    {
+        var variants = _configLoader.GetVariantsForBacklogState(state);
+        if (variants.Count == 0)
+            return null;
+
+        foreach (var variant in variants)
+        {
+            if (variant.Match == null)
+                continue;
+
+            if (!string.IsNullOrEmpty(variant.Match.Framework))
+            {
+                if (framework != null &&
+                    framework.Equals(variant.Match.Framework, StringComparison.OrdinalIgnoreCase))
+                {
+                    return variant;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(variant.Match.Language))
+            {
+                if (language != null &&
+                    language.Equals(variant.Match.Language, StringComparison.OrdinalIgnoreCase))
+                {
+                    return variant;
+                }
+            }
+
+            if (variant.Match.Files != null && variant.Match.Files.Count > 0)
+            {
+                if (await _contextDetector.FilesPresentAsync(repositoryPath, variant.Match.Files))
+                {
+                    return variant;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ArtifactType DetermineArtifactTypeForTask(AgentConfig config)
     {
         if (config.Output?.Type != null)
         {
@@ -439,15 +551,24 @@ public class OrchestratorService : IOrchestratorService
             };
         }
 
-        return config.State switch
+        return config.TaskState switch
         {
-            PipelineState.Split => ArtifactType.TaskSplit,
             PipelineState.Research => ArtifactType.ResearchFindings,
             PipelineState.Planning => ArtifactType.Plan,
             PipelineState.Implementing => ArtifactType.Implementation,
             PipelineState.Simplifying => ArtifactType.SimplificationReview,
             PipelineState.Verifying => ArtifactType.VerificationReport,
             PipelineState.Reviewing => ArtifactType.Review,
+            _ => ArtifactType.General
+        };
+    }
+
+    private static ArtifactType DetermineArtifactTypeForBacklog(BacklogItemState state)
+    {
+        return state switch
+        {
+            BacklogItemState.Refining => ArtifactType.General,
+            BacklogItemState.Splitting => ArtifactType.TaskSplit,
             _ => ArtifactType.General
         };
     }

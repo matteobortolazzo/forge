@@ -9,14 +9,24 @@ namespace Forge.Api.Features.Agents;
 public interface IArtifactParser
 {
     /// <summary>
-    /// Extracts the artifact content from agent output.
+    /// Extracts the artifact content from agent output for a task.
     /// </summary>
-    ParsedArtifact? ParseArtifact(string agentOutput, AgentConfig config);
+    ParsedArtifact? ParseTaskArtifact(string agentOutput, AgentConfig config);
+
+    /// <summary>
+    /// Extracts the artifact content from agent output for a backlog item.
+    /// </summary>
+    ParsedBacklogArtifact? ParseBacklogArtifact(string agentOutput, AgentConfig config);
 
     /// <summary>
     /// Extracts the recommended next state from agent output.
     /// </summary>
     PipelineState? ParseRecommendedNextState(string agentOutput);
+
+    /// <summary>
+    /// Extracts the recommended next backlog state from agent output.
+    /// </summary>
+    BacklogItemState? ParseRecommendedNextBacklogState(string agentOutput);
 
     /// <summary>
     /// Extracts the confidence score from agent output.
@@ -35,9 +45,20 @@ public interface IArtifactParser
 }
 
 /// <summary>
-/// Parsed artifact from agent output.
+/// Parsed artifact from agent output for tasks.
 /// </summary>
 public record ParsedArtifact(
+    ArtifactType Type,
+    string Content,
+    decimal? ConfidenceScore = null,
+    bool HumanInputRequested = false,
+    string? HumanInputReason = null
+);
+
+/// <summary>
+/// Parsed artifact from agent output for backlog items.
+/// </summary>
+public record ParsedBacklogArtifact(
     ArtifactType Type,
     string Content,
     decimal? ConfidenceScore = null,
@@ -64,6 +85,7 @@ public partial class ArtifactParser : IArtifactParser
         "# Task Split",
         "# Simplification Review",
         "# Verification Report",
+        "# Refined Specification",
     ];
 
     public ArtifactParser(ILogger<ArtifactParser> logger)
@@ -71,13 +93,13 @@ public partial class ArtifactParser : IArtifactParser
         _logger = logger;
     }
 
-    public ParsedArtifact? ParseArtifact(string agentOutput, AgentConfig config)
+    public ParsedArtifact? ParseTaskArtifact(string agentOutput, AgentConfig config)
     {
         if (string.IsNullOrWhiteSpace(agentOutput))
             return null;
 
         // Determine expected artifact type from config
-        var artifactType = GetArtifactType(config);
+        var artifactType = GetTaskArtifactType(config);
 
         // Try to find the artifact section in the output
         var content = ExtractArtifactContent(agentOutput);
@@ -93,10 +115,37 @@ public partial class ArtifactParser : IArtifactParser
         var confidenceScore = ParseConfidenceScore(agentOutput);
         var (humanInputRequested, humanInputReason) = ParseHumanInputRequest(agentOutput);
 
-        _logger.LogDebug("Parsed artifact of type {Type} with {Length} characters, confidence: {Confidence}, human input: {HumanInput}",
+        _logger.LogDebug("Parsed task artifact of type {Type} with {Length} characters, confidence: {Confidence}, human input: {HumanInput}",
             artifactType, content.Length, confidenceScore, humanInputRequested);
 
         return new ParsedArtifact(artifactType, content, confidenceScore, humanInputRequested, humanInputReason);
+    }
+
+    public ParsedBacklogArtifact? ParseBacklogArtifact(string agentOutput, AgentConfig config)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput))
+            return null;
+
+        // Determine expected artifact type from config
+        var artifactType = GetBacklogArtifactType(config);
+
+        // Try to find the artifact section in the output
+        var content = ExtractArtifactContent(agentOutput);
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            _logger.LogWarning("No structured artifact found in agent output");
+            content = agentOutput;
+        }
+
+        // Extract confidence score and human input request
+        var confidenceScore = ParseConfidenceScore(agentOutput);
+        var (humanInputRequested, humanInputReason) = ParseHumanInputRequest(agentOutput);
+
+        _logger.LogDebug("Parsed backlog artifact of type {Type} with {Length} characters, confidence: {Confidence}, human input: {HumanInput}",
+            artifactType, content.Length, confidenceScore, humanInputRequested);
+
+        return new ParsedBacklogArtifact(artifactType, content, confidenceScore, humanInputRequested, humanInputReason);
     }
 
     public PipelineState? ParseRecommendedNextState(string agentOutput)
@@ -125,6 +174,35 @@ public partial class ArtifactParser : IArtifactParser
         }
 
         _logger.LogDebug("Could not parse state from: {Text}", stateText);
+        return null;
+    }
+
+    public BacklogItemState? ParseRecommendedNextBacklogState(string agentOutput)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput))
+            return null;
+
+        // Look for "Recommended Next State" section
+        var match = RecommendedStateRegex().Match(agentOutput);
+        if (!match.Success)
+        {
+            _logger.LogDebug("No recommended next backlog state found in output");
+            return null;
+        }
+
+        var stateText = match.Groups[1].Value.Trim();
+
+        // Parse the state
+        foreach (var state in Enum.GetValues<BacklogItemState>())
+        {
+            if (stateText.Contains(state.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Parsed recommended next backlog state: {State}", state);
+                return state;
+            }
+        }
+
+        _logger.LogDebug("Could not parse backlog state from: {Text}", stateText);
         return null;
     }
 
@@ -189,7 +267,7 @@ public partial class ArtifactParser : IArtifactParser
         return null;
     }
 
-    private static ArtifactType GetArtifactType(AgentConfig config)
+    private static ArtifactType GetTaskArtifactType(AgentConfig config)
     {
         // First check explicit output type in config
         if (config.Output?.Type != null)
@@ -208,16 +286,37 @@ public partial class ArtifactParser : IArtifactParser
             };
         }
 
-        // Fall back to inferring from state
-        return config.State switch
+        // Fall back to inferring from task state
+        return config.TaskState switch
         {
-            PipelineState.Split => ArtifactType.TaskSplit,
             PipelineState.Research => ArtifactType.ResearchFindings,
             PipelineState.Planning => ArtifactType.Plan,
             PipelineState.Implementing => ArtifactType.Implementation,
             PipelineState.Simplifying => ArtifactType.SimplificationReview,
             PipelineState.Verifying => ArtifactType.VerificationReport,
             PipelineState.Reviewing => ArtifactType.Review,
+            _ => ArtifactType.General
+        };
+    }
+
+    private static ArtifactType GetBacklogArtifactType(AgentConfig config)
+    {
+        // First check explicit output type in config
+        if (config.Output?.Type != null)
+        {
+            return config.Output.Type.ToLowerInvariant() switch
+            {
+                "task_split" => ArtifactType.TaskSplit,
+                "refined_spec" => ArtifactType.General, // Refining agent output
+                _ => ArtifactType.General
+            };
+        }
+
+        // Fall back to inferring from backlog state
+        return config.BacklogState switch
+        {
+            BacklogItemState.Refining => ArtifactType.General,
+            BacklogItemState.Splitting => ArtifactType.TaskSplit,
             _ => ArtifactType.General
         };
     }

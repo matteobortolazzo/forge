@@ -1,6 +1,7 @@
 using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.Backlog;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.HumanGates;
 using Forge.Api.Features.Notifications;
@@ -19,7 +20,6 @@ public class SchedulerService(
     SchedulerState schedulerState,
     IOptions<SchedulerOptions> options,
     IOptions<PipelineConfiguration> pipelineConfig,
-    IParentStateService parentStateService,
     HumanGateService humanGateService,
     ILogger<SchedulerService> logger)
 {
@@ -30,9 +30,11 @@ public class SchedulerService(
     public void Enable() => schedulerState.Enable();
     public void Disable() => schedulerState.Disable();
 
+    #region Task Scheduling
+
     /// <summary>
     /// Gets the next task eligible for scheduling based on priority and state.
-    /// Only leaf tasks (tasks without children) can be scheduled.
+    /// All tasks are now leaf tasks (no hierarchy).
     /// </summary>
     public async Task<TaskDto?> GetNextSchedulableTaskAsync()
     {
@@ -46,17 +48,15 @@ public class SchedulerService(
         // 2. Filter: IsPaused = false
         // 3. Filter: HasError = false OR RetryCount < MaxRetries
         // 4. Filter: AssignedAgentId IS NULL
-        // 5. Filter: ChildCount == 0 (leaf tasks only - parent state is derived)
-        // 6. Filter: HasPendingGate = false (no pending human gates)
-        // 7. Order: Priority DESC, State ASC (Split first), CreatedAt ASC
+        // 5. Filter: HasPendingGate = false (no pending human gates)
+        // 6. Order: Priority DESC, State ASC (Research first), CreatedAt ASC
 
         var entity = await db.Tasks
             .Where(t => SchedulableStates.Contains(t.State))
             .Where(t => !t.IsPaused)
             .Where(t => !t.HasError || t.RetryCount < t.MaxRetries)
             .Where(t => t.AssignedAgentId == null)
-            .Where(t => t.ChildCount == 0)  // Only schedule leaf tasks
-            .Where(t => !t.HasPendingGate)   // No pending human gates
+            .Where(t => !t.HasPendingGate)
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.State)
             .ThenBy(t => t.CreatedAt)
@@ -67,7 +67,7 @@ public class SchedulerService(
 
     /// <summary>
     /// Handles agent completion and auto-transitions task to next state.
-    /// Also updates parent derived state if task is a child.
+    /// Also updates parent backlog item task count.
     /// </summary>
     public async Task<TaskDto?> HandleAgentCompletionAsync(Guid taskId, AgentCompletionResult result)
     {
@@ -82,11 +82,11 @@ public class SchedulerService(
         switch (result)
         {
             case AgentCompletionResult.Success:
-                dto = await HandleSuccessAsync(entity);
+                dto = await HandleTaskSuccessAsync(entity);
                 break;
 
             case AgentCompletionResult.Error:
-                dto = await HandleErrorAsync(entity);
+                dto = await HandleTaskErrorAsync(entity);
                 break;
 
             case AgentCompletionResult.Cancelled:
@@ -108,16 +108,16 @@ public class SchedulerService(
                 break;
         }
 
-        // Update parent derived state if this is a child task
-        if (entity.ParentId is not null)
+        // Update parent backlog item state if task completed
+        if (entity.State == PipelineState.Done)
         {
-            await parentStateService.UpdateByParentIdAsync(entity.ParentId.Value);
+            await UpdateBacklogItemFromTaskCompletionAsync(entity.BacklogItemId);
         }
 
         return dto;
     }
 
-    private async Task<TaskDto> HandleSuccessAsync(TaskEntity entity)
+    private async Task<TaskDto> HandleTaskSuccessAsync(TaskEntity entity)
     {
         // Clear any previous error state
         if (entity.HasError)
@@ -128,9 +128,9 @@ public class SchedulerService(
         }
 
         // Check if human gate is needed based on confidence
-        if (await ShouldTriggerHumanGateAsync(entity))
+        if (await ShouldTriggerTaskHumanGateAsync(entity))
         {
-            var gate = await humanGateService.CreateGateAsync(entity);
+            var gate = await humanGateService.CreateGateForTaskAsync(entity);
             entity.HasPendingGate = true;
             entity.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
@@ -167,7 +167,7 @@ public class SchedulerService(
     /// <summary>
     /// Checks if a human gate should be triggered based on confidence score and pipeline configuration.
     /// </summary>
-    private Task<bool> ShouldTriggerHumanGateAsync(TaskEntity entity)
+    private Task<bool> ShouldTriggerTaskHumanGateAsync(TaskEntity entity)
     {
         // PR gate is always mandatory
         if (entity.State == PipelineState.Reviewing)
@@ -177,14 +177,6 @@ public class SchedulerService(
 
         // Check confidence threshold for conditional gates
         var confidenceThreshold = _pipelineConfig.ConfidenceThreshold;
-
-        if (entity.State == PipelineState.Split)
-        {
-            if (_pipelineConfig.HumanGates.IsSplitMandatory)
-                return Task.FromResult(true);
-
-            return Task.FromResult(entity.ConfidenceScore.HasValue && entity.ConfidenceScore < confidenceThreshold);
-        }
 
         if (entity.State == PipelineState.Planning)
         {
@@ -217,7 +209,7 @@ public class SchedulerService(
         if (verdict.Equals("approved", StringComparison.OrdinalIgnoreCase))
         {
             // Continue to Verifying
-            return await HandleSuccessAsync(entity);
+            return await HandleTaskSuccessAsync(entity);
         }
 
         if (verdict.Equals("changes_requested", StringComparison.OrdinalIgnoreCase))
@@ -233,7 +225,7 @@ public class SchedulerService(
                 entity.UpdatedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
 
-                await humanGateService.CreateGateAsync(entity);
+                await humanGateService.CreateGateForTaskAsync(entity);
 
                 logger.LogWarning("Task {TaskId} escalated to human after {Iterations} simplification iterations",
                     taskId, entity.SimplificationIterations);
@@ -265,14 +257,14 @@ public class SchedulerService(
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        await humanGateService.CreateGateAsync(entity);
+        await humanGateService.CreateGateForTaskAsync(entity);
 
         var escalatedDto2 = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(escalatedDto2);
         return escalatedDto2;
     }
 
-    private async Task<TaskDto> HandleErrorAsync(TaskEntity entity)
+    private async Task<TaskDto> HandleTaskErrorAsync(TaskEntity entity)
     {
         entity.RetryCount++;
         entity.UpdatedAt = DateTime.UtcNow;
@@ -349,29 +341,295 @@ public class SchedulerService(
         return dto;
     }
 
+    #endregion
+
+    #region Backlog Item Scheduling
+
+    /// <summary>
+    /// Gets the next backlog item eligible for scheduling based on priority and state.
+    /// </summary>
+    public async Task<BacklogItemDto?> GetNextSchedulableBacklogItemAsync()
+    {
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        // Backlog Item Selection Algorithm:
+        // 1. Filter: State IN schedulable states (New, Refining, Ready)
+        // 2. Filter: IsPaused = false
+        // 3. Filter: AssignedAgentId IS NULL
+        // 4. Filter: HasPendingGate = false
+        // 5. Order: Priority DESC, State ASC (New first), CreatedAt ASC
+
+        var entity = await db.BacklogItems
+            .Where(b => BacklogItemConstants.SchedulableStates.Contains(b.State))
+            .Where(b => !b.IsPaused)
+            .Where(b => b.AssignedAgentId == null)
+            .Where(b => !b.HasPendingGate)
+            .OrderByDescending(b => b.Priority)
+            .ThenBy(b => b.State)
+            .ThenBy(b => b.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        return entity is null ? null : BacklogItemDto.FromEntity(entity);
+    }
+
+    /// <summary>
+    /// Handles agent completion for a backlog item and auto-transitions to next state.
+    /// </summary>
+    public async Task<BacklogItemDto?> HandleBacklogAgentCompletionAsync(Guid backlogItemId, AgentCompletionResult result)
+    {
+        var entity = await db.BacklogItems.FindAsync(backlogItemId);
+        if (entity is null)
+        {
+            logger.LogWarning("BacklogItem {BacklogItemId} not found for completion handling", backlogItemId);
+            return null;
+        }
+
+        BacklogItemDto? dto;
+        switch (result)
+        {
+            case AgentCompletionResult.Success:
+                dto = await HandleBacklogSuccessAsync(entity);
+                break;
+
+            case AgentCompletionResult.Error:
+                dto = await HandleBacklogErrorAsync(entity);
+                break;
+
+            case AgentCompletionResult.Cancelled:
+                entity.IsPaused = true;
+                entity.PauseReason = "Manually aborted by user";
+                entity.PausedAt = DateTime.UtcNow;
+                entity.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+
+                logger.LogInformation("BacklogItem {BacklogItemId} agent was cancelled, item paused", backlogItemId);
+
+                dto = BacklogItemDto.FromEntity(entity);
+                await sse.EmitBacklogItemPausedAsync(dto);
+                break;
+
+            default:
+                dto = BacklogItemDto.FromEntity(entity);
+                break;
+        }
+
+        return dto;
+    }
+
+    private async Task<BacklogItemDto> HandleBacklogSuccessAsync(BacklogItemEntity entity)
+    {
+        // Check if human gate is needed based on confidence
+        if (await ShouldTriggerBacklogHumanGateAsync(entity))
+        {
+            var gate = await humanGateService.CreateGateForBacklogItemAsync(entity);
+            entity.HasPendingGate = true;
+            entity.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("BacklogItem {BacklogItemId} requires human approval at {State} gate",
+                entity.Id, gate.GateType);
+
+            var dto = BacklogItemDto.FromEntity(entity);
+            await sse.EmitBacklogItemUpdatedAsync(dto);
+            return dto;
+        }
+
+        // Auto-transition to next state
+        if (BacklogItemConstants.StateTransitions.TryGetValue(entity.State, out var nextState))
+        {
+            var previousState = entity.State;
+            entity.State = nextState;
+            entity.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("BacklogItem {BacklogItemId} auto-transitioned from {FromState} to {ToState}",
+                entity.Id, previousState, nextState);
+
+            var dto = BacklogItemDto.FromEntity(entity);
+            await sse.EmitBacklogItemUpdatedAsync(dto);
+            return dto;
+        }
+
+        logger.LogWarning("No transition defined for backlog state {State}", entity.State);
+        return BacklogItemDto.FromEntity(entity);
+    }
+
+    private Task<bool> ShouldTriggerBacklogHumanGateAsync(BacklogItemEntity entity)
+    {
+        var confidenceThreshold = _pipelineConfig.ConfidenceThreshold;
+
+        // Refining gate is conditional based on confidence
+        if (entity.State == BacklogItemState.Refining)
+        {
+            if (_pipelineConfig.HumanGates.IsRefiningMandatory)
+                return Task.FromResult(true);
+
+            return Task.FromResult(entity.ConfidenceScore.HasValue && entity.ConfidenceScore < confidenceThreshold);
+        }
+
+        // Splitting gate (conditional based on confidence)
+        if (entity.State == BacklogItemState.Splitting)
+        {
+            if (_pipelineConfig.HumanGates.IsSplitMandatory)
+                return Task.FromResult(true);
+
+            return Task.FromResult(entity.ConfidenceScore.HasValue && entity.ConfidenceScore < confidenceThreshold);
+        }
+
+        // Check if human input was explicitly requested
+        if (entity.HumanInputRequested)
+        {
+            return Task.FromResult(true);
+        }
+
+        return Task.FromResult(false);
+    }
+
+    private async Task<BacklogItemDto> HandleBacklogErrorAsync(BacklogItemEntity entity)
+    {
+        entity.RetryCount++;
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        var maxRetries = options.Value.DefaultMaxRetries;
+
+        if (entity.RetryCount >= maxRetries)
+        {
+            entity.IsPaused = true;
+            entity.PauseReason = $"Auto-paused after {entity.RetryCount} failed attempts";
+            entity.PausedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+
+            logger.LogWarning("BacklogItem {BacklogItemId} auto-paused after {RetryCount} retries",
+                entity.Id, entity.RetryCount);
+
+            var dto = BacklogItemDto.FromEntity(entity);
+            await sse.EmitBacklogItemPausedAsync(dto);
+            return dto;
+        }
+
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("BacklogItem {BacklogItemId} error, retry {RetryCount}/{MaxRetries}",
+            entity.Id, entity.RetryCount, maxRetries);
+
+        return BacklogItemDto.FromEntity(entity);
+    }
+
+    /// <summary>
+    /// Pauses a backlog item from scheduling.
+    /// </summary>
+    public async Task<BacklogItemDto?> PauseBacklogItemAsync(Guid backlogItemId, string reason)
+    {
+        var entity = await db.BacklogItems.FindAsync(backlogItemId);
+        if (entity is null) return null;
+
+        entity.IsPaused = true;
+        entity.PauseReason = reason;
+        entity.PausedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("BacklogItem {BacklogItemId} paused: {Reason}", backlogItemId, reason);
+
+        var dto = BacklogItemDto.FromEntity(entity);
+        await sse.EmitBacklogItemPausedAsync(dto);
+        return dto;
+    }
+
+    /// <summary>
+    /// Resumes a paused backlog item for scheduling.
+    /// </summary>
+    public async Task<BacklogItemDto?> ResumeBacklogItemAsync(Guid backlogItemId)
+    {
+        var entity = await db.BacklogItems.FindAsync(backlogItemId);
+        if (entity is null) return null;
+
+        entity.IsPaused = false;
+        entity.PauseReason = null;
+        entity.PausedAt = null;
+        entity.RetryCount = 0;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("BacklogItem {BacklogItemId} resumed", backlogItemId);
+
+        var dto = BacklogItemDto.FromEntity(entity);
+        await sse.EmitBacklogItemResumedAsync(dto);
+        return dto;
+    }
+
+    /// <summary>
+    /// Updates a backlog item state based on task completion.
+    /// When all tasks are done, transitions backlog item to Done.
+    /// </summary>
+    private async Task UpdateBacklogItemFromTaskCompletionAsync(Guid backlogItemId)
+    {
+        var backlogItem = await db.BacklogItems
+            .Include(b => b.Tasks)
+            .FirstOrDefaultAsync(b => b.Id == backlogItemId);
+
+        if (backlogItem is null) return;
+
+        // Update completed count
+        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.Done);
+        backlogItem.UpdatedAt = DateTime.UtcNow;
+
+        // Check if all tasks are done
+        if (backlogItem.Tasks.Count > 0 && backlogItem.Tasks.All(t => t.State == PipelineState.Done))
+        {
+            backlogItem.State = BacklogItemState.Done;
+            logger.LogInformation("BacklogItem {BacklogItemId} completed - all {TaskCount} tasks done",
+                backlogItemId, backlogItem.Tasks.Count);
+        }
+
+        await db.SaveChangesAsync();
+        await sse.EmitBacklogItemUpdatedAsync(BacklogItemDto.FromEntity(backlogItem));
+    }
+
+    #endregion
+
+    #region Status
+
     /// <summary>
     /// Gets scheduler status metrics.
     /// </summary>
     public async Task<SchedulerStatusDto> GetStatusAsync(AgentStatusDto agentStatus)
     {
-        // Only count leaf tasks as pending (parent tasks are not schedulable)
-        var pendingCount = await db.Tasks
+        var pendingTaskCount = await db.Tasks
             .Where(t => SchedulableStates.Contains(t.State))
             .Where(t => !t.IsPaused)
             .Where(t => !t.HasError || t.RetryCount < t.MaxRetries)
             .Where(t => t.AssignedAgentId == null)
-            .Where(t => t.ChildCount == 0)
             .CountAsync();
 
-        var pausedCount = await db.Tasks
+        var pausedTaskCount = await db.Tasks
             .Where(t => t.IsPaused)
+            .CountAsync();
+
+        var pendingBacklogCount = await db.BacklogItems
+            .Where(b => BacklogItemConstants.SchedulableStates.Contains(b.State))
+            .Where(b => !b.IsPaused)
+            .Where(b => b.AssignedAgentId == null)
+            .CountAsync();
+
+        var pausedBacklogCount = await db.BacklogItems
+            .Where(b => b.IsPaused)
             .CountAsync();
 
         return new SchedulerStatusDto(
             IsEnabled,
             agentStatus.IsRunning,
             agentStatus.CurrentTaskId,
-            pendingCount,
-            pausedCount);
+            agentStatus.CurrentBacklogItemId,
+            pendingTaskCount,
+            pausedTaskCount,
+            pendingBacklogCount,
+            pausedBacklogCount);
     }
+
+    #endregion
 }

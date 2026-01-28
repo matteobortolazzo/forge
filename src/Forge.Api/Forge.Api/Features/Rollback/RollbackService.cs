@@ -2,10 +2,8 @@ using System.Text.Json;
 using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Events;
-using Forge.Api.Features.Worktree;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
 namespace Forge.Api.Features.Rollback;
 
@@ -14,15 +12,6 @@ namespace Forge.Api.Features.Rollback;
 /// </summary>
 public interface IRollbackService
 {
-    /// <summary>
-    /// Rolls back a subtask, reverting its worktree and preserving artifacts.
-    /// </summary>
-    Task<RollbackRecordEntity> RollbackSubtaskAsync(
-        Guid subtaskId,
-        RollbackTrigger trigger,
-        string? notes = null,
-        CancellationToken ct = default);
-
     /// <summary>
     /// Rolls back a task to a specific pipeline stage.
     /// </summary>
@@ -34,10 +23,27 @@ public interface IRollbackService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Rolls back a backlog item to a specific state.
+    /// </summary>
+    Task<RollbackRecordEntity> RollbackBacklogItemAsync(
+        Guid backlogItemId,
+        BacklogItemState targetState,
+        RollbackTrigger trigger,
+        string? notes = null,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Gets rollback records for a task.
     /// </summary>
     Task<IReadOnlyList<RollbackRecordEntity>> GetRollbackRecordsAsync(
         Guid taskId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets rollback records for a backlog item.
+    /// </summary>
+    Task<IReadOnlyList<RollbackRecordEntity>> GetBacklogRollbackRecordsAsync(
+        Guid backlogItemId,
         CancellationToken ct = default);
 }
 
@@ -47,117 +53,17 @@ public interface IRollbackService
 public class RollbackService : IRollbackService
 {
     private readonly ForgeDbContext _db;
-    private readonly IWorktreeService _worktreeService;
     private readonly ISseService _sseService;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<RollbackService> _logger;
 
     public RollbackService(
         ForgeDbContext db,
-        IWorktreeService worktreeService,
         ISseService sseService,
-        IConfiguration configuration,
         ILogger<RollbackService> logger)
     {
         _db = db;
-        _worktreeService = worktreeService;
         _sseService = sseService;
-        _configuration = configuration;
         _logger = logger;
-    }
-
-    public async Task<RollbackRecordEntity> RollbackSubtaskAsync(
-        Guid subtaskId,
-        RollbackTrigger trigger,
-        string? notes = null,
-        CancellationToken ct = default)
-    {
-        var subtask = await _db.Subtasks
-            .Include(s => s.Artifacts)
-            .Include(s => s.ParentTask)
-            .ThenInclude(t => t.Repository)
-            .FirstOrDefaultAsync(s => s.Id == subtaskId, ct)
-            ?? throw new InvalidOperationException($"Subtask {subtaskId} not found");
-
-        var task = subtask.ParentTask
-            ?? throw new InvalidOperationException($"Parent task {subtask.ParentTaskId} not found");
-
-        _logger.LogInformation("Rolling back subtask {SubtaskId} due to {Trigger}", subtaskId, trigger);
-
-        // Capture state before rollback
-        var stateBefore = new RollbackStateBefore
-        {
-            Branch = subtask.BranchName,
-            Commit = subtask.WorktreePath != null
-                ? await _worktreeService.GetCurrentCommitAsync(subtask.WorktreePath, ct)
-                : null,
-            FilesChanged = subtask.WorktreePath != null
-                ? (await _worktreeService.GetChangedFilesAsync(subtask.WorktreePath, ct)).ToList()
-                : []
-        };
-
-        // Perform rollback actions
-        var actionTaken = new RollbackActionTaken
-        {
-            WorktreeRemoved = false,
-            BranchDeleted = false,
-            CommitsReverted = []
-        };
-
-        // Remove worktree if it exists
-        if (!string.IsNullOrEmpty(subtask.WorktreePath))
-        {
-            // Get repository path from parent task's repository
-            var repoPath = task.Repository.Path;
-
-            var result = await _worktreeService.RemoveWorktreeAsync(repoPath, subtaskId, ct);
-            actionTaken = actionTaken with
-            {
-                WorktreeRemoved = result.Success,
-                BranchDeleted = result.Success
-            };
-        }
-
-        // Preserve artifact references
-        var preservedArtifacts = subtask.Artifacts
-            .Select(a => new PreservedArtifactInfo
-            {
-                Stage = a.ProducedInState.ToString(),
-                Path = $"/api/tasks/{subtask.ParentTaskId}/artifacts/{a.Id}"
-            })
-            .ToList();
-
-        // Create rollback record
-        var rollbackRecord = new RollbackRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            TaskId = subtask.ParentTaskId,
-            SubtaskId = subtaskId,
-            Trigger = trigger,
-            Timestamp = DateTime.UtcNow,
-            StateBeforeJson = JsonSerializer.Serialize(stateBefore, SharedJsonOptions.SnakeCaseLower),
-            ActionTakenJson = JsonSerializer.Serialize(actionTaken, SharedJsonOptions.SnakeCaseLower),
-            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, SharedJsonOptions.SnakeCaseLower),
-            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), SharedJsonOptions.SnakeCaseLower),
-            Notes = notes
-        };
-
-        _db.RollbackRecords.Add(rollbackRecord);
-
-        // Update subtask status
-        subtask.Status = SubtaskStatus.Failed;
-        subtask.FailureReason = $"Rolled back due to {trigger}: {notes}";
-        subtask.WorktreePath = null;
-        subtask.BranchName = null;
-
-        await _db.SaveChangesAsync(ct);
-
-        // Emit SSE event
-        await EmitRollbackEventAsync(rollbackRecord, stateBefore, actionTaken, preservedArtifacts);
-
-        _logger.LogInformation("Subtask {SubtaskId} rolled back successfully", subtaskId);
-
-        return rollbackRecord;
     }
 
     public async Task<RollbackRecordEntity> RollbackToStageAsync(
@@ -195,8 +101,8 @@ public class RollbackService : IRollbackService
             .Where(a => a.ProducedInState >= targetStage)
             .Select(a => new PreservedArtifactInfo
             {
-                Stage = a.ProducedInState.ToString(),
-                Path = $"/api/tasks/{taskId}/artifacts/{a.Id}"
+                Stage = a.ProducedInState?.ToString() ?? "Unknown",
+                Path = $"/api/repositories/{task.BacklogItem?.RepositoryId}/backlog/{task.BacklogItemId}/tasks/{taskId}/artifacts/{a.Id}"
             })
             .ToList();
 
@@ -205,7 +111,7 @@ public class RollbackService : IRollbackService
         {
             Id = Guid.NewGuid(),
             TaskId = taskId,
-            SubtaskId = null,
+            BacklogItemId = null,
             Trigger = trigger,
             Timestamp = DateTime.UtcNow,
             StateBeforeJson = JsonSerializer.Serialize(stateBefore, SharedJsonOptions.SnakeCaseLower),
@@ -240,12 +146,100 @@ public class RollbackService : IRollbackService
         return rollbackRecord;
     }
 
+    public async Task<RollbackRecordEntity> RollbackBacklogItemAsync(
+        Guid backlogItemId,
+        BacklogItemState targetState,
+        RollbackTrigger trigger,
+        string? notes = null,
+        CancellationToken ct = default)
+    {
+        var backlogItem = await _db.BacklogItems
+            .Include(b => b.Artifacts)
+            .FirstOrDefaultAsync(b => b.Id == backlogItemId, ct)
+            ?? throw new InvalidOperationException($"Backlog item {backlogItemId} not found");
+
+        _logger.LogInformation("Rolling back backlog item {BacklogItemId} to state {State} due to {Trigger}",
+            backlogItemId, targetState, trigger);
+
+        // Capture state before rollback
+        var stateBefore = new RollbackStateBefore
+        {
+            Branch = null,
+            Commit = null,
+            FilesChanged = []
+        };
+
+        var actionTaken = new RollbackActionTaken
+        {
+            WorktreeRemoved = false,
+            BranchDeleted = false,
+            CommitsReverted = []
+        };
+
+        // Preserve artifact references
+        var preservedArtifacts = backlogItem.Artifacts
+            .Select(a => new PreservedArtifactInfo
+            {
+                Stage = a.ProducedInBacklogState?.ToString() ?? "Unknown",
+                Path = $"/api/repositories/{backlogItem.RepositoryId}/backlog/{backlogItemId}/artifacts/{a.Id}"
+            })
+            .ToList();
+
+        // Create rollback record
+        var rollbackRecord = new RollbackRecordEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskId = null,
+            BacklogItemId = backlogItemId,
+            Trigger = trigger,
+            Timestamp = DateTime.UtcNow,
+            StateBeforeJson = JsonSerializer.Serialize(stateBefore, SharedJsonOptions.SnakeCaseLower),
+            ActionTakenJson = JsonSerializer.Serialize(actionTaken, SharedJsonOptions.SnakeCaseLower),
+            PreservedArtifactsJson = JsonSerializer.Serialize(preservedArtifacts, SharedJsonOptions.SnakeCaseLower),
+            RecoveryOptionsJson = JsonSerializer.Serialize(GetRecoveryOptions(trigger), SharedJsonOptions.SnakeCaseLower),
+            Notes = notes
+        };
+
+        _db.RollbackRecords.Add(rollbackRecord);
+
+        // Update backlog item state
+        var previousState = backlogItem.State;
+        backlogItem.State = targetState;
+        backlogItem.UpdatedAt = DateTime.UtcNow;
+
+        // Reset iteration counters
+        if (targetState == BacklogItemState.New)
+        {
+            backlogItem.RefiningIterations = 0;
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        // Emit SSE event
+        await EmitRollbackEventAsync(rollbackRecord, stateBefore, actionTaken, preservedArtifacts);
+
+        _logger.LogInformation("Backlog item {BacklogItemId} rolled back from {PreviousState} to {TargetState}",
+            backlogItemId, previousState, targetState);
+
+        return rollbackRecord;
+    }
+
     public async Task<IReadOnlyList<RollbackRecordEntity>> GetRollbackRecordsAsync(
         Guid taskId,
         CancellationToken ct = default)
     {
         return await _db.RollbackRecords
             .Where(r => r.TaskId == taskId)
+            .OrderByDescending(r => r.Timestamp)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<RollbackRecordEntity>> GetBacklogRollbackRecordsAsync(
+        Guid backlogItemId,
+        CancellationToken ct = default)
+    {
+        return await _db.RollbackRecords
+            .Where(r => r.BacklogItemId == backlogItemId)
             .OrderByDescending(r => r.Timestamp)
             .ToListAsync(ct);
     }
@@ -258,7 +252,6 @@ public class RollbackService : IRollbackService
             [
                 "Retry with human guidance",
                 "Modify acceptance criteria",
-                "Skip subtask, continue pipeline",
                 "Abort entire task"
             ],
             RollbackTrigger.HumanRejected =>
@@ -296,7 +289,7 @@ public class RollbackService : IRollbackService
         var dto = new RollbackDto(
             record.Id,
             record.TaskId,
-            record.SubtaskId,
+            record.BacklogItemId,
             record.Trigger,
             record.Timestamp,
             new Features.Events.RollbackStateBefore(

@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.Backlog;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Repositories;
 using Forge.Api.Features.Tasks;
@@ -11,6 +12,14 @@ namespace Forge.Api.Features.Events;
 
 public interface ISseService
 {
+    // Backlog item events
+    Task EmitBacklogItemCreatedAsync(BacklogItemDto item);
+    Task EmitBacklogItemUpdatedAsync(BacklogItemDto item);
+    Task EmitBacklogItemDeletedAsync(Guid itemId);
+    Task EmitBacklogItemPausedAsync(BacklogItemDto item);
+    Task EmitBacklogItemResumedAsync(BacklogItemDto item);
+    Task EmitBacklogItemLogAsync(BacklogItemLogDto log);
+
     // Task events
     Task EmitTaskCreatedAsync(TaskDto task);
     Task EmitTaskUpdatedAsync(TaskDto task);
@@ -18,14 +27,13 @@ public interface ISseService
     Task EmitTaskLogAsync(TaskLogDto log);
     Task EmitTaskPausedAsync(TaskDto task);
     Task EmitTaskResumedAsync(TaskDto task);
-    Task EmitTaskSplitAsync(TaskDto parent, IReadOnlyList<TaskDto> children);
-    Task EmitChildAddedAsync(Guid parentId, TaskDto child);
 
     // Agent events
-    Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt);
+    Task EmitAgentStatusChangedAsync(AgentStatusDto status);
 
     // Scheduler events
     Task EmitSchedulerTaskScheduledAsync(TaskDto task);
+    Task EmitSchedulerBacklogItemScheduledAsync(BacklogItemDto item);
 
     // Notification events
     Task EmitNotificationNewAsync(NotificationDto notification);
@@ -36,12 +44,6 @@ public interface ISseService
     // Human gate events
     Task EmitHumanGateRequestedAsync(HumanGateDto gate);
     Task EmitHumanGateResolvedAsync(HumanGateDto gate);
-
-    // Subtask events
-    Task EmitSubtaskCreatedAsync(SubtaskDto subtask);
-    Task EmitSubtaskStartedAsync(SubtaskDto subtask);
-    Task EmitSubtaskCompletedAsync(SubtaskDto subtask);
-    Task EmitSubtaskFailedAsync(SubtaskDto subtask);
 
     // Rollback events
     Task EmitRollbackInitiatedAsync(RollbackDto rollback);
@@ -60,6 +62,44 @@ public sealed class SseService : ISseService
     private readonly Channel<ServerEvent> _channel = Channel.CreateUnbounded<ServerEvent>(
         new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
 
+    // Backlog item events
+    public Task EmitBacklogItemCreatedAsync(BacklogItemDto item)
+    {
+        var evt = new ServerEvent("backlogItem:created", item, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitBacklogItemUpdatedAsync(BacklogItemDto item)
+    {
+        var evt = new ServerEvent("backlogItem:updated", item, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitBacklogItemDeletedAsync(Guid itemId)
+    {
+        var evt = new ServerEvent("backlogItem:deleted", new { id = itemId }, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitBacklogItemPausedAsync(BacklogItemDto item)
+    {
+        var evt = new ServerEvent("backlogItem:paused", item, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitBacklogItemResumedAsync(BacklogItemDto item)
+    {
+        var evt = new ServerEvent("backlogItem:resumed", item, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitBacklogItemLogAsync(BacklogItemLogDto log)
+    {
+        var evt = new ServerEvent("backlogItem:log", log, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    // Task events
     public Task EmitTaskCreatedAsync(TaskDto task)
     {
         var evt = new ServerEvent("task:created", task, DateTime.UtcNow);
@@ -96,30 +136,23 @@ public sealed class SseService : ISseService
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 
-    public Task EmitTaskSplitAsync(TaskDto parent, IReadOnlyList<TaskDto> children)
+    // Agent events
+    public Task EmitAgentStatusChangedAsync(AgentStatusDto status)
     {
-        var payload = new { parent, children };
-        var evt = new ServerEvent("task:split", payload, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitChildAddedAsync(Guid parentId, TaskDto child)
-    {
-        var payload = new { parentId, child };
-        var evt = new ServerEvent("task:childAdded", payload, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitAgentStatusChangedAsync(bool isRunning, Guid? taskId, DateTime? startedAt)
-    {
-        var status = new AgentStatusDto(isRunning, taskId, startedAt);
         var evt = new ServerEvent("agent:statusChanged", status, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 
+    // Scheduler events
     public Task EmitSchedulerTaskScheduledAsync(TaskDto task)
     {
         var evt = new ServerEvent("scheduler:taskScheduled", task, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitSchedulerBacklogItemScheduledAsync(BacklogItemDto item)
+    {
+        var evt = new ServerEvent("scheduler:backlogItemScheduled", item, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 
@@ -144,30 +177,6 @@ public sealed class SseService : ISseService
     public Task EmitHumanGateResolvedAsync(HumanGateDto gate)
     {
         var evt = new ServerEvent("humanGate:resolved", gate, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitSubtaskCreatedAsync(SubtaskDto subtask)
-    {
-        var evt = new ServerEvent("subtask:created", subtask, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitSubtaskStartedAsync(SubtaskDto subtask)
-    {
-        var evt = new ServerEvent("subtask:started", subtask, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitSubtaskCompletedAsync(SubtaskDto subtask)
-    {
-        var evt = new ServerEvent("subtask:completed", subtask, DateTime.UtcNow);
-        return _channel.Writer.WriteAsync(evt).AsTask();
-    }
-
-    public Task EmitSubtaskFailedAsync(SubtaskDto subtask)
-    {
-        var evt = new ServerEvent("subtask:failed", subtask, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

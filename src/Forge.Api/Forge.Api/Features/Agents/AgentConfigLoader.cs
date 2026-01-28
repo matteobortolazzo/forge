@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Forge.Api.Shared;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -21,14 +20,24 @@ public interface IAgentConfigLoader
     IReadOnlyList<AgentConfig> GetVariantConfigs();
 
     /// <summary>
-    /// Gets the default agent configuration for a specific state.
+    /// Gets the default agent configuration for a specific task state.
     /// </summary>
-    AgentConfig? GetDefaultForState(PipelineState state);
+    AgentConfig? GetDefaultForTaskState(PipelineState state);
 
     /// <summary>
-    /// Gets all variants for a specific state.
+    /// Gets the default agent configuration for a specific backlog item state.
     /// </summary>
-    IReadOnlyList<AgentConfig> GetVariantsForState(PipelineState state);
+    AgentConfig? GetDefaultForBacklogState(BacklogItemState state);
+
+    /// <summary>
+    /// Gets all variants for a specific task state.
+    /// </summary>
+    IReadOnlyList<AgentConfig> GetVariantsForTaskState(PipelineState state);
+
+    /// <summary>
+    /// Gets all variants for a specific backlog item state.
+    /// </summary>
+    IReadOnlyList<AgentConfig> GetVariantsForBacklogState(BacklogItemState state);
 
     /// <summary>
     /// Reloads all configurations from disk.
@@ -75,16 +84,28 @@ public class AgentConfigLoader : IAgentConfigLoader
         return _variantConfigs.AsReadOnly();
     }
 
-    public AgentConfig? GetDefaultForState(PipelineState state)
+    public AgentConfig? GetDefaultForTaskState(PipelineState state)
     {
         EnsureLoaded();
-        return _defaultConfigs.FirstOrDefault(c => c.State == state);
+        return _defaultConfigs.FirstOrDefault(c => c.TaskState == state);
     }
 
-    public IReadOnlyList<AgentConfig> GetVariantsForState(PipelineState state)
+    public AgentConfig? GetDefaultForBacklogState(BacklogItemState state)
     {
         EnsureLoaded();
-        return _variantConfigs.Where(c => c.State == state).ToList().AsReadOnly();
+        return _defaultConfigs.FirstOrDefault(c => c.BacklogState == state);
+    }
+
+    public IReadOnlyList<AgentConfig> GetVariantsForTaskState(PipelineState state)
+    {
+        EnsureLoaded();
+        return _variantConfigs.Where(c => c.TaskState == state).ToList().AsReadOnly();
+    }
+
+    public IReadOnlyList<AgentConfig> GetVariantsForBacklogState(BacklogItemState state)
+    {
+        EnsureLoaded();
+        return _variantConfigs.Where(c => c.BacklogState == state).ToList().AsReadOnly();
     }
 
     public void Reload()

@@ -5,19 +5,19 @@ using Forge.Api.Data.Entities;
 namespace Forge.Api.Features.Agents;
 
 /// <summary>
-/// Builds prompts by interpolating templates with task data and artifacts.
+/// Builds prompts by interpolating templates with task or backlog item data and artifacts.
 /// </summary>
 public interface IPromptBuilder
 {
     /// <summary>
     /// Builds a prompt from a template and task data.
     /// </summary>
-    string BuildPrompt(string template, TaskEntity task, IReadOnlyList<AgentArtifactEntity> artifacts);
+    string BuildTaskPrompt(string template, TaskEntity task, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null);
 
     /// <summary>
-    /// Builds a prompt from a template with subtask context.
+    /// Builds a prompt from a template and backlog item data.
     /// </summary>
-    string BuildPrompt(string template, TaskEntity task, SubtaskEntity? subtask, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null);
+    string BuildBacklogPrompt(string template, BacklogItemEntity backlogItem, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null);
 }
 
 /// <summary>
@@ -32,26 +32,15 @@ public partial class PromptBuilder : IPromptBuilder
         _logger = logger;
     }
 
-    public string BuildPrompt(string template, TaskEntity task, IReadOnlyList<AgentArtifactEntity> artifacts)
-    {
-        return BuildPrompt(template, task, null, artifacts, null);
-    }
-
-    public string BuildPrompt(string template, TaskEntity task, SubtaskEntity? subtask, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null)
+    public string BuildTaskPrompt(string template, TaskEntity task, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null)
     {
         var result = template;
 
         // Replace task placeholders
         result = ReplaceTaskPlaceholders(result, task);
 
-        // Replace subtask placeholders (if subtask is provided)
-        if (subtask != null)
-        {
-            result = ReplaceSubtaskPlaceholders(result, subtask);
-        }
-
         // Replace context placeholders
-        result = ReplaceContextPlaceholders(result, repositoryPath);
+        result = ReplaceContextPlaceholders(result, task.DetectedLanguage, task.DetectedFramework, repositoryPath);
 
         // Replace specific artifact type placeholders (e.g., {artifacts.research}, {artifacts.plan})
         result = ReplaceSpecificArtifactPlaceholders(result, artifacts);
@@ -59,14 +48,34 @@ public partial class PromptBuilder : IPromptBuilder
         // Replace general artifacts placeholder
         result = ReplaceArtifactsPlaceholder(result, artifacts);
 
-        _logger.LogDebug("Built prompt with {Length} characters", result.Length);
+        _logger.LogDebug("Built task prompt with {Length} characters", result.Length);
+
+        return result;
+    }
+
+    public string BuildBacklogPrompt(string template, BacklogItemEntity backlogItem, IReadOnlyList<AgentArtifactEntity> artifacts, string? repositoryPath = null)
+    {
+        var result = template;
+
+        // Replace backlog item placeholders
+        result = ReplaceBacklogItemPlaceholders(result, backlogItem);
+
+        // Replace context placeholders
+        result = ReplaceContextPlaceholders(result, backlogItem.DetectedLanguage, backlogItem.DetectedFramework, repositoryPath);
+
+        // Replace specific artifact type placeholders (e.g., {artifacts.research}, {artifacts.plan})
+        result = ReplaceSpecificArtifactPlaceholders(result, artifacts);
+
+        // Replace general artifacts placeholder
+        result = ReplaceArtifactsPlaceholder(result, artifacts);
+
+        _logger.LogDebug("Built backlog item prompt with {Length} characters", result.Length);
 
         return result;
     }
 
     private static string ReplaceTaskPlaceholders(string template, TaskEntity task)
     {
-        // Simple placeholder replacement using regex
         var result = template;
 
         // {task.title}
@@ -93,45 +102,52 @@ public partial class PromptBuilder : IPromptBuilder
         return result;
     }
 
-    private static string ReplaceSubtaskPlaceholders(string template, SubtaskEntity subtask)
+    private static string ReplaceBacklogItemPlaceholders(string template, BacklogItemEntity backlogItem)
     {
         var result = template;
 
-        // {subtask.title}
-        result = SubtaskTitleRegex().Replace(result, subtask.Title);
+        // {backlogItem.title}
+        result = BacklogItemTitleRegex().Replace(result, backlogItem.Title);
 
-        // {subtask.description}
-        result = SubtaskDescriptionRegex().Replace(result, subtask.Description);
+        // {backlogItem.description}
+        result = BacklogItemDescriptionRegex().Replace(result, backlogItem.Description);
 
-        // {subtask.acceptance_criteria}
-        try
-        {
-            var criteria = System.Text.Json.JsonSerializer.Deserialize<List<string>>(subtask.AcceptanceCriteriaJson) ?? [];
-            var criteriaText = criteria.Count > 0
-                ? string.Join("\n", criteria.Select((c, i) => $"{i + 1}. {c}"))
-                : "*No acceptance criteria defined.*";
-            result = SubtaskAcceptanceCriteriaRegex().Replace(result, criteriaText);
-        }
-        catch
-        {
-            result = SubtaskAcceptanceCriteriaRegex().Replace(result, "*Invalid acceptance criteria format.*");
-        }
+        // {backlogItem.state}
+        result = BacklogItemStateRegex().Replace(result, backlogItem.State.ToString());
 
-        // {subtask.scope}
-        result = SubtaskScopeRegex().Replace(result, subtask.EstimatedScope.ToString());
+        // {backlogItem.priority}
+        result = BacklogItemPriorityRegex().Replace(result, backlogItem.Priority.ToString());
 
-        // {subtask.status}
-        result = SubtaskStatusRegex().Replace(result, subtask.Status.ToString());
+        // {backlogItem.id}
+        result = BacklogItemIdRegex().Replace(result, backlogItem.Id.ToString());
+
+        // {backlogItem.language}
+        result = BacklogItemLanguageRegex().Replace(result, backlogItem.DetectedLanguage ?? "unknown");
+
+        // {backlogItem.framework}
+        result = BacklogItemFrameworkRegex().Replace(result, backlogItem.DetectedFramework ?? "unknown");
+
+        // {backlogItem.acceptanceCriteria}
+        result = BacklogItemAcceptanceCriteriaRegex().Replace(result, backlogItem.AcceptanceCriteria ?? "*No acceptance criteria defined.*");
+
+        // {backlogItem.refiningIterations}
+        result = BacklogItemRefiningIterationsRegex().Replace(result, backlogItem.RefiningIterations.ToString());
 
         return result;
     }
 
-    private static string ReplaceContextPlaceholders(string template, string? repositoryPath)
+    private static string ReplaceContextPlaceholders(string template, string? language, string? framework, string? repositoryPath)
     {
         var result = template;
 
         // {context.repo_path}
         result = ContextRepoPathRegex().Replace(result, repositoryPath ?? Environment.CurrentDirectory);
+
+        // {context.language}
+        result = ContextLanguageRegex().Replace(result, language ?? "unknown");
+
+        // {context.framework}
+        result = ContextFrameworkRegex().Replace(result, framework ?? "unknown");
 
         return result;
     }
@@ -144,6 +160,16 @@ public partial class PromptBuilder : IPromptBuilder
         var latestByType = artifacts
             .GroupBy(a => a.ArtifactType)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.CreatedAt).First());
+
+        // {artifacts.split}
+        if (latestByType.TryGetValue(Shared.ArtifactType.TaskSplit, out var split))
+        {
+            result = ArtifactsSplitRegex().Replace(result, split.Content.Trim());
+        }
+        else
+        {
+            result = ArtifactsSplitRegex().Replace(result, "*No task split available.*");
+        }
 
         // {artifacts.research}
         if (latestByType.TryGetValue(Shared.ArtifactType.ResearchFindings, out var research))
@@ -185,6 +211,16 @@ public partial class PromptBuilder : IPromptBuilder
             result = ArtifactsSimplificationRegex().Replace(result, "*No simplification review available.*");
         }
 
+        // {artifacts.verification}
+        if (latestByType.TryGetValue(Shared.ArtifactType.VerificationReport, out var verification))
+        {
+            result = ArtifactsVerificationRegex().Replace(result, verification.Content.Trim());
+        }
+        else
+        {
+            result = ArtifactsVerificationRegex().Replace(result, "*No verification report available.*");
+        }
+
         // {artifacts.review}
         if (latestByType.TryGetValue(Shared.ArtifactType.Review, out var review))
         {
@@ -213,7 +249,11 @@ public partial class PromptBuilder : IPromptBuilder
         {
             foreach (var artifact in artifacts.OrderBy(a => a.CreatedAt))
             {
-                artifactsSection.AppendLine($"### {GetArtifactTypeLabel(artifact.ArtifactType)} (from {artifact.ProducedInState} stage)");
+                var stateLabel = artifact.ProducedInState.HasValue
+                    ? artifact.ProducedInState.Value.ToString()
+                    : artifact.ProducedInBacklogState?.ToString() ?? "Unknown";
+
+                artifactsSection.AppendLine($"### {GetArtifactTypeLabel(artifact.ArtifactType)} (from {stateLabel} stage)");
                 artifactsSection.AppendLine();
                 artifactsSection.AppendLine(artifact.Content.Trim());
                 artifactsSection.AppendLine();
@@ -242,6 +282,7 @@ public partial class PromptBuilder : IPromptBuilder
         };
     }
 
+    // Task placeholders
     [GeneratedRegex(@"\{task\.title\}", RegexOptions.IgnoreCase)]
     private static partial Regex TaskTitleRegex();
 
@@ -263,27 +304,48 @@ public partial class PromptBuilder : IPromptBuilder
     [GeneratedRegex(@"\{task\.framework\}", RegexOptions.IgnoreCase)]
     private static partial Regex TaskFrameworkRegex();
 
-    // Subtask placeholders
-    [GeneratedRegex(@"\{subtask\.title\}", RegexOptions.IgnoreCase)]
-    private static partial Regex SubtaskTitleRegex();
+    // Backlog item placeholders
+    [GeneratedRegex(@"\{backlogItem\.title\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemTitleRegex();
 
-    [GeneratedRegex(@"\{subtask\.description\}", RegexOptions.IgnoreCase)]
-    private static partial Regex SubtaskDescriptionRegex();
+    [GeneratedRegex(@"\{backlogItem\.description\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemDescriptionRegex();
 
-    [GeneratedRegex(@"\{subtask\.acceptance_criteria\}", RegexOptions.IgnoreCase)]
-    private static partial Regex SubtaskAcceptanceCriteriaRegex();
+    [GeneratedRegex(@"\{backlogItem\.state\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemStateRegex();
 
-    [GeneratedRegex(@"\{subtask\.scope\}", RegexOptions.IgnoreCase)]
-    private static partial Regex SubtaskScopeRegex();
+    [GeneratedRegex(@"\{backlogItem\.priority\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemPriorityRegex();
 
-    [GeneratedRegex(@"\{subtask\.status\}", RegexOptions.IgnoreCase)]
-    private static partial Regex SubtaskStatusRegex();
+    [GeneratedRegex(@"\{backlogItem\.id\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemIdRegex();
+
+    [GeneratedRegex(@"\{backlogItem\.language\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemLanguageRegex();
+
+    [GeneratedRegex(@"\{backlogItem\.framework\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemFrameworkRegex();
+
+    [GeneratedRegex(@"\{backlogItem\.acceptanceCriteria\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemAcceptanceCriteriaRegex();
+
+    [GeneratedRegex(@"\{backlogItem\.refiningIterations\}", RegexOptions.IgnoreCase)]
+    private static partial Regex BacklogItemRefiningIterationsRegex();
 
     // Context placeholders
     [GeneratedRegex(@"\{context\.repo_path\}", RegexOptions.IgnoreCase)]
     private static partial Regex ContextRepoPathRegex();
 
+    [GeneratedRegex(@"\{context\.language\}", RegexOptions.IgnoreCase)]
+    private static partial Regex ContextLanguageRegex();
+
+    [GeneratedRegex(@"\{context\.framework\}", RegexOptions.IgnoreCase)]
+    private static partial Regex ContextFrameworkRegex();
+
     // Specific artifact type placeholders
+    [GeneratedRegex(@"\{artifacts\.split\}", RegexOptions.IgnoreCase)]
+    private static partial Regex ArtifactsSplitRegex();
+
     [GeneratedRegex(@"\{artifacts\.research\}", RegexOptions.IgnoreCase)]
     private static partial Regex ArtifactsResearchRegex();
 
@@ -295,6 +357,9 @@ public partial class PromptBuilder : IPromptBuilder
 
     [GeneratedRegex(@"\{artifacts\.simplification\}", RegexOptions.IgnoreCase)]
     private static partial Regex ArtifactsSimplificationRegex();
+
+    [GeneratedRegex(@"\{artifacts\.verification\}", RegexOptions.IgnoreCase)]
+    private static partial Regex ArtifactsVerificationRegex();
 
     [GeneratedRegex(@"\{artifacts\.review\}", RegexOptions.IgnoreCase)]
     private static partial Regex ArtifactsReviewRegex();

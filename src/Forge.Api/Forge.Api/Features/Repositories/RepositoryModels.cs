@@ -7,6 +7,7 @@ public record RepositoryDto(
     string Name,
     string Path,
     bool IsActive,
+    bool IsDefault,
     string? Branch,
     string? CommitHash,
     string? RemoteUrl,
@@ -15,13 +16,14 @@ public record RepositoryDto(
     DateTime? LastRefreshedAt,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    int TaskCount)
+    int BacklogItemCount)
 {
-    public static RepositoryDto FromEntity(RepositoryEntity entity, int? taskCount = null) => new(
+    public static RepositoryDto FromEntity(RepositoryEntity entity, int? backlogItemCount = null) => new(
         entity.Id,
         entity.Name,
         entity.Path,
         entity.IsActive,
+        entity.IsDefault,
         entity.Branch,
         entity.CommitHash,
         entity.RemoteUrl,
@@ -30,12 +32,13 @@ public record RepositoryDto(
         entity.LastRefreshedAt,
         entity.CreatedAt,
         entity.UpdatedAt,
-        taskCount ?? entity.Tasks.Count);
+        backlogItemCount ?? entity.BacklogItems.Count);
 }
 
 public record CreateRepositoryDto(
     string Name,
-    string Path);
+    string Path,
+    bool IsDefault = false);
 
 public record UpdateRepositoryDto(
     string? Name = null);

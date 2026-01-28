@@ -9,6 +9,7 @@ public record NotificationDto(
     string Message,
     NotificationType Type,
     Guid? TaskId,
+    Guid? BacklogItemId,
     bool Read,
     DateTime CreatedAt)
 {
@@ -18,6 +19,7 @@ public record NotificationDto(
         entity.Message,
         entity.Type,
         entity.TaskId,
+        entity.BacklogItemId,
         entity.Read,
         entity.CreatedAt);
 }
@@ -26,4 +28,5 @@ public record CreateNotificationDto(
     string Title,
     string Message,
     NotificationType Type,
-    Guid? TaskId = null);
+    Guid? TaskId = null,
+    Guid? BacklogItemId = null);
