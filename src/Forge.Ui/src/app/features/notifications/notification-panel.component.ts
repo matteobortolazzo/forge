@@ -154,8 +154,14 @@ export class NotificationPanelComponent {
 
   onNotificationClick(notification: Notification): void {
     this.notificationStore.markAsRead(notification.id);
-    if (notification.taskId) {
-      this.router.navigate(['/tasks', notification.taskId]);
+
+    if (notification.taskId && notification.backlogItemId) {
+      // Task notification - navigate to task detail within backlog item
+      this.router.navigate(['/backlog', notification.backlogItemId, 'tasks', notification.taskId]);
+      this.closePanel();
+    } else if (notification.backlogItemId) {
+      // Backlog item notification
+      this.router.navigate(['/backlog', notification.backlogItemId]);
       this.closePanel();
     }
   }

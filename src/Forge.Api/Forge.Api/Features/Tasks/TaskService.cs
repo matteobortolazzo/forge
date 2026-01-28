@@ -100,7 +100,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
-        await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, dto.TargetState);
+        await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.BacklogItemId, entity.Title, previousState, dto.TargetState);
 
         // Update backlog item if task is now Done
         if (dto.TargetState == PipelineState.Done)
@@ -171,7 +171,7 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
-        await notifications.NotifyTaskErrorAsync(entity.Id, entity.Title, errorMessage);
+        await notifications.NotifyTaskErrorAsync(entity.Id, entity.BacklogItemId, entity.Title, errorMessage);
         return result;
     }
 

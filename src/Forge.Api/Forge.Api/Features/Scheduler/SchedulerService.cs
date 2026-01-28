@@ -155,7 +155,7 @@ public class SchedulerService(
 
             var dto = TaskDto.FromEntity(entity);
             await sse.EmitTaskUpdatedAsync(dto);
-            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, nextState);
+            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.BacklogItemId, entity.Title, previousState, nextState);
             return dto;
         }
 
@@ -246,7 +246,7 @@ public class SchedulerService(
 
             var dto = TaskDto.FromEntity(entity);
             await sse.EmitTaskUpdatedAsync(dto);
-            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, entity.State);
+            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.BacklogItemId, entity.Title, previousState, entity.State);
             return dto;
         }
 
@@ -284,7 +284,7 @@ public class SchedulerService(
 
             var dto = TaskDto.FromEntity(entity);
             await sse.EmitTaskPausedAsync(dto);
-            await notifications.NotifyTaskPausedAsync(entity.Id, entity.Title, entity.PauseReason);
+            await notifications.NotifyTaskPausedAsync(entity.Id, entity.BacklogItemId, entity.Title, entity.PauseReason);
             return dto;
         }
 

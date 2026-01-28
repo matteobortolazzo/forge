@@ -64,7 +64,7 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
 
     #region Task Notifications
 
-    public async Task NotifyTaskStateChangedAsync(Guid taskId, string taskTitle, PipelineState fromState, PipelineState toState)
+    public async Task NotifyTaskStateChangedAsync(Guid taskId, Guid backlogItemId, string taskTitle, PipelineState fromState, PipelineState toState)
     {
         var type = toState == PipelineState.Done ? NotificationType.Success : NotificationType.Info;
         var title = toState == PipelineState.Done ? "Task Completed" : "Task State Changed";
@@ -72,27 +72,27 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
             ? $"\"{taskTitle}\" completed"
             : $"\"{taskTitle}\" moved to {toState}";
 
-        await CreateAsync(new CreateNotificationDto(title, message, type, taskId, null));
+        await CreateAsync(new CreateNotificationDto(title, message, type, taskId, backlogItemId));
     }
 
-    public async Task NotifyTaskErrorAsync(Guid taskId, string taskTitle, string errorMessage)
+    public async Task NotifyTaskErrorAsync(Guid taskId, Guid backlogItemId, string taskTitle, string errorMessage)
     {
         await CreateAsync(new CreateNotificationDto(
             "Task Error",
             $"Error on \"{taskTitle}\": {errorMessage}",
             NotificationType.Error,
             taskId,
-            null));
+            backlogItemId));
     }
 
-    public async Task NotifyTaskPausedAsync(Guid taskId, string taskTitle, string reason)
+    public async Task NotifyTaskPausedAsync(Guid taskId, Guid backlogItemId, string taskTitle, string reason)
     {
         await CreateAsync(new CreateNotificationDto(
             "Task Paused",
             $"\"{taskTitle}\" was paused: {reason}",
             NotificationType.Warning,
             taskId,
-            null));
+            backlogItemId));
     }
 
     #endregion
