@@ -1,4 +1,12 @@
 {
+  "/api/events": {
+    "target": "http://localhost:5140",
+    "secure": false,
+    "changeOrigin": true,
+    "headers": {
+      "Connection": "keep-alive"
+    }
+  },
   "/api": {
     "target": "http://localhost:5140",
     "secure": false,

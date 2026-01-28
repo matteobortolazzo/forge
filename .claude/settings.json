@@ -2,19 +2,26 @@
   "permissions": {
     "allow": [
       "Bash(dotnet:*)",
+      "Bash(cat:*)",
       "Bash(gh repo:*)",
       "Bash(git:*)",
       "Bash(ls:*)",
       "Bash(ng:*)",
       "Bash(npm install:*)",
+      "Bash(npm test:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm run:*)",
       "Bash(npx ng:*)",
+      "Bash(npx vitest run)",
       "Bash(tree:*)",
+      "Bash(wc:*)",
       "mcp__angular-cli__find_examples",
       "mcp__angular-cli__get_best_practices",
+      "mcp__angular-cli__list_projects",
+      "mcp__angular-cli__search_documentation",
       "mcp__context7__query-docs",
-      "mcp__context7__resolve-library-id"
+      "mcp__context7__resolve-library-id",
+      "WebSearch"
     ]
   },
   "enabledMcpjsonServers": [

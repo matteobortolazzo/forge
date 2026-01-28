@@ -1,5 +1,6 @@
 using Forge.Api.Features.Agent;
 using Forge.Api.Features.Repositories;
+using Forge.Api.Shared;
 
 namespace Forge.Api.Features.Backlog;
 
@@ -164,6 +165,21 @@ public static class BacklogEndpoints
         var item = await backlogService.GetByIdAsync(id);
         if (item is null) return Results.NotFound();
         if (item.RepositoryId != repoId) return Results.NotFound();
+
+        // Auto-transition from New to Refining if needed (so refining agent can start)
+        if (item.State == BacklogItemState.New)
+        {
+            try
+            {
+                var transitionDto = new TransitionBacklogItemDto(BacklogItemState.Refining);
+                item = await backlogService.TransitionAsync(id, transitionDto);
+                if (item is null) return Results.NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }
 
         var started = await agentRunner.StartBacklogAgentAsync(id, item.Title, item.Description);
         if (!started)

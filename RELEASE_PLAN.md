@@ -18,14 +18,14 @@
 
 Forge transforms the raw Claude Code CLI into an enterprise-ready development workflow by adding:
 
-| Capability | Raw CLI | Forge |
-|------------|---------|-------|
-| Task orchestration | Manual | Automated pipeline |
-| Human oversight | None | Configurable approval gates |
-| Parallel execution | Manual worktrees | Automatic subtask isolation |
-| Error recovery | Manual | Automatic rollback with audit trail |
-| Progress visibility | Terminal output | Real-time dashboard |
-| Team collaboration | None | Shared task queue |
+| Capability          | Raw CLI          | Forge                               |
+| ------------------- | ---------------- | ----------------------------------- |
+| Task orchestration  | Manual           | Automated pipeline                  |
+| Human oversight     | None             | Configurable approval gates         |
+| Parallel execution  | Manual worktrees | Automatic subtask isolation         |
+| Error recovery      | Manual           | Automatic rollback with audit trail |
+| Progress visibility | Terminal output  | Real-time dashboard                 |
+| Team collaboration  | None             | Shared task queue                   |
 
 ### Key Differentiators
 
@@ -46,12 +46,12 @@ Forge transforms the raw Claude Code CLI into an enterprise-ready development wo
 
 ### Tier Structure
 
-| Tier | Price | Task Limits | Projects | Key Features |
-|------|-------|-------------|----------|--------------|
-| **Free** | $0 | 5 tasks/day | 1 | Core pipeline, local execution, community support |
-| **Pro** | $7/month | Unlimited | 5 | Full pipeline, priority scheduling, email support |
-| **Team** | $15/seat/month | Unlimited | Unlimited | Shared dashboard, audit logs, API access, usage analytics |
-| **Enterprise** | Custom | Unlimited | Unlimited | SSO, on-premises option, SLA, dedicated support, compliance |
+| Tier           | Price          | Task Limits | Projects  | Key Features                                                |
+| -------------- | -------------- | ----------- | --------- | ----------------------------------------------------------- |
+| **Free**       | $0             | 5 tasks/day | 1         | Core pipeline, local execution, community support           |
+| **Pro**        | $7/month       | Unlimited   | 5         | Full pipeline, priority scheduling, email support           |
+| **Team**       | $15/seat/month | Unlimited   | Unlimited | Shared dashboard, audit logs, API access, usage analytics   |
+| **Enterprise** | Custom         | Unlimited   | Unlimited | SSO, on-premises option, SLA, dedicated support, compliance |
 
 ### Pricing Rationale
 
@@ -63,6 +63,7 @@ Forge transforms the raw Claude Code CLI into an enterprise-ready development wo
 ### Free Tier Strategy
 
 The free tier is designed to:
+
 - Lower barrier to entry for .NET developers
 - Demonstrate value before purchase decision
 - Create habit formation with daily usage
@@ -164,40 +165,40 @@ forge start
 
 **Goal:** Package current Forge features as a commercial product
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Current pipeline features | Ready | Existing codebase |
-| dotnet tool packaging | TODO | Self-contained publish |
-| Free tier with limits | TODO | Task/project limits |
-| Pro tier unlock | TODO | Payment integration |
-| License validation | TODO | Azure Functions backend |
-| GitHub OAuth | TODO | Primary auth method |
+| Feature                   | Status | Notes                   |
+| ------------------------- | ------ | ----------------------- |
+| Current pipeline features | Ready  | Existing codebase       |
+| dotnet tool packaging     | TODO   | Self-contained publish  |
+| Free tier with limits     | TODO   | Task/project limits     |
+| Pro tier unlock           | TODO   | Payment integration     |
+| License validation        | TODO   | Azure Functions backend |
+| GitHub OAuth              | TODO   | Primary auth method     |
 
 ### Phase 2: Team Features (Month 3-4)
 
 **Goal:** Enable team collaboration and enterprise evaluation
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Team dashboard | High | Shared task visibility |
-| User management | High | Invite/remove team members |
-| Usage analytics | Medium | Per-user and team metrics |
-| Audit logs | Medium | Action history for compliance |
-| Azure DevOps integration | Medium | Work item sync |
-| GitHub Issues integration | Low | Bi-directional sync |
+| Feature                   | Priority | Notes                         |
+| ------------------------- | -------- | ----------------------------- |
+| Team dashboard            | High     | Shared task visibility        |
+| User management           | High     | Invite/remove team members    |
+| Usage analytics           | Medium   | Per-user and team metrics     |
+| Audit logs                | Medium   | Action history for compliance |
+| Azure DevOps integration  | Medium   | Work item sync                |
+| GitHub Issues integration | Low      | Bi-directional sync           |
 
 ### Phase 3: Enterprise (Month 6+)
 
 **Goal:** Enterprise-ready deployment options
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| SSO integration | High | Azure AD, Okta, SAML |
-| On-premises deployment | High | Docker/Kubernetes |
-| Multi-agent support | Medium | OpenAI, local models |
-| Compliance features | Medium | SOC2, GDPR support |
-| Custom agent configs | Low | Per-org agent variants |
-| White-labeling | Low | Custom branding |
+| Feature                | Priority | Notes                  |
+| ---------------------- | -------- | ---------------------- |
+| SSO integration        | High     | Azure AD, Okta, SAML   |
+| On-premises deployment | High     | Docker/Kubernetes      |
+| Multi-agent support    | Medium   | OpenAI, local models   |
+| Compliance features    | Medium   | SOC2, GDPR support     |
+| Custom agent configs   | Low      | Per-org agent variants |
+| White-labeling         | Low      | Custom branding        |
 
 ---
 
@@ -270,14 +271,14 @@ forge start
 
 ## Risk Mitigation
 
-| Risk | Likelihood | Impact | Mitigation Strategy |
-|------|------------|--------|---------------------|
-| **Anthropic ships native orchestrator** | Medium | High | Build moat through enterprise features (human gates, audit trails, compliance); accelerate multi-agent roadmap |
-| **Claude CLI breaking changes** | Medium | Medium | Pin CLI versions; comprehensive integration tests; rapid patching process; maintain compatibility layer |
-| **Low free→paid conversion** | High | Medium | Generous free tier for adoption; clear value demonstration; in-app upgrade prompts at natural moments |
-| **Competition from Cursor/Windsurf** | Medium | Medium | .NET-first positioning; enterprise features; pipeline orchestration differentiator |
-| **Scaling issues at growth** | Low | High | Azure Functions auto-scaling; database read replicas; CDN for static assets |
-| **Security vulnerabilities** | Low | High | Security audit before launch; responsible disclosure program; regular dependency updates |
+| Risk                                    | Likelihood | Impact | Mitigation Strategy                                                                                            |
+| --------------------------------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| **Anthropic ships native orchestrator** | Medium     | High   | Build moat through enterprise features (human gates, audit trails, compliance); accelerate multi-agent roadmap |
+| **Claude CLI breaking changes**         | Medium     | Medium | Pin CLI versions; comprehensive integration tests; rapid patching process; maintain compatibility layer        |
+| **Low free→paid conversion**            | High       | Medium | Generous free tier for adoption; clear value demonstration; in-app upgrade prompts at natural moments          |
+| **Competition from Cursor/Windsurf**    | Medium     | Medium | .NET-first positioning; enterprise features; pipeline orchestration differentiator                             |
+| **Scaling issues at growth**            | Low        | High   | Azure Functions auto-scaling; database read replicas; CDN for static assets                                    |
+| **Security vulnerabilities**            | Low        | High   | Security audit before launch; responsible disclosure program; regular dependency updates                       |
 
 ---
 
@@ -285,33 +286,37 @@ forge start
 
 ### 6-Month Targets
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| **Free users** | 1,000+ | Unique authenticated accounts |
-| **Paid users** | 100+ | Active Pro/Team subscriptions |
-| **MRR** | $1,000+ | Monthly recurring revenue |
-| **Free→Paid conversion** | 10%+ | Paid / (Free + Paid) users |
-| **Monthly churn** | <5% | Canceled / Total paid users |
-| **NPS score** | 40+ | Quarterly survey |
+| Metric                   | Target  | Measurement                   |
+| ------------------------ | ------- | ----------------------------- |
+| **Free users**           | 1,000+  | Unique authenticated accounts |
+| **Paid users**           | 100+    | Active Pro/Team subscriptions |
+| **MRR**                  | $1,000+ | Monthly recurring revenue     |
+| **Free→Paid conversion** | 10%+    | Paid / (Free + Paid) users    |
+| **Monthly churn**        | <5%     | Canceled / Total paid users   |
+| **NPS score**            | 40+     | Quarterly survey              |
 
 ### Key Performance Indicators (KPIs)
 
 **Acquisition:**
+
 - Website visitors → Signups (target: 10%)
 - Signups → Active users (target: 50%)
 - GitHub stars (vanity but signals interest)
 
 **Activation:**
+
 - Time to first task completion
 - Users completing 5+ tasks in first week
 - Users who configure human gates
 
 **Retention:**
+
 - Daily/Weekly/Monthly active users
 - Tasks completed per user per week
 - Return rate after 7/30 days
 
 **Revenue:**
+
 - Average Revenue Per User (ARPU)
 - Customer Lifetime Value (LTV)
 - LTV:CAC ratio (target: 3:1)
@@ -322,37 +327,38 @@ forge start
 
 ### MVP Infrastructure (Month 1-2)
 
-| Service | Provider | Estimated Cost |
-|---------|----------|----------------|
-| License server | Azure Functions (Consumption) | $10-50/mo |
-| Database | Azure SQL Basic (5 DTU) | $5-15/mo |
-| Authentication | Auth0 (Free tier) | $0 |
-| File storage | Azure Blob Storage | $1-5/mo |
-| Monitoring | Application Insights | $0-10/mo |
-| Domain + DNS | Cloudflare | $10-15/yr |
-| Email (transactional) | SendGrid (Free tier) | $0 |
-| **Total MVP** | | **~$25-80/mo** |
+| Service               | Provider                      | Estimated Cost |
+| --------------------- | ----------------------------- | -------------- |
+| License server        | Azure Functions (Consumption) | $10-50/mo      |
+| Database              | Azure SQL Basic (5 DTU)       | $5-15/mo       |
+| Authentication        | Auth0 (Free tier)             | $0             |
+| File storage          | Azure Blob Storage            | $1-5/mo        |
+| Monitoring            | Application Insights          | $0-10/mo       |
+| Domain + DNS          | Cloudflare                    | $10-15/yr      |
+| Email (transactional) | SendGrid (Free tier)          | $0             |
+| **Total MVP**         |                               | **~$25-80/mo** |
 
 ### Growth Infrastructure (Month 3-6)
 
-| Service | Provider | Estimated Cost |
-|---------|----------|----------------|
-| License server | Azure Functions (Premium) | $50-150/mo |
-| Database | Azure SQL S1 | $30-50/mo |
-| Authentication | Auth0 (Essentials) | $23/mo |
-| CDN | Azure CDN | $10-30/mo |
-| Monitoring | Application Insights | $20-50/mo |
-| Email | SendGrid (Essentials) | $20/mo |
-| **Total Growth** | | **~$150-320/mo** |
+| Service          | Provider                  | Estimated Cost   |
+| ---------------- | ------------------------- | ---------------- |
+| License server   | Azure Functions (Premium) | $50-150/mo       |
+| Database         | Azure SQL S1              | $30-50/mo        |
+| Authentication   | Auth0 (Essentials)        | $23/mo           |
+| CDN              | Azure CDN                 | $10-30/mo        |
+| Monitoring       | Application Insights      | $20-50/mo        |
+| Email            | SendGrid (Essentials)     | $20/mo           |
+| **Total Growth** |                           | **~$150-320/mo** |
 
 ### Payment Processing
 
-| Provider | Fees |
-|----------|------|
-| Stripe | 2.9% + $0.30 per transaction |
+| Provider          | Fees                         |
+| ----------------- | ---------------------------- |
+| Stripe            | 2.9% + $0.30 per transaction |
 | PayPal (optional) | 2.9% + $0.30 per transaction |
 
 **Example at 100 Pro users ($7/mo):**
+
 - Revenue: $700/mo
 - Stripe fees: ~$50/mo (7%)
 - Net revenue: ~$650/mo
@@ -405,13 +411,13 @@ forge start
 
 ### Competitive Landscape
 
-| Product | Focus | Pricing | Key Difference |
-|---------|-------|---------|----------------|
-| Cursor | IDE with AI | $20/mo | IDE-integrated, general purpose |
-| Windsurf | IDE with AI | $15/mo | IDE-integrated, general purpose |
-| GitHub Copilot | Code completion | $10/mo | Inline suggestions, no orchestration |
-| Continue.dev | Open source | Free | Requires setup, no pipeline |
-| **Forge** | .NET orchestrator | $7/mo | Pipeline-first, human gates, enterprise |
+| Product        | Focus             | Pricing | Key Difference                          |
+| -------------- | ----------------- | ------- | --------------------------------------- |
+| Cursor         | IDE with AI       | $20/mo  | IDE-integrated, general purpose         |
+| Windsurf       | IDE with AI       | $15/mo  | IDE-integrated, general purpose         |
+| GitHub Copilot | Code completion   | $10/mo  | Inline suggestions, no orchestration    |
+| Continue.dev   | Open source       | Free    | Requires setup, no pipeline             |
+| **Forge**      | .NET orchestrator | $7/mo   | Pipeline-first, human gates, enterprise |
 
 ### Glossary
 
@@ -423,4 +429,4 @@ forge start
 
 ---
 
-*Last updated: January 2026*
+_Last updated: January 2026_
