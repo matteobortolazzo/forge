@@ -15,6 +15,7 @@ internal sealed class CliProcess : IAsyncDisposable
     private readonly StringBuilder _stderrBuilder = new();
     private readonly TaskCompletionSource<bool> _stderrCompleted = new();
     private bool _disposed;
+    private bool _stdinClosed;
 
     private CliProcess(Process process)
     {
@@ -29,13 +30,15 @@ internal sealed class CliProcess : IAsyncDisposable
     /// <param name="workingDirectory">The working directory.</param>
     /// <param name="environmentVariables">Additional environment variables.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="keepStdinOpen">If true, stdin is kept open for bidirectional communication.</param>
     /// <returns>The started CLI process wrapper.</returns>
     public static CliProcess Start(
         string cliPath,
         IReadOnlyList<string> arguments,
         string? workingDirectory,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool keepStdinOpen = false)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -79,10 +82,14 @@ internal sealed class CliProcess : IAsyncDisposable
                 throw new CliConnectionException("Failed to start Claude Code CLI process.");
             }
 
-            // Close stdin immediately since we pass the prompt via command line
-            process.StandardInput.Close();
-
             var wrapper = new CliProcess(process);
+
+            // Close stdin immediately unless we need bidirectional communication
+            if (!keepStdinOpen)
+            {
+                process.StandardInput.Close();
+                wrapper._stdinClosed = true;
+            }
             wrapper.StartStderrCapture();
 
             // Register cancellation to kill the process
@@ -197,6 +204,39 @@ internal sealed class CliProcess : IAsyncDisposable
     /// Gets the captured stderr output.
     /// </summary>
     public string Stderr => _stderrBuilder.ToString();
+
+    /// <summary>
+    /// Writes a line to stdin and flushes the stream.
+    /// </summary>
+    /// <param name="content">The content to write.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown if stdin has been closed.</exception>
+    public async Task WriteLineAsync(string content, CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (_stdinClosed)
+        {
+            throw new InvalidOperationException("Cannot write to stdin after it has been closed.");
+        }
+
+        await _process.StandardInput.WriteLineAsync(content.AsMemory(), ct);
+        await _process.StandardInput.FlushAsync(ct);
+    }
+
+    /// <summary>
+    /// Closes stdin to signal end of input.
+    /// </summary>
+    public void CloseStdin()
+    {
+        if (_disposed || _stdinClosed)
+        {
+            return;
+        }
+
+        _stdinClosed = true;
+        _process.StandardInput.Close();
+    }
 
     private void StartStderrCapture()
     {

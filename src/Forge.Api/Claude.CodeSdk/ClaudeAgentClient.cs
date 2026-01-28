@@ -1,7 +1,10 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Claude.CodeSdk.ContentBlocks;
+using Claude.CodeSdk.Exceptions;
 using Claude.CodeSdk.Internal;
 using Claude.CodeSdk.Messages;
+using Claude.CodeSdk.Permissions;
 
 namespace Claude.CodeSdk;
 
@@ -67,23 +70,145 @@ public sealed class ClaudeAgentClient : IClaudeAgentClient
         var effectiveOptions = MergeOptions(_defaultOptions, options);
         var args = CommandBuilder.BuildArguments(prompt, effectiveOptions);
 
+        var hasPermissionHandler = effectiveOptions.ToolPermissionHandler is not null;
+
         await using var process = CliProcess.Start(
             _cliPath,
             args,
             effectiveOptions.WorkingDirectory,
             effectiveOptions.EnvironmentVariables,
-            ct);
+            ct,
+            keepStdinOpen: hasPermissionHandler);
+
+        string? sessionId = null;
 
         await foreach (var line in process.ReadLinesAsync(ct))
         {
-            if (MessageParser.TryParse(line, out var message) && message is not null)
+            if (!MessageParser.TryParse(line, out var message) || message is null)
             {
-                yield return message;
+                continue;
             }
+
+            // Track session ID for permission context
+            if (message is SystemMessage systemMsg && systemMsg.SessionId is not null)
+            {
+                sessionId = systemMsg.SessionId;
+            }
+
+            // Process tool uses if we have a permission handler
+            if (hasPermissionHandler && message is AssistantMessage assistantMsg)
+            {
+                var toolUses = assistantMsg.Content.OfType<ToolUseBlock>().ToList();
+                if (toolUses.Count > 0)
+                {
+                    await ProcessToolUsesAsync(
+                        process,
+                        toolUses,
+                        effectiveOptions,
+                        sessionId,
+                        ct);
+                }
+            }
+
+            yield return message;
+        }
+
+        // Close stdin if it was kept open
+        if (hasPermissionHandler)
+        {
+            process.CloseStdin();
         }
 
         await process.WaitForExitAsync(ct);
     }
+
+    private async Task ProcessToolUsesAsync(
+        CliProcess process,
+        IReadOnlyList<ToolUseBlock> toolUses,
+        ClaudeAgentOptions options,
+        string? sessionId,
+        CancellationToken ct)
+    {
+        var handler = options.ToolPermissionHandler!;
+        var timeoutMs = options.ToolPermissionTimeoutMs;
+
+        var toolResults = new List<object>();
+
+        foreach (var toolUse in toolUses)
+        {
+            var context = new ToolPermissionContext(
+                toolUse.Name,
+                toolUse.Id,
+                toolUse.Input,
+                options.WorkingDirectory,
+                sessionId);
+
+            PermissionResult result;
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(timeoutMs);
+
+                result = await handler(context, timeoutCts.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new ToolPermissionTimeoutException(toolUse.Name, toolUse.Id, timeoutMs);
+            }
+
+            switch (result)
+            {
+                case PermissionResult.AllowResult allowResult:
+                    // If input was modified, we send it back as a tool result
+                    if (allowResult.UpdatedInput.HasValue)
+                    {
+                        toolResults.Add(new
+                        {
+                            type = "tool_result",
+                            tool_use_id = toolUse.Id,
+                            content = allowResult.UpdatedInput.Value.GetRawText(),
+                            is_error = false
+                        });
+                    }
+                    // If no modification, the tool will execute normally - no result needed
+                    break;
+
+                case PermissionResult.DenyResult denyResult:
+                    if (denyResult.Interrupt)
+                    {
+                        throw new ToolDeniedException(toolUse.Name, toolUse.Id, denyResult.Message);
+                    }
+
+                    // Send error result back to CLI
+                    toolResults.Add(new
+                    {
+                        type = "tool_result",
+                        tool_use_id = toolUse.Id,
+                        content = $"Permission denied: {denyResult.Message}",
+                        is_error = true
+                    });
+                    break;
+            }
+        }
+
+        // Send tool results back to CLI if any
+        if (toolResults.Count > 0)
+        {
+            var userMessage = new
+            {
+                type = "user",
+                content = toolResults
+            };
+
+            var json = JsonSerializer.Serialize(userMessage, JsonSerializerOptions);
+            await process.WriteLineAsync(json, ct);
+        }
+    }
+
+    private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     /// <summary>
     /// Sends a query and returns only the text content from assistant messages.
@@ -173,7 +298,9 @@ public sealed class ClaudeAgentClient : IClaudeAgentClient
             TimeoutMs = overrides.TimeoutMs ?? defaults.TimeoutMs,
             DangerouslySkipPermissions = overrides.DangerouslySkipPermissions || defaults.DangerouslySkipPermissions,
             Verbose = overrides.Verbose || defaults.Verbose,
-            AdditionalArgs = MergeAdditionalArgs(defaults.AdditionalArgs, overrides.AdditionalArgs)
+            AdditionalArgs = MergeAdditionalArgs(defaults.AdditionalArgs, overrides.AdditionalArgs),
+            ToolPermissionHandler = overrides.ToolPermissionHandler ?? defaults.ToolPermissionHandler,
+            ToolPermissionTimeoutMs = overrides.ToolPermissionTimeoutMs != 60000 ? overrides.ToolPermissionTimeoutMs : defaults.ToolPermissionTimeoutMs
         };
     }
 

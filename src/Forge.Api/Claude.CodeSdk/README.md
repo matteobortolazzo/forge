@@ -65,11 +65,17 @@ Claude.CodeSdk/
 │   ├── McpServerStatus.cs        # Server status
 │   └── McpServerConfig.cs        # Server config
 ├── Exceptions/
-│   ├── ClaudeAgentException.cs   # Base exception
-│   ├── CliNotFoundException.cs   # CLI not found
-│   ├── CliConnectionException.cs # Connection failure
-│   ├── ProcessException.cs       # Non-zero exit
-│   └── JsonDecodeException.cs    # Parse failure
+│   ├── ClaudeAgentException.cs          # Base exception
+│   ├── CliNotFoundException.cs          # CLI not found
+│   ├── CliConnectionException.cs        # Connection failure
+│   ├── ProcessException.cs              # Non-zero exit
+│   ├── JsonDecodeException.cs           # Parse failure
+│   ├── ToolDeniedException.cs           # Tool denied with interrupt
+│   └── ToolPermissionTimeoutException.cs # Handler timeout
+├── Permissions/
+│   ├── PermissionResult.cs        # Allow/Deny result types
+│   ├── ToolPermissionContext.cs   # Context for handler
+│   └── ToolPermissionHandler.cs   # Handler delegate
 └── Internal/
     ├── CliLocator.cs             # Find CLI executable
     ├── CommandBuilder.cs         # Build CLI args
@@ -209,6 +215,10 @@ public sealed record ClaudeAgentOptions
     // Environment
     IReadOnlyDictionary<string, string>? EnvironmentVariables { get; init; }
     IReadOnlyList<string>? AdditionalArgs { get; init; }
+
+    // Tool permission handling
+    ToolPermissionHandler? ToolPermissionHandler { get; init; } // Handler for tool permission requests
+    int ToolPermissionTimeoutMs { get; init; }                   // Timeout for handler (default: 60000)
 }
 ```
 
@@ -238,6 +248,49 @@ public sealed record QueryRequest
     required string Prompt { get; init; }
     ClaudeAgentOptions? Options { get; init; }
 }
+```
+
+### Tool Permission Handler
+
+The SDK supports intercepting tool use requests via a `ToolPermissionHandler` callback, enabling bidirectional communication with the CLI process.
+
+#### ToolPermissionHandler Delegate
+
+```csharp
+public delegate ValueTask<PermissionResult> ToolPermissionHandler(
+    ToolPermissionContext context,
+    CancellationToken ct);
+```
+
+#### ToolPermissionContext
+
+Context information provided to the permission handler:
+
+```csharp
+public sealed record ToolPermissionContext(
+    string ToolName,      // Name of the tool being invoked
+    string ToolUseId,     // Unique identifier for this tool use
+    JsonElement Input,    // Input parameters as JSON
+    string? WorkingDirectory,  // Working directory, if set
+    string? SessionId);   // Current session ID, if available
+```
+
+#### PermissionResult
+
+Factory methods for creating permission results:
+
+```csharp
+// Allow the tool to execute
+PermissionResult.Allow();
+
+// Allow with modified input (useful for custom UI responses)
+PermissionResult.Allow(updatedInput: modifiedJsonElement);
+
+// Deny without interrupting the session (sends error back to Claude)
+PermissionResult.Deny("Reason for denial");
+
+// Deny and abort the session (throws ToolDeniedException)
+PermissionResult.Deny("Critical security violation", interrupt: true);
 ```
 
 ## Message Types
@@ -507,10 +560,12 @@ await using var client = new ClaudeAgentClient(options);
 
 ```
 ClaudeAgentException (base)
-├── CliNotFoundException      # CLI executable not found
-├── CliConnectionException    # Failed to start/connect to CLI
-├── ProcessException          # CLI exited with non-zero code
-└── JsonDecodeException       # Failed to parse CLI output
+├── CliNotFoundException           # CLI executable not found
+├── CliConnectionException         # Failed to start/connect to CLI
+├── ProcessException               # CLI exited with non-zero code
+├── JsonDecodeException            # Failed to parse CLI output
+├── ToolDeniedException            # Tool denied with interrupt flag
+└── ToolPermissionTimeoutException # Handler exceeded timeout
 ```
 
 ### CliNotFoundException
@@ -544,6 +599,32 @@ Thrown when JSON parsing fails.
 public sealed class JsonDecodeException : ClaudeAgentException
 {
     string RawData { get; }
+}
+```
+
+### ToolDeniedException
+
+Thrown when a tool permission request is denied with the `interrupt` flag set.
+
+```csharp
+public sealed class ToolDeniedException : ClaudeAgentException
+{
+    string ToolName { get; }     // Name of the denied tool
+    string ToolUseId { get; }    // ID of the tool use
+    string DenyReason { get; }   // Reason for denial
+}
+```
+
+### ToolPermissionTimeoutException
+
+Thrown when the tool permission handler exceeds the configured timeout.
+
+```csharp
+public sealed class ToolPermissionTimeoutException : ClaudeAgentException
+{
+    string ToolName { get; }   // Name of the tool that timed out
+    string ToolUseId { get; }  // ID of the tool use
+    int TimeoutMs { get; }     // Configured timeout in milliseconds
 }
 ```
 
@@ -766,6 +847,90 @@ await using var client = new ClaudeAgentClient(new ClaudeAgentOptions
     PermissionMode = PermissionMode.Allowlist,
     AllowedTools = ["Read", "Glob", "Grep"]  // Only allow read operations
 });
+```
+
+### Pattern 8: Tool Permission Handling
+
+Intercept tool use requests to implement custom approval flows, block dangerous operations, or provide custom UI for tool inputs.
+
+```csharp
+await using var client = new ClaudeAgentClient(new ClaudeAgentOptions
+{
+    WorkingDirectory = "/project",
+    ToolPermissionTimeoutMs = 120000, // 2 minutes for user input
+    ToolPermissionHandler = async (context, ct) =>
+    {
+        // Custom UI for AskUserQuestion tool
+        if (context.ToolName == "AskUserQuestion")
+        {
+            var questions = context.Input.GetProperty("questions");
+            var answer = await ShowMyCustomQuestionUI(questions, ct);
+
+            // Return modified input with the user's answers
+            return PermissionResult.Allow(answer);
+        }
+
+        // Block dangerous Bash commands
+        if (context.ToolName == "Bash")
+        {
+            var command = context.Input.GetProperty("command").GetString();
+            if (command?.Contains("rm -rf") == true)
+            {
+                // Interrupt: throws ToolDeniedException, aborts session
+                return PermissionResult.Deny("Destructive commands not allowed", interrupt: true);
+            }
+
+            if (command?.Contains("sudo") == true)
+            {
+                // Non-interrupt: sends error to Claude, continues session
+                return PermissionResult.Deny("Sudo commands not permitted");
+            }
+        }
+
+        // Allow all other tools
+        return PermissionResult.Allow();
+    }
+});
+
+try
+{
+    await foreach (var msg in client.QueryStreamAsync("Help me refactor this code"))
+    {
+        if (msg is AssistantMessage assistant)
+        {
+            Console.Write(assistant.Text);
+        }
+    }
+}
+catch (ToolDeniedException ex)
+{
+    Console.WriteLine($"Session aborted: Tool '{ex.ToolName}' was denied: {ex.DenyReason}");
+}
+catch (ToolPermissionTimeoutException ex)
+{
+    Console.WriteLine($"User did not respond in time for tool '{ex.ToolName}'");
+}
+```
+
+**Protocol Flow:**
+
+```
+┌────────────────┐                    ┌───────────────┐
+│  Claude Code   │                    │   SDK Client  │
+│     CLI        │                    │               │
+└───────┬────────┘                    └───────┬───────┘
+        │                                     │
+        │  stdout: ToolUseBlock               │
+        │────────────────────────────────────>│
+        │                                     │
+        │                    ToolPermissionHandler invoked
+        │                                     │
+        │  stdin: tool_result (allow/deny)    │
+        │<────────────────────────────────────│
+        │                                     │
+        │  stdout: continue execution         │
+        │────────────────────────────────────>│
+        │                                     │
 ```
 
 ## Integration with ASP.NET Core

@@ -1,4 +1,5 @@
 using Claude.CodeSdk.Mcp;
+using Claude.CodeSdk.Permissions;
 
 namespace Claude.CodeSdk;
 
@@ -110,4 +111,17 @@ public sealed record ClaudeAgentOptions
     /// Gets or sets additional CLI arguments to pass.
     /// </summary>
     public IReadOnlyList<string>? AdditionalArgs { get; init; }
+
+    /// <summary>
+    /// Gets or sets the handler for tool permission requests.
+    /// When set, this handler is invoked before each tool execution, allowing the consumer
+    /// to approve, deny, or modify tool inputs.
+    /// </summary>
+    public ToolPermissionHandler? ToolPermissionHandler { get; init; }
+
+    /// <summary>
+    /// Gets or sets the timeout in milliseconds for tool permission handler responses.
+    /// Defaults to 60000 (60 seconds).
+    /// </summary>
+    public int ToolPermissionTimeoutMs { get; init; } = 60000;
 }
