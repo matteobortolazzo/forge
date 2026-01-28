@@ -53,13 +53,19 @@ export interface RunAsyncOptions {
  * Runs an async operation with automatic loading/error state management.
  * Reduces boilerplate in store actions.
  *
+ * @param state - The async state signals to manage
+ * @param operation - The async operation to run
+ * @param options - Optional configuration for loading/error behavior
+ * @param errorMessage - Custom error message prefix (default: 'An error occurred')
+ * @returns The result of the operation, or null if an error occurred
+ *
  * @example
  * ```typescript
  * async loadData(): Promise<void> {
  *   await runAsync(this.asyncState, async () => {
  *     const data = await firstValueFrom(this.service.getData());
  *     this.data.set(data);
- *   });
+ *   }, {}, 'Failed to load data');
  * }
  *
  * // Without loading state (for fire-and-forget operations)
@@ -68,14 +74,15 @@ export interface RunAsyncOptions {
  *     await firstValueFrom(this.service.delete(id));
  *     this.items.update(list => list.filter(i => i.id !== id));
  *     return true;
- *   }, { setLoading: false }) ?? false;
+ *   }, { setLoading: false }, 'Failed to delete item') ?? false;
  * }
  * ```
  */
 export async function runAsync<T>(
   state: WritableAsyncState,
   operation: () => Promise<T>,
-  options: RunAsyncOptions = {}
+  options: RunAsyncOptions = {},
+  errorMessage = 'An error occurred'
 ): Promise<T | null> {
   const { setLoading = true, clearError = true } = options;
 
@@ -89,7 +96,7 @@ export async function runAsync<T>(
   try {
     return await operation();
   } catch (err) {
-    state.error.set(err instanceof Error ? err.message : 'An error occurred');
+    state.error.set(extractErrorMessage(err, errorMessage));
     return null;
   } finally {
     if (setLoading) {
