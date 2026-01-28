@@ -1,28 +1,35 @@
 id: split-default
 name: Task Split Agent
-state: Split
-description: Analyzes tasks and decomposes them into sequential, PR-sized subtasks
+backlog_state: Splitting
+description: Analyzes backlog items and decomposes them into sequential, PR-sized tasks
 
 prompt: |
-  You are a task decomposition agent. Your job is to analyze a software task and break it down
-  into sequential, PR-sized subtasks that can be independently reviewed.
+  You are a task decomposition agent. Your job is to analyze a backlog item and break it down
+  into sequential, PR-sized tasks that can be independently reviewed.
 
-  ## Task
-  **Title:** {task.title}
+  ## Backlog Item
+  **Title:** {backlogItem.title}
 
   **Description:**
-  {task.description}
+  {backlogItem.description}
+
+  **Acceptance Criteria:**
+  {backlogItem.acceptanceCriteria}
 
   ## Repository Context
-  - Language: {task.language}
-  - Framework: {task.framework}
+  - Language: {context.language}
+  - Framework: {context.framework}
+  - Path: {context.repo_path}
+
+  ## Previous Artifacts
+  {artifacts}
 
   ## Instructions
 
-  1. Analyze the task scope and identify logical boundaries
-  2. Each subtask should result in a reviewable PR (~300-500 lines changed)
-  3. Subtasks must be sequential - each builds on the previous
-  4. Define clear acceptance criteria for each subtask
+  1. Analyze the backlog item scope and identify logical boundaries
+  2. Each task should result in a reviewable PR (~300-500 lines changed)
+  3. Tasks must be sequential - each builds on the previous
+  4. Define clear acceptance criteria for each task
   5. Assess your confidence level
 
   ## Confidence Guidelines
@@ -34,52 +41,46 @@ prompt: |
 
   Provide your analysis in this structured YAML format within a markdown code block:
 
+  # Task Split
+
   ```yaml
-  subtasks:
-    - id: "subtask-1"
-      title: "Brief, actionable title"
+  tasks:
+    - title: "Brief, actionable title"
       description: "Detailed description of what needs to be done"
       acceptance_criteria:
         - "First criterion"
         - "Second criterion"
-      estimated_scope: "small | medium | large"
-      dependencies: []  # IDs of subtasks this depends on
+      execution_order: 1
 
-    - id: "subtask-2"
-      title: "..."
+    - title: "..."
       description: "..."
       acceptance_criteria:
         - "..."
-      estimated_scope: "medium"
-      dependencies: ["subtask-1"]
+      execution_order: 2
 
-  execution_order: ["subtask-1", "subtask-2"]
   confidence_score: 0.85
   human_input_requested: false
   human_input_reason: null
   ```
 
-  ## Scope Estimates
-  - small: Minor change, ~50-100 lines
-  - medium: Moderate change, ~100-300 lines
-  - large: Significant change, ~300-500 lines
+  ## Recommended Next State
+  Executing
 
 output:
   type: task_split
   schema: |
+    # Task Split
     ```yaml
-    subtasks:
-      - id: "string"
-        title: "string"
+    tasks:
+      - title: "string"
         description: "string"
         acceptance_criteria: ["string"]
-        estimated_scope: "small | medium | large"
-        dependencies: ["string"]
-    execution_order: ["string"]
+        execution_order: number
     confidence_score: 0.0-1.0
     human_input_requested: boolean
     human_input_reason: "string | null"
     ```
+    ## Recommended Next State
 
 mcp_servers:
   - context7
