@@ -1,10 +1,23 @@
-// Pipeline States - ordered from start to finish
+// Backlog Item States - ordered from start to finish
+export const BACKLOG_ITEM_STATES = [
+  'New',
+  'Refining',
+  'Ready',
+  'Splitting',
+  'Executing',
+  'Done',
+] as const;
+
+export type BacklogItemState = (typeof BACKLOG_ITEM_STATES)[number];
+
+// Pipeline States - ordered from start to finish (for tasks)
 export const PIPELINE_STATES = [
-  'Backlog',
+  'Research',
   'Planning',
   'Implementing',
+  'Simplifying',
+  'Verifying',
   'Reviewing',
-  'Testing',
   'PrReady',
   'Done',
 ] as const;
@@ -20,20 +33,59 @@ export const LOG_TYPES = ['info', 'toolUse', 'toolResult', 'error', 'thinking'] 
 export type LogType = (typeof LOG_TYPES)[number];
 
 // Artifact Types produced by agents
-export const ARTIFACT_TYPES = ['plan', 'implementation', 'review', 'test', 'general'] as const;
+export const ARTIFACT_TYPES = [
+  'task_split',
+  'research_findings',
+  'plan',
+  'implementation',
+  'simplification_review',
+  'verification_report',
+  'review',
+  'documentation_update',
+  'test',
+  'general',
+] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
-// Task Progress for parent tasks
-export interface TaskProgress {
+// Backlog Item Progress
+export interface BacklogItemProgress {
   completed: number;
   total: number;
   percent: number;
 }
 
-// Task Interface
+// Backlog Item Interface
+export interface BacklogItem {
+  id: string;
+  repositoryId: string;
+  title: string;
+  description: string;
+  state: BacklogItemState;
+  priority: Priority;
+  acceptanceCriteria?: string;
+  assignedAgentId?: string;
+  hasError: boolean;
+  errorMessage?: string;
+  isPaused: boolean;
+  pauseReason?: string;
+  pausedAt?: Date;
+  retryCount: number;
+  maxRetries: number;
+  createdAt: Date;
+  updatedAt: Date;
+  taskCount: number;
+  completedTaskCount: number;
+  confidenceScore?: number;
+  hasPendingGate: boolean;
+  refiningIterations: number;
+  progress?: BacklogItemProgress;
+}
+
+// Task Interface (belongs to a BacklogItem)
 export interface Task {
   id: string;
   repositoryId: string;
+  backlogItemId: string;
   title: string;
   description: string;
   state: PipelineState;
@@ -48,23 +100,17 @@ export interface Task {
   maxRetries: number;
   createdAt: Date;
   updatedAt: Date;
-  // Hierarchy fields
-  parentId?: string;
-  childCount: number;
-  derivedState?: PipelineState;
-  children?: Task[];
-  progress?: TaskProgress;
-  // Agent context detection
-  detectedLanguage?: string;
-  detectedFramework?: string;
-  recommendedNextState?: PipelineState;
+  executionOrder: number;
+  confidenceScore?: number;
+  hasPendingGate: boolean;
 }
 
 // Agent Artifact Interface
 export interface Artifact {
   id: string;
-  taskId: string;
-  producedInState: PipelineState;
+  taskId?: string;
+  backlogItemId?: string;
+  producedInState: PipelineState | BacklogItemState;
   artifactType: ArtifactType;
   content: string;
   createdAt: Date;
@@ -74,7 +120,8 @@ export interface Artifact {
 // Task Log Interface
 export interface TaskLog {
   id: string;
-  taskId: string;
+  taskId?: string;
+  backlogItemId?: string;
   type: LogType;
   content: string;
   timestamp: Date;
@@ -88,11 +135,35 @@ export interface Notification {
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
   taskId?: string;
+  backlogItemId?: string;
   read: boolean;
   createdAt: Date;
 }
 
-// DTOs for API operations
+// Backlog Item DTOs
+export interface CreateBacklogItemDto {
+  title: string;
+  description: string;
+  priority?: Priority;
+  acceptanceCriteria?: string;
+}
+
+export interface UpdateBacklogItemDto {
+  title?: string;
+  description?: string;
+  priority?: Priority;
+  acceptanceCriteria?: string;
+}
+
+export interface TransitionBacklogItemDto {
+  targetState: BacklogItemState;
+}
+
+export interface PauseBacklogItemDto {
+  reason?: string;
+}
+
+// Task DTOs
 export interface CreateTaskDto {
   title: string;
   description: string;
@@ -109,51 +180,35 @@ export interface TransitionTaskDto {
   targetState: PipelineState;
 }
 
-// Hierarchy DTOs
-export interface CreateSubtaskDto {
-  title: string;
-  description: string;
-  priority: Priority;
-}
-
-export interface SplitTaskDto {
-  subtasks: CreateSubtaskDto[];
-}
-
-export interface SplitTaskResultDto {
-  parent: Task;
-  children: Task[];
+export interface PauseTaskDto {
+  reason?: string;
 }
 
 // Event types for SSE
 export type ServerEventType =
+  | 'backlogItem:created'
+  | 'backlogItem:updated'
+  | 'backlogItem:deleted'
+  | 'backlogItem:log'
+  | 'backlogItem:paused'
+  | 'backlogItem:resumed'
   | 'task:created'
   | 'task:updated'
   | 'task:deleted'
   | 'task:log'
   | 'task:paused'
   | 'task:resumed'
-  | 'task:split'
-  | 'task:childAdded'
   | 'agent:statusChanged'
   | 'scheduler:taskScheduled'
   | 'notification:new'
   | 'artifact:created'
+  | 'humanGate:requested'
+  | 'humanGate:resolved'
   | 'repository:created'
   | 'repository:updated'
   | 'repository:deleted';
 
 // SSE Event Payloads
-export interface TaskSplitPayload {
-  parent: Task;
-  children: Task[];
-}
-
-export interface ChildAddedPayload {
-  parentId: string;
-  child: Task;
-}
-
 export interface ServerEvent {
   type: ServerEventType;
   payload: unknown;
@@ -164,6 +219,7 @@ export interface ServerEvent {
 export interface AgentStatus {
   isRunning: boolean;
   currentTaskId?: string;
+  currentBacklogItemId?: string;
   startedAt?: Date;
 }
 
@@ -172,13 +228,9 @@ export interface SchedulerStatus {
   isEnabled: boolean;
   isAgentRunning: boolean;
   currentTaskId?: string;
+  currentBacklogItemId?: string;
   pendingTaskCount: number;
   pausedTaskCount: number;
-}
-
-// Pause Task DTO
-export interface PauseTaskDto {
-  reason: string;
 }
 
 // Repository Interface (full entity)
