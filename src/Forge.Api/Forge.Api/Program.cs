@@ -13,7 +13,7 @@ using Forge.Api.Features.Agents;
 using Forge.Api.Features.Tasks;
 using Forge.Api.Features.Worktree;
 using Forge.Api.Features.Rollback;
-using Forge.Api.Features.Subtasks;
+using Forge.Api.Features.Backlog;
 using Forge.Api.Features.HumanGates;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +52,7 @@ else
 }
 
 builder.Services.AddSingleton<IAgentRunnerService, AgentRunnerService>();
-builder.Services.AddScoped<IParentStateService, ParentStateService>();
+builder.Services.AddScoped<BacklogService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.Configure<SchedulerOptions>(builder.Configuration.GetSection(SchedulerOptions.SectionName));
@@ -70,7 +70,6 @@ builder.Services.AddSingleton<IArtifactParser, ArtifactParser>();
 builder.Services.AddSingleton<IOrchestratorService, OrchestratorService>();
 builder.Services.AddSingleton<IWorktreeService, WorktreeService>();
 builder.Services.AddScoped<IRollbackService, RollbackService>();
-builder.Services.AddScoped<SubtaskService>();
 builder.Services.AddScoped<HumanGateService>();
 
 // CORS for Angular dev server
@@ -106,14 +105,14 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Map endpoints
+app.MapRepositoryEndpoints();
+app.MapBacklogEndpoints();
 app.MapTaskEndpoints();
 app.MapTaskArtifactEndpoints();
 app.MapAgentEndpoints();
 app.MapEventEndpoints();
 app.MapNotificationEndpoints();
 app.MapSchedulerEndpoints();
-app.MapRepositoryEndpoints();
-app.MapSubtaskEndpoints();
 app.MapHumanGateEndpoints();
 
 // Mock control endpoints (only in mock mode)

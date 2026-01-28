@@ -7,11 +7,11 @@ namespace Forge.Api.Data;
 public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContext(options)
 {
     public DbSet<RepositoryEntity> Repositories => Set<RepositoryEntity>();
+    public DbSet<BacklogItemEntity> BacklogItems => Set<BacklogItemEntity>();
     public DbSet<TaskEntity> Tasks => Set<TaskEntity>();
     public DbSet<TaskLogEntity> TaskLogs => Set<TaskLogEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
     public DbSet<AgentArtifactEntity> AgentArtifacts => Set<AgentArtifactEntity>();
-    public DbSet<SubtaskEntity> Subtasks => Set<SubtaskEntity>();
     public DbSet<HumanGateEntity> HumanGates => Set<HumanGateEntity>();
     public DbSet<RollbackRecordEntity> RollbackRecords => Set<RollbackRecordEntity>();
 
@@ -37,9 +37,61 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.HasIndex(e => e.IsActive)
                 .HasDatabaseName("IX_Repositories_Active");
 
+            entity.HasMany(e => e.BacklogItems)
+                .WithOne(b => b.Repository)
+                .HasForeignKey(b => b.RepositoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BacklogItemEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).IsRequired();
+            entity.Property(e => e.State)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.Priority)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.AssignedAgentId).HasMaxLength(100);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.Property(e => e.PauseReason).HasMaxLength(500);
+
+            // Context detection fields
+            entity.Property(e => e.DetectedLanguage).HasMaxLength(50);
+            entity.Property(e => e.DetectedFramework).HasMaxLength(50);
+
+            // Confidence and human gate tracking
+            entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
+            entity.Property(e => e.HumanInputReason).HasMaxLength(1000);
+
+            // Index for scheduler queries (schedulable backlog items)
+            entity.HasIndex(e => new { e.State, e.IsPaused, e.AssignedAgentId })
+                .HasDatabaseName("IX_BacklogItems_Schedulable");
+
+            // Index for repository queries
+            entity.HasIndex(e => e.RepositoryId)
+                .HasDatabaseName("IX_BacklogItems_RepositoryId");
+
             entity.HasMany(e => e.Tasks)
-                .WithOne(t => t.Repository)
-                .HasForeignKey(t => t.RepositoryId)
+                .WithOne(t => t.BacklogItem)
+                .HasForeignKey(t => t.BacklogItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Artifacts)
+                .WithOne(a => a.BacklogItem)
+                .HasForeignKey(a => a.BacklogItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.HumanGates)
+                .WithOne(g => g.BacklogItem)
+                .HasForeignKey(g => g.BacklogItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Logs)
+                .WithOne(l => l.BacklogItem)
+                .HasForeignKey(l => l.BacklogItemId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -57,37 +109,18 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.AssignedAgentId).HasMaxLength(100);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
             entity.Property(e => e.PauseReason).HasMaxLength(500);
-            entity.Property(e => e.DerivedState)
-                .HasConversion<string>()
-                .HasMaxLength(20);
 
             // Index for scheduler queries (schedulable tasks)
             entity.HasIndex(e => new { e.State, e.IsPaused, e.AssignedAgentId })
                 .HasDatabaseName("IX_Tasks_Schedulable");
 
-            // Index for hierarchy queries (children by parent)
-            entity.HasIndex(e => e.ParentId)
-                .HasDatabaseName("IX_Tasks_ParentId");
+            // Index for backlog item queries
+            entity.HasIndex(e => new { e.BacklogItemId, e.ExecutionOrder })
+                .HasDatabaseName("IX_Tasks_BacklogItem_Order");
 
             // Index for repository queries
             entity.HasIndex(e => e.RepositoryId)
                 .HasDatabaseName("IX_Tasks_RepositoryId");
-
-            // Self-referential relationship for task hierarchy
-            entity.HasOne(e => e.Parent)
-                .WithMany(e => e.Children)
-                .HasForeignKey(e => e.ParentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(e => e.Logs)
-                .WithOne(l => l.Task)
-                .HasForeignKey(l => l.TaskId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(e => e.Artifacts)
-                .WithOne(a => a.Task)
-                .HasForeignKey(a => a.TaskId)
-                .OnDelete(DeleteBehavior.Cascade);
 
             // Agent context detection fields
             entity.Property(e => e.DetectedLanguage).HasMaxLength(50);
@@ -100,17 +133,26 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
             entity.Property(e => e.HumanInputReason).HasMaxLength(1000);
 
-            // Subtasks relationship
-            entity.HasMany(e => e.Subtasks)
-                .WithOne(s => s.ParentTask)
-                .HasForeignKey(s => s.ParentTaskId)
+            entity.HasMany(e => e.Logs)
+                .WithOne(l => l.Task)
+                .HasForeignKey(l => l.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Human gates relationship
+            entity.HasMany(e => e.Artifacts)
+                .WithOne(a => a.Task)
+                .HasForeignKey(a => a.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasMany(e => e.HumanGates)
                 .WithOne(g => g.Task)
                 .HasForeignKey(g => g.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Repository relationship (through BacklogItem, but also direct FK for queries)
+            entity.HasOne(e => e.Repository)
+                .WithMany()
+                .HasForeignKey(e => e.RepositoryId)
+                .OnDelete(DeleteBehavior.Restrict);  // Prevent cascade conflict
         });
 
         modelBuilder.Entity<TaskLogEntity>(entity =>
@@ -125,6 +167,10 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             // Index for retrieving logs by task (ordered by timestamp)
             entity.HasIndex(e => new { e.TaskId, e.Timestamp })
                 .HasDatabaseName("IX_TaskLogs_Task_Timestamp");
+
+            // Index for retrieving logs by backlog item (ordered by timestamp)
+            entity.HasIndex(e => new { e.BacklogItemId, e.Timestamp })
+                .HasDatabaseName("IX_TaskLogs_BacklogItem_Timestamp");
         });
 
         modelBuilder.Entity<NotificationEntity>(entity =>
@@ -152,9 +198,12 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.ProducedInState)
                 .HasConversion<string>()
                 .HasMaxLength(20);
-            entity.Property(e => e.ArtifactType)
+            entity.Property(e => e.ProducedInBacklogState)
                 .HasConversion<string>()
                 .HasMaxLength(20);
+            entity.Property(e => e.ArtifactType)
+                .HasConversion<string>()
+                .HasMaxLength(30);
             entity.Property(e => e.AgentId).HasMaxLength(100);
 
             // Index for retrieving artifacts by task (ordered by creation)
@@ -165,49 +214,11 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.HasIndex(e => new { e.TaskId, e.ProducedInState })
                 .HasDatabaseName("IX_AgentArtifacts_Task_State");
 
-            // Index for retrieving artifacts by subtask
-            entity.HasIndex(e => new { e.SubtaskId, e.CreatedAt })
-                .HasDatabaseName("IX_AgentArtifacts_Subtask_CreatedAt");
+            // Index for retrieving artifacts by backlog item (ordered by creation)
+            entity.HasIndex(e => new { e.BacklogItemId, e.CreatedAt })
+                .HasDatabaseName("IX_AgentArtifacts_BacklogItem_CreatedAt");
 
             entity.Property(e => e.HumanInputReason).HasMaxLength(1000);
-        });
-
-        modelBuilder.Entity<SubtaskEntity>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Description).IsRequired();
-            entity.Property(e => e.EstimatedScope)
-                .HasConversion<string>()
-                .HasMaxLength(20);
-            entity.Property(e => e.Status)
-                .HasConversion<string>()
-                .HasMaxLength(20);
-            entity.Property(e => e.CurrentStage)
-                .HasConversion<string>()
-                .HasMaxLength(20);
-            entity.Property(e => e.WorktreePath).HasMaxLength(500);
-            entity.Property(e => e.BranchName).HasMaxLength(200);
-            entity.Property(e => e.FailureReason).HasMaxLength(2000);
-            entity.Property(e => e.ConfidenceScore).HasPrecision(3, 2);
-
-            // Index for retrieving subtasks by parent task
-            entity.HasIndex(e => new { e.ParentTaskId, e.ExecutionOrder })
-                .HasDatabaseName("IX_Subtasks_Parent_Order");
-
-            // Index for finding pending subtasks
-            entity.HasIndex(e => e.Status)
-                .HasDatabaseName("IX_Subtasks_Status");
-
-            entity.HasOne(e => e.ParentTask)
-                .WithMany(t => t.Subtasks)
-                .HasForeignKey(e => e.ParentTaskId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(e => e.Artifacts)
-                .WithOne(a => a.Subtask)
-                .HasForeignKey(a => a.SubtaskId)
-                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<HumanGateEntity>(entity =>
@@ -224,19 +235,13 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.Property(e => e.ResolvedBy).HasMaxLength(200);
             entity.Property(e => e.Resolution).HasMaxLength(2000);
 
-            // Index for finding pending gates
+            // Index for finding pending gates by task
             entity.HasIndex(e => new { e.TaskId, e.Status })
                 .HasDatabaseName("IX_HumanGates_Task_Status");
 
-            entity.HasOne(e => e.Task)
-                .WithMany(t => t.HumanGates)
-                .HasForeignKey(e => e.TaskId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Subtask)
-                .WithMany(s => s.HumanGates)
-                .HasForeignKey(e => e.SubtaskId)
-                .OnDelete(DeleteBehavior.Cascade);
+            // Index for finding pending gates by backlog item
+            entity.HasIndex(e => new { e.BacklogItemId, e.Status })
+                .HasDatabaseName("IX_HumanGates_BacklogItem_Status");
         });
 
         modelBuilder.Entity<RollbackRecordEntity>(entity =>
@@ -254,11 +259,6 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
             entity.HasOne(e => e.Task)
                 .WithMany()
                 .HasForeignKey(e => e.TaskId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(e => e.Subtask)
-                .WithMany()
-                .HasForeignKey(e => e.SubtaskId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
     }

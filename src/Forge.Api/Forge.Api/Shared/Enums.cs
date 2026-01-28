@@ -3,14 +3,28 @@ using System.Text.Json.Serialization;
 namespace Forge.Api.Shared;
 
 /// <summary>
+/// Backlog item states. Serialized as PascalCase.
+/// Flow: New → Refining → Ready → Splitting → Executing → Done
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum BacklogItemState
+{
+    New,        // Human creates item, waiting to be refined
+    Refining,   // Optimizer agent asks questions, improves spec (can cycle)
+    Ready,      // Spec approved, waiting for split
+    Splitting,  // Split agent creating tasks
+    Executing,  // Tasks in progress
+    Done        // All tasks completed
+}
+
+/// <summary>
 /// Pipeline states for task workflow. Serialized as PascalCase.
-/// Flow: Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+/// Flow: Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+/// Note: Tasks are leaf units created from BacklogItem splitting.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PipelineState
 {
-    Backlog,
-    Split,        // Task decomposition into subtasks
     Research,     // Codebase analysis and pattern discovery
     Planning,     // Test-first implementation design
     Implementing, // Code generation (tests first, then implementation)
@@ -100,31 +114,15 @@ public enum ArtifactType
 }
 
 /// <summary>
-/// Status of a subtask within a split task.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<SubtaskStatus>))]
-public enum SubtaskStatus
-{
-    [JsonStringEnumMemberName("pending")]
-    Pending,
-    [JsonStringEnumMemberName("in_progress")]
-    InProgress,
-    [JsonStringEnumMemberName("completed")]
-    Completed,
-    [JsonStringEnumMemberName("failed")]
-    Failed,
-    [JsonStringEnumMemberName("skipped")]
-    Skipped
-}
-
-/// <summary>
 /// Types of human gates in the pipeline.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<HumanGateType>))]
 public enum HumanGateType
 {
+    [JsonStringEnumMemberName("refining")]
+    Refining,    // Conditional - triggered when confidence < threshold during BacklogItem refining
     [JsonStringEnumMemberName("split")]
-    Split,       // Conditional - triggered when confidence < threshold
+    Split,       // Conditional - triggered when confidence < threshold during BacklogItem splitting
     [JsonStringEnumMemberName("planning")]
     Planning,    // Conditional - triggered when confidence < threshold or high-risk
     [JsonStringEnumMemberName("pr")]
@@ -145,20 +143,6 @@ public enum HumanGateStatus
     Rejected,
     [JsonStringEnumMemberName("skipped")]
     Skipped
-}
-
-/// <summary>
-/// Estimated scope of a subtask.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<EstimatedScope>))]
-public enum EstimatedScope
-{
-    [JsonStringEnumMemberName("small")]
-    Small,    // Minor change, ~50-100 lines
-    [JsonStringEnumMemberName("medium")]
-    Medium,   // Moderate change, ~100-300 lines
-    [JsonStringEnumMemberName("large")]
-    Large     // Significant change, ~300-500 lines
 }
 
 /// <summary>
