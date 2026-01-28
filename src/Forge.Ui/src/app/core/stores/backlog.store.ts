@@ -186,7 +186,11 @@ export class BacklogStore {
         }
         const updatedItem = await firstValueFrom(this.backlogService.update(item.repositoryId, id, dto));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },
@@ -231,7 +235,11 @@ export class BacklogStore {
         const dto: TransitionBacklogItemDto = { targetState };
         const updatedItem = await firstValueFrom(this.backlogService.transition(item.repositoryId, id, dto));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },
@@ -250,7 +258,11 @@ export class BacklogStore {
         }
         const updatedItem = await firstValueFrom(this.backlogService.startAgent(item.repositoryId, id));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },
@@ -269,7 +281,11 @@ export class BacklogStore {
         }
         const updatedItem = await firstValueFrom(this.backlogService.abortAgent(item.repositoryId, id));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },
@@ -289,7 +305,11 @@ export class BacklogStore {
         const dto: PauseBacklogItemDto = { reason };
         const updatedItem = await firstValueFrom(this.backlogService.pause(item.repositoryId, id, dto));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },
@@ -308,7 +328,11 @@ export class BacklogStore {
         }
         const updatedItem = await firstValueFrom(this.backlogService.resume(item.repositoryId, id));
         this.items.update(items =>
-          items.map(i => (i.id === id ? updatedItem : i))
+          items.map(i => {
+            if (i.id !== id) return i;
+            // Keep the newer data (SSE may have arrived with fresher state)
+            return new Date(updatedItem.updatedAt) >= new Date(i.updatedAt) ? updatedItem : i;
+          })
         );
         return updatedItem;
       },

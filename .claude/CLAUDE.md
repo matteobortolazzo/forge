@@ -12,15 +12,15 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 forge/
 ├── agents/                         # Agent configuration (YAML)
 │   ├── defaults/                   # Default agents for each pipeline state
-│   │   ├── split.yml               # Split agent (task decomposition into subtasks)
+│   │   ├── refining.yml            # Refining agent (backlog item specification refinement)
+│   │   ├── split.yml               # Split agent (backlog item decomposition into tasks)
 │   │   ├── research.yml            # Research agent (codebase analysis)
 │   │   ├── planning.yml            # Planning agent (test-first design)
 │   │   ├── implementing.yml        # Implementation agent (code generation)
 │   │   ├── simplifying.yml         # Simplifying agent (over-engineering review)
 │   │   ├── verifying.yml           # Verifying agent (comprehensive verification)
 │   │   ├── reviewing.yml           # Review agent (code review)
-│   │   ├── documenting.yml         # Documentation maintenance agent
-│   │   └── testing.yml             # Testing agent (legacy - replaced by verifying)
+│   │   └── documenting.yml         # Documentation maintenance agent
 │   └── variants/                   # Framework-specific variants
 │       ├── implementing.angular.yml
 │       ├── implementing.dotnet.yml

@@ -71,6 +71,26 @@ mcp_servers:
   - primeng
 ```
 
+## Backlog Item Agents
+
+Backlog items have their own pipeline with dedicated agents:
+
+| State | Agent File | Description |
+|-------|------------|-------------|
+| Refining | `refining.yml` | Refines specifications, identifies ambiguities, suggests acceptance criteria |
+| Splitting | `split.yml` | Decomposes backlog items into sequential, PR-sized tasks |
+
+Backlog agents use `backlog_state` instead of `state` in their YAML configuration.
+
+### Backlog Template Variables
+
+| Variable | Description |
+|----------|-------------|
+| `{backlogItem.title}` | Backlog item title |
+| `{backlogItem.description}` | Backlog item description |
+| `{backlogItem.acceptanceCriteria}` | Backlog item acceptance criteria |
+| `{backlogItem.refiningIterations}` | Number of refinement iterations |
+
 ## Template Variables
 
 Available placeholders in prompts:
@@ -101,7 +121,8 @@ Available placeholders in prompts:
 
 | Type | Produced By | Contains |
 |------|-------------|----------|
-| `task_split` | Split agent | Subtask decomposition, execution order, dependencies |
+| `refined_spec` | Refining agent | Clarifying questions, suggested improvements, scope assessment |
+| `task_split` | Split agent | Task decomposition, execution order, acceptance criteria |
 | `research_findings` | Research agent | Existing code, patterns, affected files, external references |
 | `plan` | Planning agent | Test specifications, implementation steps, verification commands |
 | `implementation` | Implementing agent | Files changed, test results, verification log |
@@ -109,7 +130,6 @@ Available placeholders in prompts:
 | `verification_report` | Verifying agent | Full test suite results, build status, regression check |
 | `review` | Reviewing agent | Review findings, suggested changes, approval status |
 | `documentation_update` | Documenting agent | Files modified, files reviewed, recommendations |
-| `test` | Testing agent (legacy) | Test results, coverage report |
 | `general` | Any agent | Unstructured output |
 
 ## Context Detection

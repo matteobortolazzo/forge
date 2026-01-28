@@ -63,7 +63,8 @@ public class AgentConfigLoader : IAgentConfigLoader
     {
         // Default to agents/ directory relative to content root, can be overridden
         var contentRoot = configuration["CONTENT_ROOT"] ?? Directory.GetCurrentDirectory();
-        _agentsBasePath = configuration["AGENTS_PATH"] ?? Path.Combine(contentRoot, "..", "..", "..", "agents");
+        var rawPath = configuration["AGENTS_PATH"] ?? Path.Combine(contentRoot, "..", "..", "..", "agents");
+        _agentsBasePath = Path.GetFullPath(rawPath);
         _logger = logger;
 
         _deserializer = new DeserializerBuilder()
