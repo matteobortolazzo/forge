@@ -160,7 +160,15 @@ export class BacklogStore {
           throw new Error('No repository selected');
         }
         const newItem = await firstValueFrom(this.backlogService.create(repoId, dto));
-        this.items.update(items => [newItem, ...items]);
+        // Only add if not already present (SSE event may have arrived first)
+        this.items.update(items => {
+          const exists = items.some(i => i.id === newItem.id);
+          if (exists) {
+            // SSE beat us - update instead of add
+            return items.map(i => (i.id === newItem.id ? newItem : i));
+          }
+          return [newItem, ...items];
+        });
         return newItem;
       },
       { setLoading: false },

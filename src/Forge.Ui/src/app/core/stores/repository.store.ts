@@ -107,6 +107,12 @@ export class RepositoryStore {
     try {
       const newRepo = await firstValueFrom(this.repositoryService.create(dto));
       this._repositories.update(repos => {
+        // Only add if not already present (SSE event may have arrived first)
+        const exists = repos.some(r => r.id === newRepo.id);
+        if (exists) {
+          // SSE beat us - update instead of add
+          return repos.map(r => (r.id === newRepo.id ? newRepo : r));
+        }
         // New repo goes at the beginning (newest first, consistent with backend)
         return [newRepo, ...repos];
       });
