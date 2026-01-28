@@ -35,12 +35,6 @@ export const routes: Routes = [
         m => m.TaskDetailComponent
       ),
   },
-  // Legacy board view (for compatibility)
-  {
-    path: 'board',
-    loadComponent: () =>
-      import('./features/board/board.component').then(m => m.BoardComponent),
-  },
   // Catch-all redirect
   {
     path: '**',
