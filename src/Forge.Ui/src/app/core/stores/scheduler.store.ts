@@ -21,6 +21,7 @@ export class SchedulerStore {
   readonly isEnabled = computed(() => this.status()?.isEnabled ?? false);
   readonly isAgentRunning = computed(() => this.status()?.isAgentRunning ?? false);
   readonly currentTaskId = computed(() => this.status()?.currentTaskId);
+  readonly currentBacklogItemId = computed(() => this.status()?.currentBacklogItemId);
   readonly pendingTaskCount = computed(() => this.status()?.pendingTaskCount ?? 0);
   readonly pausedTaskCount = computed(() => this.status()?.pausedTaskCount ?? 0);
 
@@ -74,11 +75,12 @@ export class SchedulerStore {
     } : null);
   }
 
-  updateAgentStatus(isRunning: boolean, taskId?: string): void {
+  updateAgentStatus(isRunning: boolean, taskId?: string, backlogItemId?: string): void {
     this.status.update(s => s ? {
       ...s,
       isAgentRunning: isRunning,
       currentTaskId: taskId,
+      currentBacklogItemId: backlogItemId,
     } : null);
   }
 

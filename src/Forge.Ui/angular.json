@@ -70,7 +70,8 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "exclude": ["e2e/**"]
+            "exclude": ["e2e/**"],
+            "setupFiles": ["src/test-setup.ts"]
           }
         }
       }

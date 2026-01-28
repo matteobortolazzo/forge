@@ -6,63 +6,86 @@ import {
   computed,
   OnInit,
 } from '@angular/core';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { SlicePipe } from '@angular/common';
 import { TaskStore } from '../../core/stores/task.store';
-import { NotificationStore } from '../../core/stores/notification.store';
-import { SchedulerStore } from '../../core/stores/scheduler.store';
+import { BacklogStore } from '../../core/stores/backlog.store';
 import {
   Task,
   PipelineState,
   Priority,
   PIPELINE_STATES,
   PRIORITIES,
-  CreateTaskDto,
 } from '../../shared/models';
-import { TaskRowComponent } from './task-row.component';
-import { SplitTaskDialogComponent } from './split-task-dialog.component';
-import { CreateTaskDialogComponent } from '../board/create-task-dialog.component';
+import { StateBadgeComponent } from '../../shared/components/state-badge.component';
+import { BacklogStateBadgeComponent } from '../../shared/components/backlog-state-badge/backlog-state-badge.component';
+import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
+import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
+import { PausedBadgeComponent } from '../../shared/components/paused-badge.component';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner.component';
 import { ErrorAlertComponent } from '../../shared/components/error-alert.component';
-import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 
-type SortField = 'priority' | 'state' | 'createdAt' | 'title';
+type SortField = 'executionOrder' | 'priority' | 'state' | 'title';
 type SortDirection = 'asc' | 'desc';
 
 @Component({
   selector: 'app-task-queue',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
     FormsModule,
-    TaskRowComponent,
-    SplitTaskDialogComponent,
-    CreateTaskDialogComponent,
+    SlicePipe,
+    StateBadgeComponent,
+    BacklogStateBadgeComponent,
+    PriorityBadgeComponent,
+    AgentIndicatorComponent,
+    PausedBadgeComponent,
     LoadingSpinnerComponent,
     ErrorAlertComponent,
-    AppHeaderComponent,
   ],
   template: `
     <div class="flex h-screen flex-col bg-gray-100 dark:bg-gray-950">
       <!-- Header -->
-      <app-header>
-        <button
-          type="button"
-          class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          (click)="openCreateDialog()"
-        >
-          <svg
-            class="h-4 w-4"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
+      <header class="flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+        <!-- Breadcrumb -->
+        <nav class="flex items-center gap-2 text-sm" aria-label="Breadcrumb">
+          <a
+            routerLink="/backlog"
+            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
-            <path
-              d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"
-            />
+            Backlog
+          </a>
+          @if (backlogItem()) {
+            <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+            </svg>
+            <a
+              [routerLink]="['/backlog', backlogItem()!.id]"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {{ backlogItem()!.title | slice:0:30 }}{{ backlogItem()!.title.length > 30 ? '...' : '' }}
+            </a>
+          }
+          <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
           </svg>
-          New Task
-        </button>
-      </app-header>
+          <span class="font-medium text-gray-900 dark:text-gray-100">Tasks</span>
+        </nav>
+
+        <div class="flex-1"></div>
+
+        @if (backlogItem()) {
+          <div class="flex items-center gap-2">
+            <app-backlog-state-badge [state]="backlogItem()!.state" />
+            @if (backlogItem()!.progress) {
+              <span class="text-sm text-gray-500 dark:text-gray-400">
+                {{ backlogItem()!.progress!.completed }}/{{ backlogItem()!.progress!.total }} tasks
+              </span>
+            }
+          </div>
+        }
+      </header>
 
       <!-- Filters & Sort Bar -->
       <div
@@ -126,9 +149,9 @@ type SortDirection = 'asc' | 'desc';
             [ngModel]="sortField()"
             (ngModelChange)="sortField.set($event)"
           >
+            <option value="executionOrder">Execution Order</option>
             <option value="priority">Priority</option>
             <option value="state">State</option>
-            <option value="createdAt">Created</option>
             <option value="title">Title</option>
           </select>
           <button
@@ -145,6 +168,7 @@ type SortDirection = 'asc' | 'desc';
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
+              aria-hidden="true"
             >
               <path
                 fill-rule="evenodd"
@@ -185,6 +209,7 @@ type SortDirection = 'asc' | 'desc';
               viewBox="0 0 24 24"
               stroke-width="1.5"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 stroke-linecap="round"
@@ -197,7 +222,7 @@ type SortDirection = 'asc' | 'desc';
               @if (stateFilter() || priorityFilter()) {
                 Try adjusting your filters
               } @else {
-                Create a new task to get started
+                Tasks will appear when this backlog item is split
               }
             </p>
           </div>
@@ -208,43 +233,76 @@ type SortDirection = 'asc' | 'desc';
             <div
               class="sticky top-0 z-10 flex items-center gap-4 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"
             >
-              <div class="w-6 flex-shrink-0"></div>
+              <div class="w-8 flex-shrink-0 text-center">#</div>
               <div class="min-w-0 flex-1">Task</div>
               <div class="w-28 flex-shrink-0">State</div>
               <div class="w-20 flex-shrink-0">Priority</div>
-              <div class="w-24 flex-shrink-0">Progress</div>
-              <div class="w-32 flex-shrink-0 text-right">Actions</div>
+              <div class="w-20 flex-shrink-0">Status</div>
             </div>
 
             <!-- Task Rows -->
             @for (task of filteredTasks(); track task.id) {
-              <app-task-row
-                [task]="task"
-                [children]="taskStore.getChildrenOf(task.id)"
-                (split)="onSplitTask($event)"
-              />
+              <button
+                type="button"
+                class="flex w-full items-center gap-4 border-b border-gray-200 px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/50"
+                [class.bg-blue-50]="task.assignedAgentId"
+                [class.dark:bg-blue-950/30]="task.assignedAgentId"
+                (click)="onTaskClick(task)"
+              >
+                <!-- Execution Order -->
+                <div class="flex w-8 flex-shrink-0 items-center justify-center">
+                  <span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                    {{ task.executionOrder }}
+                  </span>
+                </div>
+
+                <!-- Title & Description -->
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-gray-900 dark:text-gray-100">
+                      {{ task.title }}
+                    </span>
+                    @if (task.hasError) {
+                      <span
+                        class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200"
+                        aria-label="Task has error"
+                      >
+                        Error
+                      </span>
+                    }
+                  </div>
+                  @if (task.description) {
+                    <p class="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
+                      {{ task.description }}
+                    </p>
+                  }
+                </div>
+
+                <!-- State Badge -->
+                <div class="w-28 flex-shrink-0">
+                  <app-state-badge [state]="task.state" />
+                </div>
+
+                <!-- Priority Badge -->
+                <div class="w-20 flex-shrink-0">
+                  <app-priority-badge [priority]="task.priority" />
+                </div>
+
+                <!-- Status Indicators -->
+                <div class="flex w-20 flex-shrink-0 items-center gap-1">
+                  @if (task.assignedAgentId) {
+                    <app-agent-indicator />
+                  }
+                  @if (task.isPaused) {
+                    <app-paused-badge />
+                  }
+                </div>
+              </button>
             }
           </div>
         }
       </main>
     </div>
-
-    <!-- Create Task Dialog -->
-    <app-create-task-dialog
-      [isOpen]="isDialogOpen()"
-      (create)="onCreateTask($event)"
-      (cancel)="closeCreateDialog()"
-    />
-
-    <!-- Split Task Dialog -->
-    @if (splitDialogTaskId()) {
-      <app-split-task-dialog
-        [taskId]="splitDialogTaskId()!"
-        [taskTitle]="getSplitTaskTitle()"
-        (split)="onConfirmSplit($event)"
-        (cancel)="closeSplitDialog()"
-      />
-    }
   `,
   styles: `
     :host {
@@ -254,33 +312,34 @@ type SortDirection = 'asc' | 'desc';
   `,
 })
 export class TaskQueueComponent implements OnInit {
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   protected readonly taskStore = inject(TaskStore);
-  private readonly notificationStore = inject(NotificationStore);
-  protected readonly schedulerStore = inject(SchedulerStore);
+  protected readonly backlogStore = inject(BacklogStore);
 
   readonly pipelineStates = PIPELINE_STATES;
   readonly priorities = PRIORITIES;
 
-  readonly isDialogOpen = signal(false);
-  readonly splitDialogTaskId = signal<string | null>(null);
+  private backlogItemId = '';
 
   // Filter and sort state
   readonly stateFilter = signal<PipelineState | ''>('');
   readonly priorityFilter = signal<Priority | ''>('');
-  readonly sortField = signal<SortField>('priority');
-  readonly sortDirection = signal<SortDirection>('desc');
+  readonly sortField = signal<SortField>('executionOrder');
+  readonly sortDirection = signal<SortDirection>('asc');
 
-  // Computed: filtered and sorted root tasks
+  readonly backlogItem = computed(() => {
+    return this.backlogStore.getItemById(this.backlogItemId);
+  });
+
+  // Computed: filtered and sorted tasks
   readonly filteredTasks = computed(() => {
-    let tasks = this.taskStore.rootTasks();
+    let tasks = this.taskStore.backlogItemTasks();
 
     // Apply state filter
     const stateFilterValue = this.stateFilter();
     if (stateFilterValue) {
-      tasks = tasks.filter(t => {
-        const displayState = t.derivedState ?? t.state;
-        return displayState === stateFilterValue;
-      });
+      tasks = tasks.filter(t => t.state === stateFilterValue);
     }
 
     // Apply priority filter
@@ -299,98 +358,60 @@ export class TaskQueueComponent implements OnInit {
       low: 1,
     };
     const stateOrder: Record<PipelineState, number> = {
-      Backlog: 0,
+      Research: 0,
       Planning: 1,
       Implementing: 2,
-      Reviewing: 3,
-      Testing: 4,
-      PrReady: 5,
-      Done: 6,
+      Simplifying: 3,
+      Verifying: 4,
+      Reviewing: 5,
+      PrReady: 6,
+      Done: 7,
     };
 
     tasks = [...tasks].sort((a, b) => {
       let comparison = 0;
       switch (field) {
+        case 'executionOrder':
+          comparison = a.executionOrder - b.executionOrder;
+          break;
         case 'priority':
           comparison = priorityOrder[b.priority] - priorityOrder[a.priority];
           break;
-        case 'state': {
-          const stateA = a.derivedState ?? a.state;
-          const stateB = b.derivedState ?? b.state;
-          comparison = stateOrder[stateA] - stateOrder[stateB];
-          break;
-        }
-        case 'createdAt':
-          comparison =
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'state':
+          comparison = stateOrder[a.state] - stateOrder[b.state];
           break;
         case 'title':
           comparison = a.title.localeCompare(b.title);
           break;
       }
-      return direction === 'desc' ? comparison : -comparison;
+      return direction === 'asc' ? comparison : -comparison;
     });
 
     return tasks;
   });
 
   ngOnInit(): void {
-    // SSE connection is managed by App component
-    // Repositories are loaded in App component (sidebar), tasks load when repository is selected
-    this.loadNotifications();
-    this.loadSchedulerStatus();
+    this.backlogItemId = this.route.snapshot.paramMap.get('backlogItemId') || '';
+    this.loadData();
+  }
+
+  private async loadData(): Promise<void> {
+    // Set context for task store
+    this.taskStore.setBacklogItemContext(this.backlogItemId);
+
+    // Load backlog items and tasks
+    await Promise.all([
+      this.backlogStore.loadItems(),
+      this.taskStore.loadTasks(this.backlogItemId),
+    ]);
   }
 
   loadTasks(): void {
-    this.taskStore.loadTasks();
+    this.taskStore.loadTasks(this.backlogItemId);
   }
 
-  loadSchedulerStatus(): void {
-    this.schedulerStore.loadStatus();
-  }
-
-  loadNotifications(): void {
-    this.notificationStore.loadNotifications();
-  }
-
-  openCreateDialog(): void {
-    this.isDialogOpen.set(true);
-  }
-
-  closeCreateDialog(): void {
-    this.isDialogOpen.set(false);
-  }
-
-  async onCreateTask(dto: CreateTaskDto): Promise<void> {
-    const task = await this.taskStore.createTask(dto);
-    if (task) {
-      this.closeCreateDialog();
-    }
-  }
-
-  onSplitTask(taskId: string): void {
-    this.splitDialogTaskId.set(taskId);
-  }
-
-  closeSplitDialog(): void {
-    this.splitDialogTaskId.set(null);
-  }
-
-  getSplitTaskTitle(): string {
-    const taskId = this.splitDialogTaskId();
-    if (!taskId) return '';
-    const task = this.taskStore.getTaskById(taskId);
-    return task?.title ?? '';
-  }
-
-  async onConfirmSplit(subtasks: { title: string; description: string; priority: Priority }[]): Promise<void> {
-    const taskId = this.splitDialogTaskId();
-    if (!taskId) return;
-
-    const success = await this.taskStore.splitTask(taskId, subtasks);
-    if (success) {
-      this.closeSplitDialog();
-    }
+  onTaskClick(task: Task): void {
+    this.router.navigate(['/backlog', this.backlogItemId, 'tasks', task.id]);
   }
 
   toggleSortDirection(): void {

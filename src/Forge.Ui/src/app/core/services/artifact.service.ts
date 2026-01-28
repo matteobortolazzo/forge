@@ -8,22 +8,35 @@ export class ArtifactService {
   private readonly http = inject(HttpClient);
   private readonly useMocks = false;
 
+  private getTaskUrl(repositoryId: string, backlogItemId: string, taskId: string): string {
+    return `/api/repositories/${repositoryId}/backlog/${backlogItemId}/tasks/${taskId}`;
+  }
+
   /**
    * Gets all artifacts for a task.
    */
-  getArtifactsForTask(repositoryId: string, taskId: string): Observable<Artifact[]> {
+  getArtifactsForTask(
+    repositoryId: string,
+    backlogItemId: string,
+    taskId: string
+  ): Observable<Artifact[]> {
     if (this.useMocks) {
       return of([]).pipe(delay(200));
     }
     return this.http.get<Artifact[]>(
-      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts`
+      `${this.getTaskUrl(repositoryId, backlogItemId, taskId)}/artifacts`
     );
   }
 
   /**
    * Gets a specific artifact by ID.
    */
-  getArtifact(repositoryId: string, taskId: string, artifactId: string): Observable<Artifact> {
+  getArtifact(
+    repositoryId: string,
+    backlogItemId: string,
+    taskId: string,
+    artifactId: string
+  ): Observable<Artifact> {
     if (this.useMocks) {
       return of({
         id: artifactId,
@@ -35,14 +48,18 @@ export class ArtifactService {
       } as Artifact).pipe(delay(200));
     }
     return this.http.get<Artifact>(
-      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/${artifactId}`
+      `${this.getTaskUrl(repositoryId, backlogItemId, taskId)}/artifacts/${artifactId}`
     );
   }
 
   /**
    * Gets the latest artifact for a task.
    */
-  getLatestArtifact(repositoryId: string, taskId: string): Observable<Artifact> {
+  getLatestArtifact(
+    repositoryId: string,
+    backlogItemId: string,
+    taskId: string
+  ): Observable<Artifact> {
     if (this.useMocks) {
       return of({
         id: 'mock-latest',
@@ -54,19 +71,24 @@ export class ArtifactService {
       } as Artifact).pipe(delay(200));
     }
     return this.http.get<Artifact>(
-      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/latest`
+      `${this.getTaskUrl(repositoryId, backlogItemId, taskId)}/artifacts/latest`
     );
   }
 
   /**
    * Gets artifacts by pipeline state.
    */
-  getArtifactsByState(repositoryId: string, taskId: string, state: string): Observable<Artifact[]> {
+  getArtifactsByState(
+    repositoryId: string,
+    backlogItemId: string,
+    taskId: string,
+    state: string
+  ): Observable<Artifact[]> {
     if (this.useMocks) {
       return of([]).pipe(delay(200));
     }
     return this.http.get<Artifact[]>(
-      `/api/repositories/${repositoryId}/tasks/${taskId}/artifacts/by-state/${state}`
+      `${this.getTaskUrl(repositoryId, backlogItemId, taskId)}/artifacts/by-state/${state}`
     );
   }
 }

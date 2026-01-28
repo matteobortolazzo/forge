@@ -44,12 +44,16 @@ export class ArtifactStore {
   /**
    * Loads artifacts for a specific task.
    */
-  async loadArtifactsForTask(repositoryId: string, taskId: string): Promise<void> {
+  async loadArtifactsForTask(
+    repositoryId: string,
+    backlogItemId: string,
+    taskId: string
+  ): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
       const artifacts = await firstValueFrom(
-        this.artifactService.getArtifactsForTask(repositoryId, taskId)
+        this.artifactService.getArtifactsForTask(repositoryId, backlogItemId, taskId)
       );
       this.setArtifactsForTask(taskId, artifacts);
     } catch (err) {
@@ -63,15 +67,20 @@ export class ArtifactStore {
    * Adds an artifact from an SSE event.
    */
   addArtifactFromEvent(artifact: Artifact): void {
+    // Skip if no taskId (might be a backlog item artifact)
+    if (!artifact.taskId) {
+      return;
+    }
+    const taskId = artifact.taskId;
     this.artifactsByTaskId.update(map => {
-      const existingArtifacts = map.get(artifact.taskId) ?? [];
+      const existingArtifacts = map.get(taskId) ?? [];
       // Check if artifact already exists
       if (existingArtifacts.some(a => a.id === artifact.id)) {
         return map; // No change needed
       }
       // Only create new Map when actually adding
       const newMap = new Map(map);
-      newMap.set(artifact.taskId, [...existingArtifacts, artifact]);
+      newMap.set(taskId, [...existingArtifacts, artifact]);
       return newMap;
     });
   }

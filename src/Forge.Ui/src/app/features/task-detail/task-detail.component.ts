@@ -8,13 +8,14 @@ import {
   OnDestroy,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { SlicePipe } from '@angular/common';
 import { TaskStore } from '../../core/stores/task.store';
+import { BacklogStore } from '../../core/stores/backlog.store';
 import { LogStore } from '../../core/stores/log.store';
-import { NotificationStore } from '../../core/stores/notification.store';
 import { ArtifactStore } from '../../core/stores/artifact.store';
 import { SseService } from '../../core/services/sse.service';
 import { TaskService } from '../../core/services/task.service';
-import { Task, TaskLog, Artifact, ServerEvent, PIPELINE_STATES, PipelineState, TaskSplitPayload, ChildAddedPayload } from '../../shared/models';
+import { Task, TaskLog, Artifact, ServerEvent, BacklogItem } from '../../shared/models';
 import { StateBadgeComponent } from '../../shared/components/state-badge.component';
 import { PriorityBadgeComponent } from '../../shared/components/priority-badge.component';
 import { AgentIndicatorComponent } from '../../shared/components/agent-indicator.component';
@@ -30,6 +31,7 @@ import { Subscription } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
+    SlicePipe,
     StateBadgeComponent,
     PriorityBadgeComponent,
     AgentIndicatorComponent,
@@ -43,16 +45,32 @@ import { Subscription } from 'rxjs';
     <div class="flex h-screen flex-col bg-gray-100 dark:bg-gray-950">
       <!-- Header -->
       <header class="flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-        <a
-          routerLink="/"
-          class="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          aria-label="Back to board"
-        >
-          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path fill-rule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clip-rule="evenodd" />
+        <!-- Breadcrumb -->
+        <nav class="flex items-center gap-2 text-sm" aria-label="Breadcrumb">
+          <a
+            routerLink="/backlog"
+            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Backlog
+          </a>
+          @if (backlogItem()) {
+            <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+            </svg>
+            <a
+              [routerLink]="['/backlog', backlogItem()!.id]"
+              class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {{ backlogItem()!.title | slice:0:30 }}{{ backlogItem()!.title.length > 30 ? '...' : '' }}
+            </a>
+          }
+          <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
           </svg>
-          <span class="text-sm font-medium">Back to Board</span>
-        </a>
+          <span class="font-medium text-gray-900 dark:text-gray-100">
+            Task #{{ task()?.executionOrder }}
+          </span>
+        </nav>
       </header>
 
       <!-- Main Content -->
@@ -69,10 +87,10 @@ import { Subscription } from 'rxjs';
                 The task you're looking for doesn't exist or has been deleted.
               </p>
               <a
-                routerLink="/"
+                routerLink="/backlog"
                 class="mt-4 inline-block text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
               >
-                Return to board
+                Return to backlog
               </a>
             </div>
           </div>
@@ -87,53 +105,33 @@ import { Subscription } from 'rxjs';
               <app-agent-indicator [isRunning]="!!task()!.assignedAgentId" [showLabel]="true" />
             </div>
 
-            <!-- Parent Task Link (for subtasks) -->
-            @if (isSubtask() && parentTask()) {
+            <!-- Parent Backlog Item Link -->
+            @if (backlogItem()) {
               <div class="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                   <path fill-rule="evenodd" d="M12.207 2.232a.75.75 0 00.025 1.06l4.146 3.958H6.375a5.375 5.375 0 000 10.75H9.25a.75.75 0 000-1.5H6.375a3.875 3.875 0 010-7.75h10.003l-4.146 3.957a.75.75 0 001.036 1.085l5.5-5.25a.75.75 0 000-1.085l-5.5-5.25a.75.75 0 00-1.06.025z" clip-rule="evenodd" />
                 </svg>
-                <span>Subtask of</span>
+                <span>Part of</span>
                 <a
-                  [routerLink]="['/tasks', parentTask()!.id]"
+                  [routerLink]="['/backlog', backlogItem()!.id]"
                   class="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
-                  {{ parentTask()!.title }}
+                  {{ backlogItem()!.title }}
                 </a>
               </div>
             }
 
             <!-- Badges -->
             <div class="mt-4 flex flex-wrap items-center gap-2">
-              <app-state-badge [state]="displayState()" />
+              <app-state-badge [state]="task()!.state" />
               <app-priority-badge [priority]="task()!.priority" />
-              @if (isParentTask()) {
-                <span class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                  Parent Task
-                </span>
-              }
+              <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+                Task #{{ task()!.executionOrder }}
+              </span>
               @if (task()!.isPaused) {
                 <app-paused-badge [reason]="task()!.pauseReason" />
               }
             </div>
-
-            <!-- Progress (for parent tasks) -->
-            @if (isParentTask() && task()!.progress) {
-              <div class="mt-4 rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-                <div class="flex items-center justify-between text-sm">
-                  <span class="font-medium text-gray-700 dark:text-gray-300">Subtask Progress</span>
-                  <span class="text-gray-500 dark:text-gray-400">
-                    {{ task()!.progress!.completed }} / {{ task()!.progress!.total }} done
-                  </span>
-                </div>
-                <div class="mt-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700">
-                  <div
-                    class="h-2 rounded-full bg-green-500 transition-all"
-                    [style.width.%]="task()!.progress!.percent"
-                  ></div>
-                </div>
-              </div>
-            }
 
             <!-- Error Alert -->
             @if (task()!.hasError && task()!.errorMessage) {
@@ -148,7 +146,7 @@ import { Subscription } from 'rxjs';
             <!-- Description -->
             <div class="mt-6">
               <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Description</h2>
-              <p class="mt-2 text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+              <p class="mt-2 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">
                 {{ task()!.description || 'No description provided.' }}
               </p>
             </div>
@@ -185,82 +183,16 @@ import { Subscription } from 'rxjs';
                 <span class="text-gray-500 dark:text-gray-400">Retry Count</span>
                 <span class="text-gray-700 dark:text-gray-300">{{ task()!.retryCount }} / {{ task()!.maxRetries }}</span>
               </div>
-            </div>
-
-            <!-- Subtasks List (for parent tasks) -->
-            @if (isParentTask() && subtasks().length > 0) {
-              <div class="mt-6">
-                <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  Subtasks ({{ subtasks().length }})
-                </h2>
-                <div class="mt-3 space-y-2">
-                  @for (subtask of subtasks(); track subtask.id) {
-                    <a
-                      [routerLink]="['/tasks', subtask.id]"
-                      class="flex items-center gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                      [class.bg-blue-50]="subtask.assignedAgentId"
-                      [class.dark:bg-blue-950/30]="subtask.assignedAgentId"
-                    >
-                      <!-- Checkbox indicator -->
-                      <div
-                        class="flex h-5 w-5 items-center justify-center rounded-full border-2"
-                        [class.border-green-500]="subtask.state === 'Done'"
-                        [class.bg-green-500]="subtask.state === 'Done'"
-                        [class.border-gray-300]="subtask.state !== 'Done'"
-                        [class.dark:border-gray-600]="subtask.state !== 'Done'"
-                      >
-                        @if (subtask.state === 'Done') {
-                          <svg class="h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
-                          </svg>
-                        }
-                      </div>
-
-                      <!-- Subtask info -->
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                          <span
-                            class="truncate text-sm font-medium text-gray-900 dark:text-gray-100"
-                            [class.line-through]="subtask.state === 'Done'"
-                            [class.text-gray-500]="subtask.state === 'Done'"
-                          >
-                            {{ subtask.title }}
-                          </span>
-                          @if (subtask.hasError) {
-                            <span class="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200">
-                              Error
-                            </span>
-                          }
-                          @if (subtask.assignedAgentId) {
-                            <app-agent-indicator />
-                          }
-                        </div>
-                        <div class="mt-0.5 flex items-center gap-2">
-                          <app-state-badge [state]="subtask.state" />
-                          <app-priority-badge [priority]="subtask.priority" />
-                        </div>
-                      </div>
-
-                      <!-- Arrow -->
-                      <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
-                      </svg>
-                    </a>
-                  }
+              @if (task()!.confidenceScore !== undefined && task()!.confidenceScore !== null) {
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-gray-500 dark:text-gray-400">Confidence</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{ (task()!.confidenceScore! * 100).toFixed(0) }}%</span>
                 </div>
-              </div>
-            }
+              }
+            </div>
 
             <!-- Action Buttons -->
             <div class="mt-8 space-y-3">
-              <!-- Parent task notice -->
-              @if (isParentTask()) {
-                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                  <p class="font-medium">This is a parent task</p>
-                  <p class="mt-1">State is automatically derived from subtasks. Manage individual subtasks to progress.</p>
-                </div>
-              }
-
               <!-- State Transition Buttons -->
               <div class="flex gap-2">
                 @if (canMovePrevious()) {
@@ -285,6 +217,22 @@ import { Subscription } from 'rxjs';
                 }
               </div>
 
+              <!-- Start Agent Button -->
+              @if (!task()!.assignedAgentId && !task()!.isPaused && task()!.state !== 'Done') {
+                <button
+                  type="button"
+                  class="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                  (click)="startAgent()"
+                  [disabled]="isStartingAgent()"
+                >
+                  @if (isStartingAgent()) {
+                    Starting Agent...
+                  } @else {
+                    Start Agent
+                  }
+                </button>
+              }
+
               <!-- Abort Agent Button -->
               @if (task()!.assignedAgentId) {
                 <button
@@ -302,7 +250,7 @@ import { Subscription } from 'rxjs';
               }
 
               <!-- Pause/Resume Button -->
-              @if (!task()!.assignedAgentId) {
+              @if (!task()!.assignedAgentId && task()!.state !== 'Done') {
                 @if (task()!.isPaused) {
                   <button
                     type="button"
@@ -352,7 +300,7 @@ import { Subscription } from 'rxjs';
           <!-- Right Panel: Artifacts & Agent Output -->
           <div class="flex flex-1 flex-col overflow-hidden">
             <!-- Artifacts Section -->
-            @if (artifacts().length > 0 || task()!.state !== 'Backlog') {
+            @if (artifacts().length > 0) {
               <div class="h-64 shrink-0 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                 <app-artifact-panel [artifacts]="artifacts()" />
               </div>
@@ -378,9 +326,9 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly taskStore = inject(TaskStore);
+  private readonly backlogStore = inject(BacklogStore);
   private readonly logStore = inject(LogStore);
   private readonly artifactStore = inject(ArtifactStore);
-  private readonly notificationStore = inject(NotificationStore);
   private readonly taskService = inject(TaskService);
   private readonly sseService = inject(SseService);
 
@@ -389,11 +337,14 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   readonly isAborting = signal(false);
   readonly isDeleting = signal(false);
   readonly isPausing = signal(false);
+  readonly isStartingAgent = signal(false);
 
   private taskId = '';
+  private backlogItemId = '';
   private sseSubscription?: Subscription;
 
   readonly task = computed(() => this.taskStore.getTaskById(this.taskId));
+  readonly backlogItem = computed(() => this.backlogStore.getItemById(this.backlogItemId));
   readonly logs = computed(() => this.logStore.getLogsForTask(this.taskId));
   readonly artifacts = computed(() => this.artifactStore.getArtifactsForTask(this.taskId));
 
@@ -409,45 +360,16 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
 
   readonly canMoveNext = computed(() => {
     const t = this.task();
-    // Parent tasks cannot be transitioned directly
-    return t && t.childCount === 0 && !!this.nextState();
+    return t && !!this.nextState();
   });
+
   readonly canMovePrevious = computed(() => {
     const t = this.task();
-    // Parent tasks cannot be transitioned directly
-    return t && t.childCount === 0 && !!this.previousState();
-  });
-
-  // Hierarchy computed properties
-  readonly isParentTask = computed(() => {
-    const t = this.task();
-    return t ? t.childCount > 0 : false;
-  });
-
-  readonly isSubtask = computed(() => {
-    const t = this.task();
-    return t ? !!t.parentId : false;
-  });
-
-  readonly parentTask = computed(() => {
-    const t = this.task();
-    if (!t?.parentId) return null;
-    return this.taskStore.getTaskById(t.parentId);
-  });
-
-  readonly subtasks = computed(() => {
-    const t = this.task();
-    if (!t || t.childCount === 0) return [];
-    return this.taskStore.getChildrenOf(t.id);
-  });
-
-  readonly displayState = computed((): PipelineState => {
-    const t = this.task();
-    if (!t) return 'Backlog';
-    return t.derivedState ?? t.state;
+    return t && !!this.previousState();
   });
 
   ngOnInit(): void {
+    this.backlogItemId = this.route.snapshot.paramMap.get('backlogItemId') || '';
     this.taskId = this.route.snapshot.paramMap.get('id') || '';
     this.loadData();
     this.connectToSse();
@@ -461,20 +383,27 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
   private async loadData(): Promise<void> {
     this.isLoading.set(true);
 
-    // Load tasks if not already loaded
-    if (this.taskStore.allTasks().length === 0) {
-      await this.taskStore.loadTasks();
-    }
+    // Set context for task store
+    this.taskStore.setBacklogItemContext(this.backlogItemId);
 
-    // Get repositoryId from the task (after tasks are loaded)
-    const task = this.taskStore.getTaskById(this.taskId);
-    const repositoryId = task?.repositoryId ?? '';
-
-    // Load logs and artifacts for this task in parallel
+    // Load backlog items and tasks
     await Promise.all([
-      this.logStore.loadLogsForTask(this.taskId),
-      this.artifactStore.loadArtifactsForTask(repositoryId, this.taskId),
+      this.backlogStore.loadItems(),
+      this.taskStore.loadTasks(this.backlogItemId),
     ]);
+
+    // Get task and load logs/artifacts
+    const task = this.taskStore.getTaskById(this.taskId);
+    if (task) {
+      await Promise.all([
+        this.logStore.loadLogsForTask(this.taskId),
+        this.artifactStore.loadArtifactsForTask(
+          task.repositoryId,
+          task.backlogItemId,
+          this.taskId
+        ),
+      ]);
+    }
 
     this.isLoading.set(false);
   }
@@ -501,16 +430,9 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
         }
         break;
       }
-      case 'task:split': {
-        const splitPayload = event.payload as TaskSplitPayload;
-        this.taskStore.handleTaskSplitEvent(splitPayload.parent, splitPayload.children);
+      case 'backlogItem:updated':
+        this.backlogStore.updateItemFromEvent(event.payload as BacklogItem);
         break;
-      }
-      case 'task:childAdded': {
-        const childPayload = event.payload as ChildAddedPayload;
-        this.taskStore.handleChildAddedEvent(childPayload.parentId, childPayload.child);
-        break;
-      }
       case 'artifact:created': {
         const artifact = event.payload as Artifact;
         if (artifact.taskId === this.taskId) {
@@ -539,6 +461,12 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
     this.isTransitioning.set(false);
   }
 
+  async startAgent(): Promise<void> {
+    this.isStartingAgent.set(true);
+    await this.taskStore.startAgent(this.taskId);
+    this.isStartingAgent.set(false);
+  }
+
   async abortAgent(): Promise<void> {
     this.isAborting.set(true);
     await this.taskStore.abortAgent(this.taskId);
@@ -554,7 +482,7 @@ export class TaskDetailComponent implements OnInit, OnDestroy {
     this.isDeleting.set(false);
 
     if (success) {
-      this.router.navigate(['/']);
+      this.router.navigate(['/backlog', this.backlogItemId]);
     }
   }
 

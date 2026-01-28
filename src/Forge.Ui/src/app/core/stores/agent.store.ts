@@ -15,6 +15,7 @@ export class AgentStore {
   private readonly status = signal<AgentStatus>({
     isRunning: false,
     currentTaskId: undefined,
+    currentBacklogItemId: undefined,
     startedAt: undefined,
   });
   private readonly loading = signal(false);
@@ -50,10 +51,13 @@ export class AgentStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      await firstValueFrom(this.taskService.startAgent(task.repositoryId, taskId));
+      await firstValueFrom(
+        this.taskService.startAgent(task.repositoryId, task.backlogItemId, taskId)
+      );
       this.status.set({
         isRunning: true,
         currentTaskId: taskId,
+        currentBacklogItemId: task.backlogItemId,
         startedAt: new Date(),
       });
       return true;
@@ -71,6 +75,7 @@ export class AgentStore {
     this.status.set({
       isRunning: false,
       currentTaskId: undefined,
+      currentBacklogItemId: undefined,
       startedAt: undefined,
     });
   }

@@ -2,6 +2,7 @@ import { Injectable, inject, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SseService } from './sse.service';
 import { TaskStore } from '../stores/task.store';
+import { BacklogStore } from '../stores/backlog.store';
 import { LogStore } from '../stores/log.store';
 import { NotificationStore } from '../stores/notification.store';
 import { SchedulerStore } from '../stores/scheduler.store';
@@ -10,11 +11,10 @@ import { ArtifactStore } from '../stores/artifact.store';
 import {
   ServerEvent,
   Task,
+  BacklogItem,
   TaskLog,
   Notification,
   AgentStatus,
-  TaskSplitPayload,
-  ChildAddedPayload,
   Repository,
   Artifact,
 } from '../../shared/models';
@@ -37,6 +37,7 @@ import {
 export class SseEventDispatcher implements OnDestroy {
   private readonly sseService = inject(SseService);
   private readonly taskStore = inject(TaskStore);
+  private readonly backlogStore = inject(BacklogStore);
   private readonly logStore = inject(LogStore);
   private readonly notificationStore = inject(NotificationStore);
   private readonly schedulerStore = inject(SchedulerStore);
@@ -141,6 +142,22 @@ export class SseEventDispatcher implements OnDestroy {
 
   private handleEvent(event: ServerEvent): void {
     switch (event.type) {
+      // Backlog item events
+      case 'backlogItem:created':
+      case 'backlogItem:updated':
+      case 'backlogItem:paused':
+      case 'backlogItem:resumed':
+        this.backlogStore.updateItemFromEvent(event.payload as BacklogItem);
+        break;
+
+      case 'backlogItem:deleted':
+        this.backlogStore.removeItemFromEvent((event.payload as { id: string }).id);
+        break;
+
+      case 'backlogItem:log':
+        this.logStore.addLog(event.payload as TaskLog);
+        break;
+
       // Task events
       case 'task:created':
       case 'task:updated':
@@ -157,22 +174,14 @@ export class SseEventDispatcher implements OnDestroy {
         this.logStore.addLog(event.payload as TaskLog);
         break;
 
-      case 'task:split': {
-        const splitPayload = event.payload as TaskSplitPayload;
-        this.taskStore.handleTaskSplitEvent(splitPayload.parent, splitPayload.children);
-        break;
-      }
-
-      case 'task:childAdded': {
-        const childPayload = event.payload as ChildAddedPayload;
-        this.taskStore.handleChildAddedEvent(childPayload.parentId, childPayload.child);
-        break;
-      }
-
       // Agent/Scheduler events
       case 'agent:statusChanged': {
         const agentStatus = event.payload as AgentStatus;
-        this.schedulerStore.updateAgentStatus(agentStatus.isRunning, agentStatus.currentTaskId);
+        this.schedulerStore.updateAgentStatus(
+          agentStatus.isRunning,
+          agentStatus.currentTaskId,
+          agentStatus.currentBacklogItemId
+        );
         break;
       }
 

@@ -1,15 +1,26 @@
 import { Component, ChangeDetectionStrategy, input, computed } from '@angular/core';
-import { PipelineState } from '../models';
+import { PipelineState, BacklogItemState } from '../models';
 import { BaseBadgeComponent, BadgeVariant } from './base-badge.component';
 
+/** Combined state type for tasks and backlog items */
+type StateType = PipelineState | BacklogItemState;
+
 /** Mapping of pipeline states to badge variants */
-const STATE_VARIANTS: Record<PipelineState, BadgeVariant> = {
-  Backlog: 'slate',
+const STATE_VARIANTS: Record<StateType, BadgeVariant> = {
+  // BacklogItem states
+  New: 'slate',
+  Refining: 'purple',
+  Ready: 'cyan',
+  Splitting: 'indigo',
+  Executing: 'blue',
+  // Task (Pipeline) states
+  Research: 'slate',
   Planning: 'purple',
   Implementing: 'blue',
+  Simplifying: 'cyan',
+  Verifying: 'indigo',
   Reviewing: 'amber',
-  Testing: 'cyan',
-  PrReady: 'indigo',
+  PrReady: 'orange',
   Done: 'green',
 };
 
@@ -37,7 +48,7 @@ const STATE_VARIANTS: Record<PipelineState, BadgeVariant> = {
   `,
 })
 export class StateBadgeComponent {
-  readonly state = input.required<PipelineState>();
+  readonly state = input.required<StateType>();
 
   readonly stateLabel = computed(() => {
     const s = this.state();

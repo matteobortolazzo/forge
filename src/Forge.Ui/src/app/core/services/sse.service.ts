@@ -1,5 +1,5 @@
 import { Injectable, NgZone, inject } from '@angular/core';
-import { Observable, Subject, interval, map, takeUntil, timer } from 'rxjs';
+import { Observable, Subject, interval, map, takeUntil } from 'rxjs';
 import { ServerEvent, TaskLog, LogType } from '../../shared/models';
 
 const SSE_ENDPOINT = '/api/events';
@@ -83,7 +83,7 @@ export class SseService {
 
         const log: TaskLog = {
           id: `mock-log-${Date.now()}`,
-          taskId: 'task-006', // The active task with agent
+          taskId: 'task-002', // The active task with agent
           type: currentLog.type,
           content: currentLog.content,
           toolName: currentLog.toolName,

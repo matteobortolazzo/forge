@@ -1,13 +1,10 @@
-import { Injectable, computed, inject, signal, effect } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   Task,
   PipelineState,
   PIPELINE_STATES,
-  CreateTaskDto,
   UpdateTaskDto,
   TransitionTaskDto,
-  CreateSubtaskDto,
-  SplitTaskDto,
 } from '../../shared/models';
 import { TaskService } from '../services/task.service';
 import { RepositoryStore } from './repository.store';
@@ -22,20 +19,22 @@ export class TaskStore {
   private readonly tasks = signal<Task[]>([]);
   private readonly loading = signal(false);
   private readonly error = signal<string | null>(null);
+  private readonly _currentBacklogItemId = signal<string | null>(null);
 
   // Public readonly signals
   readonly isLoading = this.loading.asReadonly();
   readonly errorMessage = this.error.asReadonly();
   readonly allTasks = this.tasks.asReadonly();
+  readonly currentBacklogItemId = this._currentBacklogItemId.asReadonly();
 
-  // Computed: tasks for the selected repository only
-  readonly repositoryTasks = computed(() => {
-    const repoId = this.repositoryStore.selectedId();
-    if (!repoId) return [];
-    return this.tasks().filter(t => t.repositoryId === repoId);
+  // Computed: tasks for the current backlog item
+  readonly backlogItemTasks = computed(() => {
+    const backlogItemId = this._currentBacklogItemId();
+    if (!backlogItemId) return [];
+    return this.tasks().filter(t => t.backlogItemId === backlogItemId);
   });
 
-  // Computed: tasks grouped by state (for selected repository)
+  // Computed: tasks grouped by state (for current backlog item)
   readonly tasksByState = computed(() => {
     const grouped: Record<PipelineState, Task[]> = {} as Record<PipelineState, Task[]>;
 
@@ -45,11 +44,16 @@ export class TaskStore {
     }
 
     // Group tasks by state
-    for (const task of this.repositoryTasks()) {
+    for (const task of this.backlogItemTasks()) {
       grouped[task.state].push(task);
     }
 
     return grouped;
+  });
+
+  // Computed: tasks sorted by execution order
+  readonly tasksByExecutionOrder = computed(() => {
+    return [...this.backlogItemTasks()].sort((a, b) => a.executionOrder - b.executionOrder);
   });
 
   // Computed: count of tasks per state
@@ -64,71 +68,37 @@ export class TaskStore {
     return counts;
   });
 
-  // Computed: total task count (for selected repository)
-  readonly totalTaskCount = computed(() => this.repositoryTasks().length);
+  // Computed: total task count (for current backlog item)
+  readonly totalTaskCount = computed(() => this.backlogItemTasks().length);
 
   // Computed: tasks with errors
-  readonly tasksWithErrors = computed(() => this.repositoryTasks().filter(t => t.hasError));
+  readonly tasksWithErrors = computed(() => this.backlogItemTasks().filter(t => t.hasError));
 
   // Computed: tasks with active agents
-  readonly tasksWithAgents = computed(() => this.repositoryTasks().filter(t => t.assignedAgentId));
+  readonly tasksWithAgents = computed(() => this.backlogItemTasks().filter(t => t.assignedAgentId));
 
   // Computed: paused tasks
-  readonly pausedTasks = computed(() => this.repositoryTasks().filter(t => t.isPaused));
+  readonly pausedTasks = computed(() => this.backlogItemTasks().filter(t => t.isPaused));
 
-  // Computed: root tasks only (tasks without parents)
-  readonly rootTasks = computed(() => this.repositoryTasks().filter(t => !t.parentId));
+  // Computed: completed tasks
+  readonly completedTasks = computed(() => this.backlogItemTasks().filter(t => t.state === 'Done'));
 
-  // Computed: children grouped by parent ID
-  readonly childrenByParent = computed(() => {
+  // Computed: active tasks (not done)
+  readonly activeTasks = computed(() => this.backlogItemTasks().filter(t => t.state !== 'Done'));
+
+  // Computed: tasks grouped by backlog item ID
+  readonly tasksByBacklogItem = computed(() => {
     const map = new Map<string, Task[]>();
-    for (const task of this.repositoryTasks()) {
-      if (task.parentId) {
-        const children = map.get(task.parentId) ?? [];
-        children.push(task);
-        map.set(task.parentId, children);
-      }
+    for (const task of this.tasks()) {
+      const backlogItemId = task.backlogItemId;
+      const tasks = map.get(backlogItemId) ?? [];
+      tasks.push(task);
+      map.set(backlogItemId, tasks);
     }
     return map;
   });
 
-  // Computed: leaf tasks only (tasks without children)
-  readonly leafTasks = computed(() => this.repositoryTasks().filter(t => t.childCount === 0));
-
-  // Computed: parent tasks only (tasks with children)
-  readonly parentTasks = computed(() => this.repositoryTasks().filter(t => t.childCount > 0));
-
-  constructor() {
-    // Auto-reload tasks when selected repository changes
-    effect(() => {
-      const repoId = this.repositoryStore.selectedId();
-      if (repoId) {
-        this.loadTasks();
-      }
-    });
-  }
-
-  // Get children for a specific parent
-  getChildrenOf(parentId: string): Task[] {
-    return this.childrenByParent().get(parentId) ?? [];
-  }
-
-  // Get display state (derived state for parents, regular state for leaves)
-  getDisplayState(task: Task): PipelineState {
-    return task.derivedState ?? task.state;
-  }
-
-  // Check if task is a leaf task
-  isLeafTask(task: Task): boolean {
-    return task.childCount === 0;
-  }
-
-  // Check if task is a parent task
-  isParentTask(task: Task): boolean {
-    return task.childCount > 0;
-  }
-
-  // Helper to get current repository ID
+  // Get the repository ID from context
   private getRepositoryId(): string {
     const repoId = this.repositoryStore.selectedId();
     if (!repoId) {
@@ -137,42 +107,48 @@ export class TaskStore {
     return repoId;
   }
 
+  // Get current backlog item ID
+  private getBacklogItemId(): string {
+    const backlogItemId = this._currentBacklogItemId();
+    if (!backlogItemId) {
+      throw new Error('No backlog item selected');
+    }
+    return backlogItemId;
+  }
+
+  // Set the current backlog item context
+  setBacklogItemContext(backlogItemId: string | null): void {
+    this._currentBacklogItemId.set(backlogItemId);
+  }
+
   // Actions
-  async loadTasks(): Promise<void> {
+  async loadTasks(backlogItemId?: string): Promise<void> {
     const repoId = this.repositoryStore.selectedId();
-    if (!repoId) {
-      this.tasks.set([]);
+    const itemId = backlogItemId ?? this._currentBacklogItemId();
+
+    if (!repoId || !itemId) {
       return;
+    }
+
+    // Update context if a new backlog item ID was provided
+    if (backlogItemId) {
+      this._currentBacklogItemId.set(backlogItemId);
     }
 
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      const tasks = await firstValueFrom(this.taskService.getTasks(repoId));
-      // Replace tasks for this repository, keep tasks from other repositories
+      const tasks = await firstValueFrom(this.taskService.getTasks(repoId, itemId));
+      // Replace tasks for this backlog item, keep tasks from other backlog items
       this.tasks.update(existing => {
-        const otherRepoTasks = existing.filter(t => t.repositoryId !== repoId);
-        return [...otherRepoTasks, ...tasks];
+        const otherTasks = existing.filter(t => t.backlogItemId !== itemId);
+        return [...otherTasks, ...tasks];
       });
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
       this.loading.set(false);
-    }
-  }
-
-  async createTask(dto: CreateTaskDto): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const repoId = this.getRepositoryId();
-      const newTask = await firstValueFrom(this.taskService.createTask(repoId, dto));
-      this.tasks.update(tasks => [newTask, ...tasks]);
-      return newTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to create task');
-      return null;
     }
   }
 
@@ -184,7 +160,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      const updatedTask = await firstValueFrom(this.taskService.updateTask(task.repositoryId, id, dto));
+      const updatedTask = await firstValueFrom(
+        this.taskService.updateTask(task.repositoryId, task.backlogItemId, id, dto)
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -203,7 +181,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      await firstValueFrom(this.taskService.deleteTask(task.repositoryId, id));
+      await firstValueFrom(
+        this.taskService.deleteTask(task.repositoryId, task.backlogItemId, id)
+      );
       this.tasks.update(tasks => tasks.filter(t => t.id !== id));
       return true;
     } catch (err) {
@@ -221,7 +201,9 @@ export class TaskStore {
         throw new Error('Task not found');
       }
       const dto: TransitionTaskDto = { targetState };
-      const updatedTask = await firstValueFrom(this.taskService.transitionTask(task.repositoryId, id, dto));
+      const updatedTask = await firstValueFrom(
+        this.taskService.transitionTask(task.repositoryId, task.backlogItemId, id, dto)
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -240,7 +222,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      const updatedTask = await firstValueFrom(this.taskService.abortAgent(task.repositoryId, taskId));
+      const updatedTask = await firstValueFrom(
+        this.taskService.abortAgent(task.repositoryId, task.backlogItemId, taskId)
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === taskId ? updatedTask : t))
       );
@@ -259,7 +243,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      const updatedTask = await firstValueFrom(this.taskService.startAgent(task.repositoryId, taskId));
+      const updatedTask = await firstValueFrom(
+        this.taskService.startAgent(task.repositoryId, task.backlogItemId, taskId)
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === taskId ? updatedTask : t))
       );
@@ -270,7 +256,7 @@ export class TaskStore {
     }
   }
 
-  async pauseTask(id: string, reason: string): Promise<Task | null> {
+  async pauseTask(id: string, reason?: string): Promise<Task | null> {
     this.error.set(null);
 
     try {
@@ -278,7 +264,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      const updatedTask = await firstValueFrom(this.taskService.pauseTask(task.repositoryId, id, { reason }));
+      const updatedTask = await firstValueFrom(
+        this.taskService.pauseTask(task.repositoryId, task.backlogItemId, id, { reason })
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -297,7 +285,9 @@ export class TaskStore {
       if (!task) {
         throw new Error('Task not found');
       }
-      const updatedTask = await firstValueFrom(this.taskService.resumeTask(task.repositoryId, id));
+      const updatedTask = await firstValueFrom(
+        this.taskService.resumeTask(task.repositoryId, task.backlogItemId, id)
+      );
       this.tasks.update(tasks =>
         tasks.map(t => (t.id === id ? updatedTask : t))
       );
@@ -311,6 +301,11 @@ export class TaskStore {
   // Get a single task by ID
   getTaskById(id: string): Task | undefined {
     return this.tasks().find(t => t.id === id);
+  }
+
+  // Get tasks for a specific backlog item
+  getTasksForBacklogItem(backlogItemId: string): Task[] {
+    return this.tasksByBacklogItem().get(backlogItemId) ?? [];
   }
 
   // Update task from SSE event
@@ -329,89 +324,9 @@ export class TaskStore {
     this.tasks.update(tasks => tasks.filter(t => t.id !== taskId));
   }
 
-  // Hierarchy actions
-  async splitTask(taskId: string, subtasks: CreateSubtaskDto[]): Promise<boolean> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === taskId);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const dto: SplitTaskDto = { subtasks };
-      const result = await firstValueFrom(this.taskService.splitTask(task.repositoryId, taskId, dto));
-
-      // Update parent and add children to the store
-      this.tasks.update(tasks => {
-        const updatedTasks = tasks.map(t =>
-          t.id === taskId ? result.parent : t
-        );
-        return [...updatedTasks, ...result.children];
-      });
-
-      return true;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to split task');
-      return false;
-    }
-  }
-
-  async addChild(parentId: string, dto: CreateSubtaskDto): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const parent = this.tasks().find(t => t.id === parentId);
-      if (!parent) {
-        throw new Error('Parent task not found');
-      }
-      const child = await firstValueFrom(this.taskService.addChild(parent.repositoryId, parentId, dto));
-
-      // Add child to store and update parent's childCount
-      this.tasks.update(tasks => {
-        const updatedTasks = tasks.map(t => {
-          if (t.id === parentId) {
-            return { ...t, childCount: t.childCount + 1, updatedAt: new Date() };
-          }
-          return t;
-        });
-        return [...updatedTasks, child];
-      });
-
-      return child;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to add child task');
-      return null;
-    }
-  }
-
-  // Handle task:split SSE event
-  handleTaskSplitEvent(parent: Task, children: Task[]): void {
-    this.tasks.update(tasks => {
-      const updatedTasks = tasks.map(t =>
-        t.id === parent.id ? parent : t
-      );
-      // Add children that don't already exist
-      const existingIds = new Set(updatedTasks.map(t => t.id));
-      const newChildren = children.filter(c => !existingIds.has(c.id));
-      return [...updatedTasks, ...newChildren];
-    });
-  }
-
-  // Handle task:childAdded SSE event
-  handleChildAddedEvent(parentId: string, child: Task): void {
-    this.tasks.update(tasks => {
-      const updatedTasks = tasks.map(t => {
-        if (t.id === parentId) {
-          return { ...t, childCount: t.childCount + 1, updatedAt: new Date() };
-        }
-        return t;
-      });
-      // Add child if not already in store
-      const exists = updatedTasks.some(t => t.id === child.id);
-      if (!exists) {
-        return [...updatedTasks, child];
-      }
-      return updatedTasks;
-    });
+  // Clear all tasks (useful when switching repositories)
+  clearTasks(): void {
+    this.tasks.set([]);
+    this._currentBacklogItemId.set(null);
   }
 }

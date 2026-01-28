@@ -1,10 +1,10 @@
-import { Component, ChangeDetectionStrategy, inject, signal, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { TaskStore } from '../../core/stores/task.store';
 import { NotificationStore } from '../../core/stores/notification.store';
 import { SchedulerStore } from '../../core/stores/scheduler.store';
-import { PIPELINE_STATES, CreateTaskDto } from '../../shared/models';
+import { PIPELINE_STATES } from '../../shared/models';
 import { TaskColumnComponent } from './task-column.component';
-import { CreateTaskDialogComponent } from './create-task-dialog.component';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner.component';
 import { ErrorAlertComponent } from '../../shared/components/error-alert.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
@@ -14,7 +14,6 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     TaskColumnComponent,
-    CreateTaskDialogComponent,
     LoadingSpinnerComponent,
     ErrorAlertComponent,
     AppHeaderComponent,
@@ -26,20 +25,9 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
         <button
           type="button"
           class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          (click)="openCreateDialog()"
+          (click)="goToBacklog()"
         >
-          <svg
-            class="h-4 w-4"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"
-            />
-          </svg>
-          New Task
+          Go to Backlog
         </button>
       </app-header>
 
@@ -72,12 +60,6 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
       </main>
     </div>
 
-    <!-- Create Task Dialog -->
-    <app-create-task-dialog
-      [isOpen]="isDialogOpen()"
-      (create)="onCreateTask($event)"
-      (cancel)="closeCreateDialog()"
-    />
   `,
   styles: `
     :host {
@@ -87,12 +69,12 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
   `,
 })
 export class BoardComponent implements OnInit {
+  private readonly router = inject(Router);
   protected readonly taskStore = inject(TaskStore);
   private readonly notificationStore = inject(NotificationStore);
   protected readonly schedulerStore = inject(SchedulerStore);
 
   readonly pipelineStates = PIPELINE_STATES;
-  readonly isDialogOpen = signal(false);
 
   ngOnInit(): void {
     // SSE connection is managed by App component
@@ -113,18 +95,7 @@ export class BoardComponent implements OnInit {
     this.taskStore.loadTasks();
   }
 
-  openCreateDialog(): void {
-    this.isDialogOpen.set(true);
-  }
-
-  closeCreateDialog(): void {
-    this.isDialogOpen.set(false);
-  }
-
-  async onCreateTask(dto: CreateTaskDto): Promise<void> {
-    const task = await this.taskStore.createTask(dto);
-    if (task) {
-      this.closeCreateDialog();
-    }
+  goToBacklog(): void {
+    this.router.navigate(['/backlog']);
   }
 }
