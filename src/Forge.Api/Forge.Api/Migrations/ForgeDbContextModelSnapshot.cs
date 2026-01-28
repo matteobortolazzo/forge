@@ -29,7 +29,10 @@ namespace Forge.Api.Migrations
 
                     b.Property<string>("ArtifactType")
                         .IsRequired()
-                        .HasMaxLength(20)
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("BacklogItemId")
                         .HasColumnType("TEXT");
 
                     b.Property<decimal?>("ConfidenceScore")
@@ -49,21 +52,21 @@ namespace Forge.Api.Migrations
                     b.Property<bool>("HumanInputRequested")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ProducedInState")
-                        .IsRequired()
+                    b.Property<string>("ProducedInBacklogState")
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("SubtaskId")
+                    b.Property<string>("ProducedInState")
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("TaskId")
+                    b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SubtaskId", "CreatedAt")
-                        .HasDatabaseName("IX_AgentArtifacts_Subtask_CreatedAt");
+                    b.HasIndex("BacklogItemId", "CreatedAt")
+                        .HasDatabaseName("IX_AgentArtifacts_BacklogItem_CreatedAt");
 
                     b.HasIndex("TaskId", "CreatedAt")
                         .HasDatabaseName("IX_AgentArtifacts_Task_CreatedAt");
@@ -74,10 +77,119 @@ namespace Forge.Api.Migrations
                     b.ToTable("AgentArtifacts");
                 });
 
+            modelBuilder.Entity("Forge.Api.Data.Entities.BacklogItemEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AssignedAgentId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CompletedTaskCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("ConfidenceScore")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DetectedFramework")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DetectedLanguage")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("HasError")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasPendingGate")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("HumanInputReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("HumanInputRequested")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsPaused")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MaxRetries")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PauseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("PausedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RefiningIterations")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TaskCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RepositoryId")
+                        .HasDatabaseName("IX_BacklogItems_RepositoryId");
+
+                    b.HasIndex("State", "IsPaused", "AssignedAgentId")
+                        .HasDatabaseName("IX_BacklogItems_Schedulable");
+
+                    b.ToTable("BacklogItems");
+                });
+
             modelBuilder.Entity("Forge.Api.Data.Entities.HumanGateEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("BacklogItemId")
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("ConfidenceScore")
@@ -116,15 +228,13 @@ namespace Forge.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("SubtaskId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("TaskId")
+                    b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SubtaskId");
+                    b.HasIndex("BacklogItemId", "Status")
+                        .HasDatabaseName("IX_HumanGates_BacklogItem_Status");
 
                     b.HasIndex("TaskId", "Status")
                         .HasDatabaseName("IX_HumanGates_Task_Status");
@@ -136,6 +246,9 @@ namespace Forge.Api.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("BacklogItemId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
@@ -164,6 +277,8 @@ namespace Forge.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BacklogItemId");
+
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("Read");
@@ -191,6 +306,9 @@ namespace Forge.Api.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDefault")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool?>("IsDirty")
@@ -241,6 +359,9 @@ namespace Forge.Api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("BacklogItemId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
@@ -257,9 +378,6 @@ namespace Forge.Api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("SubtaskId")
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT");
 
@@ -273,7 +391,7 @@ namespace Forge.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SubtaskId");
+                    b.HasIndex("BacklogItemId");
 
                     b.HasIndex("TaskId");
 
@@ -281,92 +399,6 @@ namespace Forge.Api.Migrations
                         .HasDatabaseName("IX_RollbackRecords_Timestamp");
 
                     b.ToTable("RollbackRecords");
-                });
-
-            modelBuilder.Entity("Forge.Api.Data.Entities.SubtaskEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AcceptanceCriteriaJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BranchName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("ConfidenceScore")
-                        .HasPrecision(3, 2)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CurrentStage")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DependenciesJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("EstimatedScope")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ExecutionOrder")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ImplementationRetries")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("ParentTaskId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SimplificationIterations")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WorktreePath")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("IX_Subtasks_Status");
-
-                    b.HasIndex("ParentTaskId", "ExecutionOrder")
-                        .HasDatabaseName("IX_Subtasks_Parent_Order");
-
-                    b.ToTable("Subtasks");
                 });
 
             modelBuilder.Entity("Forge.Api.Data.Entities.TaskEntity", b =>
@@ -379,18 +411,14 @@ namespace Forge.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("ChildCount")
-                        .HasColumnType("INTEGER");
+                    b.Property<Guid>("BacklogItemId")
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal?>("ConfidenceScore")
                         .HasPrecision(3, 2)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DerivedState")
-                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
@@ -408,6 +436,9 @@ namespace Forge.Api.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ExecutionOrder")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("HasError")
                         .HasColumnType("INTEGER");
@@ -430,9 +461,6 @@ namespace Forge.Api.Migrations
 
                     b.Property<int>("MaxRetries")
                         .HasColumnType("INTEGER");
-
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("PauseReason")
                         .HasMaxLength(500)
@@ -474,11 +502,11 @@ namespace Forge.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentId")
-                        .HasDatabaseName("IX_Tasks_ParentId");
-
                     b.HasIndex("RepositoryId")
                         .HasDatabaseName("IX_Tasks_RepositoryId");
+
+                    b.HasIndex("BacklogItemId", "ExecutionOrder")
+                        .HasDatabaseName("IX_Tasks_BacklogItem_Order");
 
                     b.HasIndex("State", "IsPaused", "AssignedAgentId")
                         .HasDatabaseName("IX_Tasks_Schedulable");
@@ -492,11 +520,14 @@ namespace Forge.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("BacklogItemId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("TaskId")
+                    b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Timestamp")
@@ -513,6 +544,9 @@ namespace Forge.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BacklogItemId", "Timestamp")
+                        .HasDatabaseName("IX_TaskLogs_BacklogItem_Timestamp");
+
                     b.HasIndex("TaskId", "Timestamp")
                         .HasDatabaseName("IX_TaskLogs_Task_Timestamp");
 
@@ -521,130 +555,140 @@ namespace Forge.Api.Migrations
 
             modelBuilder.Entity("Forge.Api.Data.Entities.AgentArtifactEntity", b =>
                 {
-                    b.HasOne("Forge.Api.Data.Entities.SubtaskEntity", "Subtask")
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
                         .WithMany("Artifacts")
-                        .HasForeignKey("SubtaskId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("BacklogItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Task")
                         .WithMany("Artifacts")
                         .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
-                    b.Navigation("Subtask");
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Task");
                 });
 
+            modelBuilder.Entity("Forge.Api.Data.Entities.BacklogItemEntity", b =>
+                {
+                    b.HasOne("Forge.Api.Data.Entities.RepositoryEntity", "Repository")
+                        .WithMany("BacklogItems")
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Repository");
+                });
+
             modelBuilder.Entity("Forge.Api.Data.Entities.HumanGateEntity", b =>
                 {
-                    b.HasOne("Forge.Api.Data.Entities.SubtaskEntity", "Subtask")
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
                         .WithMany("HumanGates")
-                        .HasForeignKey("SubtaskId")
+                        .HasForeignKey("BacklogItemId")
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Task")
                         .WithMany("HumanGates")
                         .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
-                    b.Navigation("Subtask");
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Task");
                 });
 
             modelBuilder.Entity("Forge.Api.Data.Entities.NotificationEntity", b =>
                 {
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
+                        .WithMany()
+                        .HasForeignKey("BacklogItemId");
+
                     b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Task")
                         .WithMany()
                         .HasForeignKey("TaskId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Task");
                 });
 
             modelBuilder.Entity("Forge.Api.Data.Entities.RollbackRecordEntity", b =>
                 {
-                    b.HasOne("Forge.Api.Data.Entities.SubtaskEntity", "Subtask")
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
                         .WithMany()
-                        .HasForeignKey("SubtaskId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("BacklogItemId");
 
                     b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Task")
                         .WithMany()
                         .HasForeignKey("TaskId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("Subtask");
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Task");
                 });
 
-            modelBuilder.Entity("Forge.Api.Data.Entities.SubtaskEntity", b =>
-                {
-                    b.HasOne("Forge.Api.Data.Entities.TaskEntity", "ParentTask")
-                        .WithMany("Subtasks")
-                        .HasForeignKey("ParentTaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ParentTask");
-                });
-
             modelBuilder.Entity("Forge.Api.Data.Entities.TaskEntity", b =>
                 {
-                    b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Parent")
-                        .WithMany("Children")
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("Forge.Api.Data.Entities.RepositoryEntity", "Repository")
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
                         .WithMany("Tasks")
-                        .HasForeignKey("RepositoryId")
+                        .HasForeignKey("BacklogItemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Parent");
+                    b.HasOne("Forge.Api.Data.Entities.RepositoryEntity", "Repository")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Repository");
                 });
 
             modelBuilder.Entity("Forge.Api.Data.Entities.TaskLogEntity", b =>
                 {
+                    b.HasOne("Forge.Api.Data.Entities.BacklogItemEntity", "BacklogItem")
+                        .WithMany("Logs")
+                        .HasForeignKey("BacklogItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("Forge.Api.Data.Entities.TaskEntity", "Task")
                         .WithMany("Logs")
                         .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("BacklogItem");
 
                     b.Navigation("Task");
                 });
 
-            modelBuilder.Entity("Forge.Api.Data.Entities.RepositoryEntity", b =>
-                {
-                    b.Navigation("Tasks");
-                });
-
-            modelBuilder.Entity("Forge.Api.Data.Entities.SubtaskEntity", b =>
+            modelBuilder.Entity("Forge.Api.Data.Entities.BacklogItemEntity", b =>
                 {
                     b.Navigation("Artifacts");
 
                     b.Navigation("HumanGates");
+
+                    b.Navigation("Logs");
+
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("Forge.Api.Data.Entities.RepositoryEntity", b =>
+                {
+                    b.Navigation("BacklogItems");
                 });
 
             modelBuilder.Entity("Forge.Api.Data.Entities.TaskEntity", b =>
                 {
                     b.Navigation("Artifacts");
 
-                    b.Navigation("Children");
-
                     b.Navigation("HumanGates");
 
                     b.Navigation("Logs");
-
-                    b.Navigation("Subtasks");
                 });
 #pragma warning restore 612, 618
         }
