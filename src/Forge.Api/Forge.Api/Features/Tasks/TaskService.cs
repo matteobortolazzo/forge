@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Forge.Api.Features.Tasks;
 
-public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications)
+public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications, ILogger<TaskService> logger)
 {
     public async Task<IReadOnlyList<TaskDto>> GetAllAsync(Guid backlogItemId)
     {
@@ -63,6 +63,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         db.Tasks.Remove(entity);
         await db.SaveChangesAsync();
 
+        logger.LogInformation("Task {TaskId} deleted", id);
+
         await sse.EmitTaskDeletedAsync(id);
 
         // Update backlog item task count
@@ -93,6 +95,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         entity.State = dto.TargetState;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        logger.LogInformation("Task {TaskId} transitioned from {FromState} to {ToState}", id, previousState, dto.TargetState);
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
@@ -146,6 +150,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
+        logger.LogDebug("Task {TaskId} assigned to agent {AgentId}", taskId, agentId ?? "(none)");
+
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
         return result;
@@ -160,6 +166,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         entity.ErrorMessage = errorMessage;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        logger.LogWarning("Task {TaskId} error: {ErrorMessage}", taskId, errorMessage);
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskUpdatedAsync(result);
@@ -198,6 +206,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
+        logger.LogInformation("Task {TaskId} paused: {Reason}", id, reason ?? "(no reason)");
+
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskPausedAsync(result);
         return result;
@@ -221,6 +231,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         entity.RetryCount = 0;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        logger.LogInformation("Task {TaskId} resumed", id);
 
         var result = TaskDto.FromEntity(entity);
         await sse.EmitTaskResumedAsync(result);
