@@ -3,6 +3,7 @@ import { TaskLog } from '../../shared/models';
 import { TaskService } from '../services/task.service';
 import { TaskStore } from './task.store';
 import { firstValueFrom } from 'rxjs';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class LogStore {
@@ -11,12 +12,11 @@ export class LogStore {
 
   // State: logs grouped by task ID
   private readonly logsByTaskId = signal<Map<string, TaskLog[]>>(new Map());
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
 
   // Public readonly signals
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
 
   // Get logs for a specific task
   getLogsForTask(taskId: string): TaskLog[] {
@@ -30,23 +30,21 @@ export class LogStore {
 
   // Actions
   async loadLogsForTask(taskId: string): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-
-    try {
-      const task = this.taskStore.getTaskById(taskId);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const logs = await firstValueFrom(
-        this.taskService.getTaskLogs(task.repositoryId, task.backlogItemId, taskId)
-      );
-      this.setLogsForTask(taskId, logs);
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load logs');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.taskStore.getTaskById(taskId);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const logs = await firstValueFrom(
+          this.taskService.getTaskLogs(task.repositoryId, task.backlogItemId, taskId)
+        );
+        this.setLogsForTask(taskId, logs);
+      },
+      {},
+      'Failed to load logs'
+    );
   }
 
   // Add a log from SSE event

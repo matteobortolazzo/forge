@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { SchedulerStatus } from '../../shared/models';
 import { SchedulerService } from '../services/scheduler.service';
 import { firstValueFrom } from 'rxjs';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class SchedulerStore {
@@ -9,12 +10,11 @@ export class SchedulerStore {
 
   // State
   private readonly status = signal<SchedulerStatus | null>(null);
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
 
   // Public readonly signals
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
   readonly schedulerStatus = this.status.asReadonly();
 
   // Computed signals
@@ -27,43 +27,45 @@ export class SchedulerStore {
 
   // Actions
   async loadStatus(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-
-    try {
-      const status = await firstValueFrom(this.schedulerService.getStatus());
-      this.status.set(status);
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load scheduler status');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const status = await firstValueFrom(this.schedulerService.getStatus());
+        this.status.set(status);
+      },
+      {},
+      'Failed to load scheduler status'
+    );
   }
 
   async enable(): Promise<boolean> {
-    this.error.set(null);
-
-    try {
-      await firstValueFrom(this.schedulerService.enable());
-      this.status.update(s => s ? { ...s, isEnabled: true } : null);
-      return true;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to enable scheduler');
-      return false;
-    }
+    return (
+      (await runAsync(
+        this.asyncState,
+        async () => {
+          await firstValueFrom(this.schedulerService.enable());
+          this.status.update(s => (s ? { ...s, isEnabled: true } : null));
+          return true;
+        },
+        { setLoading: false },
+        'Failed to enable scheduler'
+      )) ?? false
+    );
   }
 
   async disable(): Promise<boolean> {
-    this.error.set(null);
-
-    try {
-      await firstValueFrom(this.schedulerService.disable());
-      this.status.update(s => s ? { ...s, isEnabled: false } : null);
-      return true;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to disable scheduler');
-      return false;
-    }
+    return (
+      (await runAsync(
+        this.asyncState,
+        async () => {
+          await firstValueFrom(this.schedulerService.disable());
+          this.status.update(s => (s ? { ...s, isEnabled: false } : null));
+          return true;
+        },
+        { setLoading: false },
+        'Failed to disable scheduler'
+      )) ?? false
+    );
   }
 
   // Update from SSE events

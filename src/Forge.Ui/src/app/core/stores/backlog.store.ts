@@ -11,6 +11,7 @@ import {
 import { BacklogService } from '../services/backlog.service';
 import { RepositoryStore } from './repository.store';
 import { firstValueFrom } from 'rxjs';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class BacklogStore {
@@ -19,13 +20,12 @@ export class BacklogStore {
 
   // State
   private readonly items = signal<BacklogItem[]>([]);
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
   private readonly _selectedId = signal<string | null>(null);
 
   // Public readonly signals
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
   readonly allItems = this.items.asReadonly();
   readonly selectedId = this._selectedId.asReadonly();
 
@@ -132,21 +132,19 @@ export class BacklogStore {
       return;
     }
 
-    this.loading.set(true);
-    this.error.set(null);
-
-    try {
-      const items = await firstValueFrom(this.backlogService.getAll(repoId));
-      // Replace items for this repository, keep items from other repositories
-      this.items.update(existing => {
-        const otherRepoItems = existing.filter(i => i.repositoryId !== repoId);
-        return [...otherRepoItems, ...items];
-      });
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load backlog items');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const items = await firstValueFrom(this.backlogService.getAll(repoId));
+        // Replace items for this repository, keep items from other repositories
+        this.items.update(existing => {
+          const otherRepoItems = existing.filter(i => i.repositoryId !== repoId);
+          return [...otherRepoItems, ...items];
+        });
+      },
+      {},
+      'Failed to load backlog items'
+    );
   }
 
   setSelectedItem(id: string | null): void {
@@ -154,159 +152,161 @@ export class BacklogStore {
   }
 
   async createItem(dto: CreateBacklogItemDto): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const repoId = this.repositoryStore.selectedId();
-      if (!repoId) {
-        throw new Error('No repository selected');
-      }
-      const newItem = await firstValueFrom(this.backlogService.create(repoId, dto));
-      this.items.update(items => [newItem, ...items]);
-      return newItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to create backlog item');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const repoId = this.repositoryStore.selectedId();
+        if (!repoId) {
+          throw new Error('No repository selected');
+        }
+        const newItem = await firstValueFrom(this.backlogService.create(repoId, dto));
+        this.items.update(items => [newItem, ...items]);
+        return newItem;
+      },
+      { setLoading: false },
+      'Failed to create backlog item'
+    );
   }
 
   async updateItem(id: string, dto: UpdateBacklogItemDto): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const updatedItem = await firstValueFrom(this.backlogService.update(item.repositoryId, id, dto));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to update backlog item');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const updatedItem = await firstValueFrom(this.backlogService.update(item.repositoryId, id, dto));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to update backlog item'
+    );
   }
 
   async deleteItem(id: string): Promise<boolean> {
-    this.error.set(null);
+    return (
+      (await runAsync(
+        this.asyncState,
+        async () => {
+          const item = this.items().find(i => i.id === id);
+          if (!item) {
+            throw new Error('Backlog item not found');
+          }
+          await firstValueFrom(this.backlogService.delete(item.repositoryId, id));
+          this.items.update(items => items.filter(i => i.id !== id));
 
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      await firstValueFrom(this.backlogService.delete(item.repositoryId, id));
-      this.items.update(items => items.filter(i => i.id !== id));
+          // Clear selection if we deleted the selected item
+          if (this._selectedId() === id) {
+            this._selectedId.set(null);
+          }
 
-      // Clear selection if we deleted the selected item
-      if (this._selectedId() === id) {
-        this._selectedId.set(null);
-      }
-
-      return true;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to delete backlog item');
-      return false;
-    }
+          return true;
+        },
+        { setLoading: false },
+        'Failed to delete backlog item'
+      )) ?? false
+    );
   }
 
   async transitionItem(id: string, targetState: BacklogItemState): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const dto: TransitionBacklogItemDto = { targetState };
-      const updatedItem = await firstValueFrom(this.backlogService.transition(item.repositoryId, id, dto));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to transition backlog item');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const dto: TransitionBacklogItemDto = { targetState };
+        const updatedItem = await firstValueFrom(this.backlogService.transition(item.repositoryId, id, dto));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to transition backlog item'
+    );
   }
 
   async startAgent(id: string): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const updatedItem = await firstValueFrom(this.backlogService.startAgent(item.repositoryId, id));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to start agent');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const updatedItem = await firstValueFrom(this.backlogService.startAgent(item.repositoryId, id));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to start agent'
+    );
   }
 
   async abortAgent(id: string): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const updatedItem = await firstValueFrom(this.backlogService.abortAgent(item.repositoryId, id));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to abort agent');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const updatedItem = await firstValueFrom(this.backlogService.abortAgent(item.repositoryId, id));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to abort agent'
+    );
   }
 
   async pauseItem(id: string, reason?: string): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const dto: PauseBacklogItemDto = { reason };
-      const updatedItem = await firstValueFrom(this.backlogService.pause(item.repositoryId, id, dto));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to pause backlog item');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const dto: PauseBacklogItemDto = { reason };
+        const updatedItem = await firstValueFrom(this.backlogService.pause(item.repositoryId, id, dto));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to pause backlog item'
+    );
   }
 
   async resumeItem(id: string): Promise<BacklogItem | null> {
-    this.error.set(null);
-
-    try {
-      const item = this.items().find(i => i.id === id);
-      if (!item) {
-        throw new Error('Backlog item not found');
-      }
-      const updatedItem = await firstValueFrom(this.backlogService.resume(item.repositoryId, id));
-      this.items.update(items =>
-        items.map(i => (i.id === id ? updatedItem : i))
-      );
-      return updatedItem;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to resume backlog item');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const item = this.items().find(i => i.id === id);
+        if (!item) {
+          throw new Error('Backlog item not found');
+        }
+        const updatedItem = await firstValueFrom(this.backlogService.resume(item.repositoryId, id));
+        this.items.update(items =>
+          items.map(i => (i.id === id ? updatedItem : i))
+        );
+        return updatedItem;
+      },
+      { setLoading: false },
+      'Failed to resume backlog item'
+    );
   }
 
   // Get a single item by ID

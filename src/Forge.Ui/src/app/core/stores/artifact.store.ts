@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Artifact } from '../../shared/models';
 import { ArtifactService } from '../services/artifact.service';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class ArtifactStore {
@@ -9,12 +10,11 @@ export class ArtifactStore {
 
   // Private signals - internal state
   private readonly artifactsByTaskId = signal<Map<string, Artifact[]>>(new Map());
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
 
   // Public readonly signals
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
 
   /**
    * Gets artifacts for a specific task.
@@ -49,18 +49,17 @@ export class ArtifactStore {
     backlogItemId: string,
     taskId: string
   ): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      const artifacts = await firstValueFrom(
-        this.artifactService.getArtifactsForTask(repositoryId, backlogItemId, taskId)
-      );
-      this.setArtifactsForTask(taskId, artifacts);
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load artifacts');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const artifacts = await firstValueFrom(
+          this.artifactService.getArtifactsForTask(repositoryId, backlogItemId, taskId)
+        );
+        this.setArtifactsForTask(taskId, artifacts);
+      },
+      {},
+      'Failed to load artifacts'
+    );
   }
 
   /**

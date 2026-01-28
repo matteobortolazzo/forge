@@ -9,6 +9,7 @@ import {
 import { TaskService } from '../services/task.service';
 import { RepositoryStore } from './repository.store';
 import { firstValueFrom } from 'rxjs';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class TaskStore {
@@ -17,13 +18,12 @@ export class TaskStore {
 
   // State
   private readonly tasks = signal<Task[]>([]);
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
   private readonly _currentBacklogItemId = signal<string | null>(null);
 
   // Public readonly signals
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
   readonly allTasks = this.tasks.asReadonly();
   readonly currentBacklogItemId = this._currentBacklogItemId.asReadonly();
 
@@ -135,167 +135,167 @@ export class TaskStore {
       this._currentBacklogItemId.set(backlogItemId);
     }
 
-    this.loading.set(true);
-    this.error.set(null);
-
-    try {
-      const tasks = await firstValueFrom(this.taskService.getTasks(repoId, itemId));
-      // Replace tasks for this backlog item, keep tasks from other backlog items
-      this.tasks.update(existing => {
-        const otherTasks = existing.filter(t => t.backlogItemId !== itemId);
-        return [...otherTasks, ...tasks];
-      });
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load tasks');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const tasks = await firstValueFrom(this.taskService.getTasks(repoId, itemId));
+        // Replace tasks for this backlog item, keep tasks from other backlog items
+        this.tasks.update(existing => {
+          const otherTasks = existing.filter(t => t.backlogItemId !== itemId);
+          return [...otherTasks, ...tasks];
+        });
+      },
+      {},
+      'Failed to load tasks'
+    );
   }
 
   async updateTask(id: string, dto: UpdateTaskDto): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === id);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const updatedTask = await firstValueFrom(
-        this.taskService.updateTask(task.repositoryId, task.backlogItemId, id, dto)
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === id ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to update task');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === id);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const updatedTask = await firstValueFrom(
+          this.taskService.updateTask(task.repositoryId, task.backlogItemId, id, dto)
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === id ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to update task'
+    );
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === id);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      await firstValueFrom(
-        this.taskService.deleteTask(task.repositoryId, task.backlogItemId, id)
-      );
-      this.tasks.update(tasks => tasks.filter(t => t.id !== id));
-      return true;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to delete task');
-      return false;
-    }
+    return (
+      (await runAsync(
+        this.asyncState,
+        async () => {
+          const task = this.tasks().find(t => t.id === id);
+          if (!task) {
+            throw new Error('Task not found');
+          }
+          await firstValueFrom(
+            this.taskService.deleteTask(task.repositoryId, task.backlogItemId, id)
+          );
+          this.tasks.update(tasks => tasks.filter(t => t.id !== id));
+          return true;
+        },
+        { setLoading: false },
+        'Failed to delete task'
+      )) ?? false
+    );
   }
 
   async transitionTask(id: string, targetState: PipelineState): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === id);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const dto: TransitionTaskDto = { targetState };
-      const updatedTask = await firstValueFrom(
-        this.taskService.transitionTask(task.repositoryId, task.backlogItemId, id, dto)
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === id ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to transition task');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === id);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const dto: TransitionTaskDto = { targetState };
+        const updatedTask = await firstValueFrom(
+          this.taskService.transitionTask(task.repositoryId, task.backlogItemId, id, dto)
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === id ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to transition task'
+    );
   }
 
   async abortAgent(taskId: string): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === taskId);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const updatedTask = await firstValueFrom(
-        this.taskService.abortAgent(task.repositoryId, task.backlogItemId, taskId)
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === taskId ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to abort agent');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === taskId);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const updatedTask = await firstValueFrom(
+          this.taskService.abortAgent(task.repositoryId, task.backlogItemId, taskId)
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === taskId ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to abort agent'
+    );
   }
 
   async startAgent(taskId: string): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === taskId);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const updatedTask = await firstValueFrom(
-        this.taskService.startAgent(task.repositoryId, task.backlogItemId, taskId)
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === taskId ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to start agent');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === taskId);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const updatedTask = await firstValueFrom(
+          this.taskService.startAgent(task.repositoryId, task.backlogItemId, taskId)
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === taskId ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to start agent'
+    );
   }
 
   async pauseTask(id: string, reason?: string): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === id);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const updatedTask = await firstValueFrom(
-        this.taskService.pauseTask(task.repositoryId, task.backlogItemId, id, { reason })
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === id ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to pause task');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === id);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const updatedTask = await firstValueFrom(
+          this.taskService.pauseTask(task.repositoryId, task.backlogItemId, id, { reason })
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === id ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to pause task'
+    );
   }
 
   async resumeTask(id: string): Promise<Task | null> {
-    this.error.set(null);
-
-    try {
-      const task = this.tasks().find(t => t.id === id);
-      if (!task) {
-        throw new Error('Task not found');
-      }
-      const updatedTask = await firstValueFrom(
-        this.taskService.resumeTask(task.repositoryId, task.backlogItemId, id)
-      );
-      this.tasks.update(tasks =>
-        tasks.map(t => (t.id === id ? updatedTask : t))
-      );
-      return updatedTask;
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to resume task');
-      return null;
-    }
+    return runAsync(
+      this.asyncState,
+      async () => {
+        const task = this.tasks().find(t => t.id === id);
+        if (!task) {
+          throw new Error('Task not found');
+        }
+        const updatedTask = await firstValueFrom(
+          this.taskService.resumeTask(task.repositoryId, task.backlogItemId, id)
+        );
+        this.tasks.update(tasks =>
+          tasks.map(t => (t.id === id ? updatedTask : t))
+        );
+        return updatedTask;
+      },
+      { setLoading: false },
+      'Failed to resume task'
+    );
   }
 
   // Get a single task by ID

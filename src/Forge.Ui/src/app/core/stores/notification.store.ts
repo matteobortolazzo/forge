@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Notification } from '../../shared/models';
 import { NotificationService } from '../services/notification.service';
 import { firstValueFrom } from 'rxjs';
+import { createAsyncState, runAsync } from './store-utils';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
@@ -9,13 +10,12 @@ export class NotificationStore {
 
   // State
   private readonly notifications = signal<Notification[]>([]);
-  private readonly loading = signal(false);
-  private readonly error = signal<string | null>(null);
+  private readonly asyncState = createAsyncState();
 
   // Public readonly signals
   readonly allNotifications = this.notifications.asReadonly();
-  readonly isLoading = this.loading.asReadonly();
-  readonly errorMessage = this.error.asReadonly();
+  readonly isLoading = this.asyncState.loading.asReadonly();
+  readonly errorMessage = this.asyncState.error.asReadonly();
 
   // Computed: unread notifications
   readonly unreadNotifications = computed(() =>
@@ -34,27 +34,25 @@ export class NotificationStore {
 
   // Load notifications from API
   async loadNotifications(limit = 50): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-
-    try {
-      const notifications = await firstValueFrom(
-        this.notificationService.getNotifications(limit)
-      );
-      // Convert date strings to Date objects and sort by createdAt descending
-      // (API may not return sorted, so we sort once here)
-      const parsed = notifications
-        .map(n => ({
-          ...n,
-          createdAt: new Date(n.createdAt),
-        }))
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      this.notifications.set(parsed);
-    } catch (err) {
-      this.error.set(err instanceof Error ? err.message : 'Failed to load notifications');
-    } finally {
-      this.loading.set(false);
-    }
+    await runAsync(
+      this.asyncState,
+      async () => {
+        const notifications = await firstValueFrom(
+          this.notificationService.getNotifications(limit)
+        );
+        // Convert date strings to Date objects and sort by createdAt descending
+        // (API may not return sorted, so we sort once here)
+        const parsed = notifications
+          .map(n => ({
+            ...n,
+            createdAt: new Date(n.createdAt),
+          }))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        this.notifications.set(parsed);
+      },
+      {},
+      'Failed to load notifications'
+    );
   }
 
   // Add notification from SSE event
