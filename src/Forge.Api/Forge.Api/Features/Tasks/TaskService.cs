@@ -1,5 +1,6 @@
 using Forge.Api.Data;
 using Forge.Api.Data.Entities;
+using Forge.Api.Features.Backlog;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Shared;
@@ -7,128 +8,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Forge.Api.Features.Tasks;
 
-public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications, IParentStateService parentStateService)
+public class TaskService(ForgeDbContext db, ISseService sse, NotificationService notifications)
 {
-
-    /// <summary>
-    /// Computes derived state from children states.
-    /// Parent state = minimum progress state among children (excluding Done, unless all are Done).
-    /// </summary>
-    public static PipelineState ComputeDerivedState(IEnumerable<PipelineState> childStates)
+    public async Task<IReadOnlyList<TaskDto>> GetAllAsync(Guid backlogItemId)
     {
-        var states = childStates.ToList();
-        if (states.Count == 0)
-            return PipelineState.Backlog;
-
-        // If all children are Done, parent is Done
-        if (states.All(s => s == PipelineState.Done))
-            return PipelineState.Done;
-
-        // Return minimum progress state (excluding Done)
-        var nonDoneStates = states.Where(s => s != PipelineState.Done).ToList();
-        if (nonDoneStates.Count == 0)
-            return PipelineState.Done;
-
-        return nonDoneStates.MinBy(s => PipelineConstants.GetStateIndex(s));
-    }
-
-    /// <summary>
-    /// Computes progress information for a parent task.
-    /// </summary>
-    public static TaskProgressDto ComputeProgress(IEnumerable<PipelineState> childStates)
-    {
-        var states = childStates.ToList();
-        if (states.Count == 0)
-            return new TaskProgressDto(0, 0, 0);
-
-        var completed = states.Count(s => s == PipelineState.Done);
-        var total = states.Count;
-        var percent = total > 0 ? (completed * 100) / total : 0;
-
-        return new TaskProgressDto(completed, total, percent);
-    }
-
-    public async Task<IReadOnlyList<TaskDto>> GetAllAsync(Guid repositoryId, bool rootOnly = false)
-    {
-        var query = db.Tasks.AsNoTracking()
-            .Where(t => t.RepositoryId == repositoryId);
-
-        if (rootOnly)
-        {
-            query = query.Where(t => t.ParentId == null);
-        }
-
-        var entities = await query
-            .Include(t => t.Children)
+        var entities = await db.Tasks.AsNoTracking()
+            .Where(t => t.BacklogItemId == backlogItemId)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
-        return entities.Select(e =>
-        {
-            var childDtos = e.Children.Count > 0
-                ? e.Children.Select(c => TaskDto.FromEntity(c)).ToList()
-                : null;
-            var progress = e.ChildCount > 0
-                ? ComputeProgress(e.Children.Select(c => c.State))
-                : null;
-            return TaskDto.FromEntity(e, childDtos, progress);
-        }).ToList();
+        return entities.Select(TaskDto.FromEntity).ToList();
     }
 
-    public async Task<TaskDto?> GetByIdAsync(Guid id, bool includeChildren = false)
+    public async Task<IReadOnlyList<TaskDto>> GetAllByRepositoryAsync(Guid repositoryId)
     {
-        var query = db.Tasks.AsQueryable();
-
-        if (includeChildren)
-        {
-            query = query.Include(t => t.Children);
-        }
-
-        var entity = await query.FirstOrDefaultAsync(t => t.Id == id);
-        if (entity is null) return null;
-
-        var childDtos = entity.Children?.Count > 0
-            ? entity.Children.Select(c => TaskDto.FromEntity(c)).ToList()
-            : null;
-        var progress = entity.ChildCount > 0
-            ? ComputeProgress(entity.Children?.Select(c => c.State) ?? [])
-            : null;
-
-        return TaskDto.FromEntity(entity, childDtos, progress);
-    }
-
-    public async Task<IReadOnlyList<TaskDto>> GetChildrenAsync(Guid parentId)
-    {
-        var children = await db.Tasks
-            .AsNoTracking()
-            .Where(t => t.ParentId == parentId)
-            .OrderBy(t => t.CreatedAt)
+        var entities = await db.Tasks.AsNoTracking()
+            .Where(t => t.RepositoryId == repositoryId)
+            .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
 
-        return children.Select(e => TaskDto.FromEntity(e)).ToList();
+        return entities.Select(TaskDto.FromEntity).ToList();
     }
 
-    public async Task<TaskDto> CreateAsync(Guid repositoryId, CreateTaskDto dto)
+    public async Task<TaskDto?> GetByIdAsync(Guid id)
     {
-        var entity = new TaskEntity
-        {
-            Id = Guid.NewGuid(),
-            Title = dto.Title,
-            Description = dto.Description,
-            Priority = dto.Priority,
-            State = PipelineState.Backlog,
-            HasError = false,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            RepositoryId = repositoryId
-        };
-
-        db.Tasks.Add(entity);
-        await db.SaveChangesAsync();
-
-        var result = TaskDto.FromEntity(entity);
-        await sse.EmitTaskCreatedAsync(result);
-        return result;
+        var entity = await db.Tasks.FindAsync(id);
+        return entity is null ? null : TaskDto.FromEntity(entity);
     }
 
     public async Task<TaskDto?> UpdateAsync(Guid id, UpdateTaskDto dto)
@@ -153,10 +58,16 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         var entity = await db.Tasks.FindAsync(id);
         if (entity is null) return false;
 
+        var backlogItemId = entity.BacklogItemId;
+
         db.Tasks.Remove(entity);
         await db.SaveChangesAsync();
 
         await sse.EmitTaskDeletedAsync(id);
+
+        // Update backlog item task count
+        await UpdateBacklogItemTaskCountAsync(backlogItemId);
+
         return true;
     }
 
@@ -165,11 +76,10 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         var entity = await db.Tasks.FindAsync(id);
         if (entity is null) return null;
 
-        // Parent tasks cannot be transitioned directly - their state is derived
-        if (entity.ChildCount > 0)
+        // Cannot transition while there's a pending gate
+        if (entity.HasPendingGate)
         {
-            throw new InvalidOperationException(
-                "Cannot transition a parent task. Parent state is derived from children.");
+            throw new InvalidOperationException("Cannot transition task while there's a pending human gate.");
         }
 
         // Validate adjacent state transition
@@ -188,10 +98,10 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         await sse.EmitTaskUpdatedAsync(result);
         await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.Title, previousState, dto.TargetState);
 
-        // Update parent's derived state if this is a child task
-        if (entity.ParentId is not null)
+        // Update backlog item if task is now Done
+        if (dto.TargetState == PipelineState.Done)
         {
-            await parentStateService.UpdateFromChildAsync(id);
+            await UpdateBacklogItemTaskCountAsync(entity.BacklogItemId);
         }
 
         return result;
@@ -272,122 +182,76 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         return result;
     }
 
-    /// <summary>
-    /// Splits a task into subtasks, converting the original task into a parent.
-    /// </summary>
-    public async Task<SplitTaskResultDto?> SplitTaskAsync(Guid taskId, SplitTaskDto dto)
+    public async Task<TaskDto?> PauseAsync(Guid id, string? reason)
     {
-        var parent = await db.Tasks.FindAsync(taskId);
-        if (parent is null) return null;
+        var entity = await db.Tasks.FindAsync(id);
+        if (entity is null) return null;
 
-        // Cannot split a task that already has children
-        if (parent.ChildCount > 0)
+        if (entity.IsPaused)
         {
-            throw new InvalidOperationException("Task already has children and cannot be split again.");
+            throw new InvalidOperationException("Task is already paused.");
         }
 
-        // Cannot split a task that is a child
-        if (parent.ParentId is not null)
-        {
-            throw new InvalidOperationException("Cannot split a subtask. Only root tasks can be split.");
-        }
-
-        // Create children
-        var children = new List<TaskEntity>();
-        foreach (var subtask in dto.Subtasks)
-        {
-            var child = new TaskEntity
-            {
-                Id = Guid.NewGuid(),
-                Title = subtask.Title,
-                Description = subtask.Description,
-                Priority = subtask.Priority,
-                State = PipelineState.Backlog,
-                ParentId = parent.Id,
-                RepositoryId = parent.RepositoryId, // Inherit from parent
-                HasError = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            children.Add(child);
-            db.Tasks.Add(child);
-        }
-
-        // Update parent
-        parent.ChildCount = children.Count;
-        parent.DerivedState = ComputeDerivedState(children.Select(c => c.State));
-        parent.UpdatedAt = DateTime.UtcNow;
-
+        entity.IsPaused = true;
+        entity.PauseReason = reason;
+        entity.PausedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var childDtos = children.Select(c => TaskDto.FromEntity(c)).ToList();
-        var progress = ComputeProgress(children.Select(c => c.State));
-        var parentDto = TaskDto.FromEntity(parent, childDtos, progress);
-
-        // Emit SSE events
-        await sse.EmitTaskSplitAsync(parentDto, childDtos);
-
-        return new SplitTaskResultDto(parentDto, childDtos);
+        var result = TaskDto.FromEntity(entity);
+        await sse.EmitTaskPausedAsync(result);
+        return result;
     }
 
-    /// <summary>
-    /// Adds a single child task to a parent.
-    /// </summary>
-    public async Task<TaskDto?> AddChildAsync(Guid parentId, CreateSubtaskDto dto)
+    public async Task<TaskDto?> ResumeAsync(Guid id)
     {
-        var parent = await db.Tasks
-            .Include(t => t.Children)
-            .FirstOrDefaultAsync(t => t.Id == parentId);
+        var entity = await db.Tasks.FindAsync(id);
+        if (entity is null) return null;
 
-        if (parent is null) return null;
-
-        // Cannot add child to a task that is itself a child
-        if (parent.ParentId is not null)
+        if (!entity.IsPaused)
         {
-            throw new InvalidOperationException("Cannot add children to a subtask. Max depth is 2 levels.");
+            throw new InvalidOperationException("Task is not paused.");
         }
 
-        var child = new TaskEntity
-        {
-            Id = Guid.NewGuid(),
-            Title = dto.Title,
-            Description = dto.Description,
-            Priority = dto.Priority,
-            State = PipelineState.Backlog,
-            ParentId = parent.Id,
-            RepositoryId = parent.RepositoryId, // Inherit from parent
-            HasError = false,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        db.Tasks.Add(child);
-
-        // Update parent
-        parent.ChildCount++;
-        var allChildStates = parent.Children.Select(c => c.State).Append(child.State);
-        parent.DerivedState = ComputeDerivedState(allChildStates);
-        parent.UpdatedAt = DateTime.UtcNow;
-
+        entity.IsPaused = false;
+        entity.PauseReason = null;
+        entity.PausedAt = null;
+        entity.HasError = false;
+        entity.ErrorMessage = null;
+        entity.RetryCount = 0;
+        entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        var childDto = TaskDto.FromEntity(child);
-        await sse.EmitChildAddedAsync(parentId, childDto);
-
-        // Also emit parent update
-        var progress = ComputeProgress(parent.Children.Select(c => c.State).Append(child.State));
-        var parentDto = TaskDto.FromEntity(parent, null, progress);
-        await sse.EmitTaskUpdatedAsync(parentDto);
-
-        return childDto;
+        var result = TaskDto.FromEntity(entity);
+        await sse.EmitTaskResumedAsync(result);
+        return result;
     }
 
-    /// <summary>
-    /// Checks if a task is a leaf task (has no children).
-    /// </summary>
-    public async Task<bool> IsLeafTaskAsync(Guid taskId)
+    private async Task UpdateBacklogItemTaskCountAsync(Guid backlogItemId)
     {
-        var entity = await db.Tasks.FindAsync(taskId);
-        return entity is not null && entity.ChildCount == 0;
+        var backlogItem = await db.BacklogItems
+            .Include(b => b.Tasks)
+            .FirstOrDefaultAsync(b => b.Id == backlogItemId);
+
+        if (backlogItem is null) return;
+
+        backlogItem.TaskCount = backlogItem.Tasks.Count;
+        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.Done);
+
+        // If all tasks are done, transition backlog item to Done
+        if (backlogItem.TaskCount > 0 &&
+            backlogItem.CompletedTaskCount == backlogItem.TaskCount &&
+            backlogItem.State == BacklogItemState.Executing)
+        {
+            backlogItem.State = BacklogItemState.Done;
+            await notifications.NotifyBacklogItemStateChangedAsync(
+                backlogItem.Id, backlogItem.Title, BacklogItemState.Executing, BacklogItemState.Done);
+        }
+
+        backlogItem.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var backlogDto = BacklogItemDto.FromEntity(backlogItem);
+        await sse.EmitBacklogItemUpdatedAsync(backlogDto);
     }
 }

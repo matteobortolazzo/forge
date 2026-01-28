@@ -20,21 +20,16 @@ public class PipelineConfiguration
     public int MaxSimplificationIterations { get; set; } = 2;
 
     /// <summary>
+    /// Maximum number of refining iterations for backlog items.
+    /// If the backlog item still needs clarification after this many iterations, escalate to human.
+    /// </summary>
+    public int MaxRefiningIterations { get; set; } = 3;
+
+    /// <summary>
     /// Confidence threshold below which human input is requested.
     /// Agents reporting confidence below this value trigger a human gate.
     /// </summary>
     public decimal ConfidenceThreshold { get; set; } = 0.7m;
-
-    /// <summary>
-    /// Whether to use git worktrees for subtask isolation.
-    /// </summary>
-    public bool WorktreeIsolation { get; set; } = true;
-
-    /// <summary>
-    /// Whether subtasks should be executed sequentially.
-    /// When true, only one subtask runs at a time.
-    /// </summary>
-    public bool SequentialSubtasks { get; set; } = true;
 
     /// <summary>
     /// Human gate configuration for each gate type.
@@ -48,19 +43,33 @@ public class PipelineConfiguration
 public class HumanGateConfiguration
 {
     /// <summary>
+    /// Refining gate mode: "conditional" (based on confidence) or "mandatory".
+    /// Applied to backlog items in the Refining state.
+    /// </summary>
+    public string Refining { get; set; } = "conditional";
+
+    /// <summary>
     /// Split gate mode: "conditional" (based on confidence) or "mandatory".
+    /// Applied to backlog items in the Splitting state.
     /// </summary>
     public string Split { get; set; } = "conditional";
 
     /// <summary>
     /// Planning gate mode: "conditional" (based on confidence + risk) or "mandatory".
+    /// Applied to tasks in the Planning state.
     /// </summary>
     public string Planning { get; set; } = "conditional";
 
     /// <summary>
     /// PR gate mode: always "mandatory" - cannot be changed.
+    /// Applied to tasks in the Reviewing state.
     /// </summary>
     public string Pr { get; set; } = "mandatory";
+
+    /// <summary>
+    /// Check if the refining gate requires human approval.
+    /// </summary>
+    public bool IsRefiningMandatory => Refining.Equals("mandatory", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Check if the split gate requires human approval.

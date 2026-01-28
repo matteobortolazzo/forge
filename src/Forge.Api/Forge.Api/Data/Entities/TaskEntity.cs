@@ -2,12 +2,17 @@ using Forge.Api.Shared;
 
 namespace Forge.Api.Data.Entities;
 
+/// <summary>
+/// Represents a concrete, schedulable implementation task.
+/// Tasks are leaf units created from BacklogItem splitting.
+/// All tasks are directly schedulable (no hierarchy).
+/// </summary>
 public class TaskEntity
 {
     public Guid Id { get; set; }
     public required string Title { get; set; }
     public required string Description { get; set; }
-    public PipelineState State { get; set; } = PipelineState.Backlog;
+    public PipelineState State { get; set; } = PipelineState.Research;
     public Priority Priority { get; set; } = Priority.Medium;
     public string? AssignedAgentId { get; set; }
     public bool HasError { get; set; }
@@ -19,6 +24,13 @@ public class TaskEntity
     public Guid RepositoryId { get; set; }
     public RepositoryEntity Repository { get; set; } = null!;
 
+    // BacklogItem association (required - all tasks belong to a backlog item)
+    public Guid BacklogItemId { get; set; }
+    public BacklogItemEntity BacklogItem { get; set; } = null!;
+
+    // Execution order within the backlog item (1-based)
+    public int ExecutionOrder { get; set; }
+
     // Scheduling fields
     public bool IsPaused { get; set; }
     public string? PauseReason { get; set; }
@@ -26,16 +38,7 @@ public class TaskEntity
     public int RetryCount { get; set; }
     public int MaxRetries { get; set; } = 3;
 
-    // Hierarchy fields
-    public Guid? ParentId { get; set; }
-    public TaskEntity? Parent { get; set; }
-    public ICollection<TaskEntity> Children { get; set; } = [];
-
-    // Denormalized for query efficiency
-    public int ChildCount { get; set; } = 0;
-    public PipelineState? DerivedState { get; set; }  // Computed for parents
-
-    // Agent context detection
+    // Agent context detection (inherited from BacklogItem or detected)
     public string? DetectedLanguage { get; set; }    // Auto-detected or user-specified (e.g., "csharp", "typescript")
     public string? DetectedFramework { get; set; }   // Auto-detected or user-specified (e.g., "angular", "dotnet")
     public PipelineState? RecommendedNextState { get; set; }  // Agent's recommendation for next state
@@ -53,6 +56,5 @@ public class TaskEntity
     // Navigation properties
     public ICollection<TaskLogEntity> Logs { get; set; } = [];
     public ICollection<AgentArtifactEntity> Artifacts { get; set; } = [];
-    public ICollection<SubtaskEntity> Subtasks { get; set; } = [];
     public ICollection<HumanGateEntity> HumanGates { get; set; } = [];
 }

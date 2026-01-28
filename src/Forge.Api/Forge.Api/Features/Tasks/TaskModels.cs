@@ -3,14 +3,10 @@ using Forge.Api.Shared;
 
 namespace Forge.Api.Features.Tasks;
 
-public record TaskProgressDto(
-    int Completed,
-    int Total,
-    int Percent);
-
 public record TaskDto(
     Guid Id,
     Guid RepositoryId,
+    Guid BacklogItemId,
     string Title,
     string Description,
     PipelineState State,
@@ -25,16 +21,14 @@ public record TaskDto(
     int MaxRetries,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    // Hierarchy fields
-    Guid? ParentId,
-    int ChildCount,
-    PipelineState? DerivedState,
-    IReadOnlyList<TaskDto>? Children = null,
-    TaskProgressDto? Progress = null)
+    int ExecutionOrder,
+    decimal? ConfidenceScore,
+    bool HasPendingGate)
 {
-    public static TaskDto FromEntity(TaskEntity entity, IReadOnlyList<TaskDto>? children = null, TaskProgressDto? progress = null) => new(
+    public static TaskDto FromEntity(TaskEntity entity) => new(
         entity.Id,
         entity.RepositoryId,
+        entity.BacklogItemId,
         entity.Title,
         entity.Description,
         entity.State,
@@ -49,11 +43,9 @@ public record TaskDto(
         entity.MaxRetries,
         entity.CreatedAt,
         entity.UpdatedAt,
-        entity.ParentId,
-        entity.ChildCount,
-        entity.DerivedState,
-        children,
-        progress);
+        entity.ExecutionOrder,
+        entity.ConfidenceScore,
+        entity.HasPendingGate);
 }
 
 public record TaskLogDto(
@@ -66,7 +58,7 @@ public record TaskLogDto(
 {
     public static TaskLogDto FromEntity(TaskLogEntity entity) => new(
         entity.Id,
-        entity.TaskId,
+        entity.TaskId ?? Guid.Empty,
         entity.Type,
         entity.Content,
         entity.ToolName,
@@ -86,15 +78,5 @@ public record UpdateTaskDto(
 public record TransitionTaskDto(
     PipelineState TargetState);
 
-// Hierarchy DTOs
-public record CreateSubtaskDto(
-    string Title,
-    string Description,
-    Priority Priority);
-
-public record SplitTaskDto(
-    IReadOnlyList<CreateSubtaskDto> Subtasks);
-
-public record SplitTaskResultDto(
-    TaskDto Parent,
-    IReadOnlyList<TaskDto> Children);
+public record PauseTaskDto(
+    string? Reason = null);

@@ -8,9 +8,10 @@ namespace Forge.Api.Features.Tasks;
 /// </summary>
 public record ArtifactDto(
     Guid Id,
-    Guid TaskId,
-    Guid? SubtaskId,
-    PipelineState ProducedInState,
+    Guid? TaskId,
+    Guid? BacklogItemId,
+    PipelineState? ProducedInState,
+    BacklogItemState? ProducedInBacklogState,
     ArtifactType ArtifactType,
     string Content,
     DateTime CreatedAt,
@@ -23,8 +24,9 @@ public record ArtifactDto(
         new(
             entity.Id,
             entity.TaskId,
-            entity.SubtaskId,
+            entity.BacklogItemId,
             entity.ProducedInState,
+            entity.ProducedInBacklogState,
             entity.ArtifactType,
             entity.Content,
             entity.CreatedAt,
