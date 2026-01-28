@@ -31,7 +31,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 
 // Database
-var databasePath = builder.Configuration["DATABASE_PATH"] ?? "forge.db";
+var databasePath = builder.Configuration["DATABASE_PATH"]
+    ?? throw new InvalidOperationException("DATABASE_PATH environment variable is required");
 var connectionString = $"Data Source={databasePath}";
 builder.Services.AddDbContext<ForgeDbContext>(options =>
     options.UseSqlite(connectionString));
