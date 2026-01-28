@@ -6,6 +6,7 @@ public class TransitionTaskTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public TransitionTaskTests(ForgeWebApplicationFactory factory)
     {
@@ -16,32 +17,36 @@ public class TransitionTaskTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests
+        // Create a repository and backlog item for all tests
         await using var db = _factory.CreateDbContext();
         var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
         _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
+
     [Fact]
-    public async Task TransitionTask_FromBacklogToSplit_Succeeds()
+    public async Task TransitionTask_FromResearchToPlanning_Succeeds()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Transition Test", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Transition Test", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Split);
+        task!.State.Should().Be(PipelineState.Planning);
     }
 
     [Fact]
@@ -49,12 +54,11 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Full Workflow", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Full Workflow", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
+        // New pipeline state flow (no more Backlog or Split)
         var states = new[]
         {
-            PipelineState.Split,
-            PipelineState.Research,
             PipelineState.Planning,
             PipelineState.Implementing,
             PipelineState.Simplifying,
@@ -68,7 +72,7 @@ public class TransitionTaskTests : IAsyncLifetime
         foreach (var state in states)
         {
             var dto = new TransitionTaskDtoBuilder().WithTargetState(state).Build();
-            var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+            var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             var task = await response.ReadAsAsync<TaskDto>();
             task!.State.Should().Be(state);
@@ -80,19 +84,19 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Research, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Research)
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Split);
+        task!.State.Should().Be(PipelineState.Research);
     }
 
     [Fact]
@@ -100,14 +104,14 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Skip Test", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Skip Test", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
             .WithTargetState(PipelineState.Implementing) // Skipping Planning
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -118,14 +122,14 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Same State Test", state: PipelineState.Planning, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Same State Test", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
             .WithTargetState(PipelineState.Planning) // Same state
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -141,7 +145,7 @@ public class TransitionTaskTests : IAsyncLifetime
 
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{nonExistentId}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -152,18 +156,18 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Transition", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskUpdatedAsync(
-            Arg.Is<TaskDto>(t => t.State == PipelineState.Split));
+            Arg.Is<TaskDto>(t => t.State == PipelineState.Planning));
     }
 
     [Fact]
@@ -171,16 +175,16 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Transition", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         var originalUpdatedAt = entity.UpdatedAt;
         await Task.Delay(10);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         var task = await response.ReadAsAsync<TaskDto>();
@@ -192,53 +196,53 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persist Transition", state: PipelineState.Backlog, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persist Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
         var updated = await verifyDb.Tasks.FindAsync(entity.Id);
-        updated!.State.Should().Be(PipelineState.Split);
+        updated!.State.Should().Be(PipelineState.Planning);
     }
 
     [Fact]
-    public async Task TransitionTask_FromDoneToBacklog_ReturnsBadRequest()
+    public async Task TransitionTask_FromDoneToResearch_ReturnsBadRequest()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Done Task", state: PipelineState.Done, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Done Task", state: PipelineState.Done, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Backlog) // Multiple states away
+            .WithTargetState(PipelineState.Research) // Multiple states away
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task TransitionTask_WrongRepository_ReturnsNotFound()
+    public async Task TransitionTask_WrongBacklogItem_ReturnsNotFound()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Wrong Repo Task", state: PipelineState.Backlog, repositoryId: _repositoryId);
-        var wrongRepoId = Guid.NewGuid();
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Wrong Backlog Task", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var wrongBacklogItemId = Guid.NewGuid();
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Split)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{wrongRepoId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/backlog/{wrongBacklogItemId}/tasks/{entity.Id}/transition", dto, HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

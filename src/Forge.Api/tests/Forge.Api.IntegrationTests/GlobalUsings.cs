@@ -3,6 +3,7 @@ global using System.Net.Http.Json;
 global using FluentAssertions;
 global using Forge.Api.Data;
 global using Forge.Api.Data.Entities;
+global using Forge.Api.Features.Backlog;
 global using Forge.Api.Features.Repositories;
 global using Forge.Api.Features.Tasks;
 global using Forge.Api.Shared;

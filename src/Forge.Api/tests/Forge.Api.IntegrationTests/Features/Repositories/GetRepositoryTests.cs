@@ -87,7 +87,7 @@ public class GetRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetRepository_IncludesTaskCount()
+    public async Task GetRepository_IncludesBacklogItemCount()
     {
         // Arrange
         var createDto = new CreateRepositoryDtoBuilder()
@@ -96,18 +96,18 @@ public class GetRepositoryTests : IAsyncLifetime
         var createResponse = await _client.PostAsJsonAsync("/api/repositories", createDto, HttpClientExtensions.JsonOptions);
         var repo = await createResponse.ReadAsAsync<RepositoryDto>();
 
-        // Create tasks
-        var taskDto = new CreateTaskDtoBuilder()
-            .WithTitle("Task 1")
+        // Create backlog items
+        var backlogDto = new CreateBacklogItemDtoBuilder()
+            .WithTitle("Backlog Item 1")
             .Build();
-        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/tasks", taskDto, HttpClientExtensions.JsonOptions);
-        await _client.PostAsJsonAsync($"/api/repositories/{repo.Id}/tasks", taskDto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/backlog", backlogDto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"/api/repositories/{repo.Id}/backlog", backlogDto, HttpClientExtensions.JsonOptions);
 
         // Act
         var response = await _client.GetAsync($"/api/repositories/{repo.Id}");
 
         // Assert
         var fetched = await response.ReadAsAsync<RepositoryDto>();
-        fetched!.TaskCount.Should().Be(2);
+        fetched!.BacklogItemCount.Should().Be(2);
     }
 }

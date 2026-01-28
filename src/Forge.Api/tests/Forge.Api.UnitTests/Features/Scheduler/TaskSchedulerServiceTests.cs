@@ -59,9 +59,7 @@ public class TaskSchedulerServiceTests : IDisposable
         services.AddSingleton(_schedulerOptions);
         services.AddSingleton(pipelineConfig);
         services.AddSingleton<ILogger<SchedulerService>>(Substitute.For<ILogger<SchedulerService>>());
-        services.AddSingleton<ILogger<ParentStateService>>(Substitute.For<ILogger<ParentStateService>>());
         services.AddSingleton<ILogger<HumanGateService>>(Substitute.For<ILogger<HumanGateService>>());
-        services.AddSingleton<IParentStateService, ParentStateService>();
         services.AddSingleton<HumanGateService>();
         services.AddSingleton<SchedulerService>();
 
@@ -75,76 +73,76 @@ public class TaskSchedulerServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_WhenAgentRunning_DoesNotSchedule()
+    public async Task TryScheduleNextWorkItem_WhenAgentRunning_DoesNotSchedule()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(true, Guid.NewGuid(), DateTime.UtcNow));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(true, Guid.NewGuid(), null, DateTime.UtcNow));
         await CreateTaskAsync(PipelineState.Planning, Priority.High);
 
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - agent was not started
         await _agentRunnerMock.DidNotReceive().StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_WhenAgentIdleAndTaskAvailable_StartsAgent()
+    public async Task TryScheduleNextWorkItem_WhenAgentIdleAndTaskAvailable_StartsAgent()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null, null));
         _agentRunnerMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         var taskId = await CreateTaskAsync(PipelineState.Planning, Priority.High);
 
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - agent was started with correct task
         await _agentRunnerMock.Received(1).StartAgentAsync(taskId, Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_WhenTaskAvailable_EmitsSseEvent()
+    public async Task TryScheduleNextWorkItem_WhenTaskAvailable_EmitsSseEvent()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null, null));
         _agentRunnerMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         await CreateTaskAsync(PipelineState.Planning, Priority.High);
 
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - SSE event was emitted
         await _sseMock.Received(1).EmitSchedulerTaskScheduledAsync(Arg.Any<TaskDto>());
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_WhenNoTaskAvailable_DoesNotStartAgent()
+    public async Task TryScheduleNextWorkItem_WhenNoTaskAvailable_DoesNotStartAgent()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null, null));
         // No tasks in the database
 
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - agent was not started
         await _agentRunnerMock.DidNotReceive().StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_WhenSchedulerDisabled_DoesNotStartAgent()
+    public async Task TryScheduleNextWorkItem_WhenSchedulerDisabled_DoesNotStartAgent()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null, null));
         await CreateTaskAsync(PipelineState.Planning, Priority.High);
 
         var schedulerState = _serviceProvider.GetRequiredService<SchedulerState>();
@@ -153,17 +151,17 @@ public class TaskSchedulerServiceTests : IDisposable
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - agent was not started because scheduler is disabled
         await _agentRunnerMock.DidNotReceive().StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
-    public async Task TryScheduleNextTask_SelectsHighestPriorityTask()
+    public async Task TryScheduleNextWorkItem_SelectsHighestPriorityTask()
     {
         // Arrange
-        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null));
+        _agentRunnerMock.GetStatus().Returns(new AgentStatusDto(false, null, null, null));
         _agentRunnerMock.StartAgentAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
 
         await CreateTaskAsync(PipelineState.Planning, Priority.Low, "Low");
@@ -173,7 +171,7 @@ public class TaskSchedulerServiceTests : IDisposable
         var sut = CreateService();
 
         // Act
-        await sut.TryScheduleNextTaskAsync();
+        await sut.TryScheduleNextWorkItemAsync();
 
         // Assert - high priority task was selected
         await _agentRunnerMock.Received(1).StartAgentAsync(highPriorityId, "High", Arg.Any<string>());

@@ -3,7 +3,7 @@ namespace Forge.Api.IntegrationTests.Infrastructure;
 public static class TestDatabaseHelper
 {
     /// <summary>
-    /// Creates a repository in the database. Required before creating tasks.
+    /// Creates a repository in the database. Required before creating backlog items and tasks.
     /// </summary>
     public static async Task<RepositoryEntity> SeedRepositoryAsync(
         ForgeDbContext db,
@@ -26,11 +26,14 @@ public static class TestDatabaseHelper
         return entity;
     }
 
-    public static async Task<TaskEntity> SeedTaskAsync(
+    /// <summary>
+    /// Creates a backlog item in the database. Required before creating tasks.
+    /// </summary>
+    public static async Task<BacklogItemEntity> SeedBacklogItemAsync(
         ForgeDbContext db,
-        string title = "Test Task",
+        string title = "Test Backlog Item",
         string description = "Test Description",
-        PipelineState state = PipelineState.Backlog,
+        BacklogItemState state = BacklogItemState.Executing,
         Priority priority = Priority.Medium,
         Guid? repositoryId = null)
     {
@@ -48,6 +51,63 @@ public static class TestDatabaseHelper
             repositoryId = existingRepo.Id;
         }
 
+        var entity = new BacklogItemEntity
+        {
+            Id = Guid.NewGuid(),
+            Title = title,
+            Description = description,
+            State = state,
+            Priority = priority,
+            RepositoryId = repositoryId.Value,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.BacklogItems.Add(entity);
+        await db.SaveChangesAsync();
+        return entity;
+    }
+
+    /// <summary>
+    /// Creates a task in the database under a backlog item.
+    /// </summary>
+    public static async Task<TaskEntity> SeedTaskAsync(
+        ForgeDbContext db,
+        string title = "Test Task",
+        string description = "Test Description",
+        PipelineState state = PipelineState.Research,
+        Priority priority = Priority.Medium,
+        Guid? repositoryId = null,
+        Guid? backlogItemId = null)
+    {
+        // If no repository provided, create or get an existing one
+        if (repositoryId is null)
+        {
+            var existingRepo = await db.Repositories
+                .FirstOrDefaultAsync(r => r.IsActive);
+
+            if (existingRepo is null)
+            {
+                existingRepo = await SeedRepositoryAsync(db);
+            }
+
+            repositoryId = existingRepo.Id;
+        }
+
+        // If no backlog item provided, create or get an existing one
+        if (backlogItemId is null)
+        {
+            var existingBacklogItem = await db.BacklogItems
+                .FirstOrDefaultAsync(b => b.RepositoryId == repositoryId);
+
+            if (existingBacklogItem is null)
+            {
+                existingBacklogItem = await SeedBacklogItemAsync(db, repositoryId: repositoryId);
+            }
+
+            backlogItemId = existingBacklogItem.Id;
+        }
+
         var entity = new TaskEntity
         {
             Id = Guid.NewGuid(),
@@ -57,6 +117,7 @@ public static class TestDatabaseHelper
             Priority = priority,
             HasError = false,
             RepositoryId = repositoryId.Value,
+            BacklogItemId = backlogItemId.Value,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

@@ -1,5 +1,52 @@
 namespace Forge.Api.IntegrationTests.Helpers;
 
+public class CreateBacklogItemDtoBuilder
+{
+    private string _title = "Test Backlog Item";
+    private string _description = "Test Description";
+    private Priority _priority = Priority.Medium;
+    private string? _acceptanceCriteria;
+
+    public CreateBacklogItemDtoBuilder WithTitle(string title)
+    {
+        _title = title;
+        return this;
+    }
+
+    public CreateBacklogItemDtoBuilder WithDescription(string description)
+    {
+        _description = description;
+        return this;
+    }
+
+    public CreateBacklogItemDtoBuilder WithPriority(Priority priority)
+    {
+        _priority = priority;
+        return this;
+    }
+
+    public CreateBacklogItemDtoBuilder WithAcceptanceCriteria(string acceptanceCriteria)
+    {
+        _acceptanceCriteria = acceptanceCriteria;
+        return this;
+    }
+
+    public CreateBacklogItemDto Build() => new(_title, _description, _priority, _acceptanceCriteria);
+}
+
+public class TransitionBacklogItemDtoBuilder
+{
+    private BacklogItemState _targetState = BacklogItemState.Executing;
+
+    public TransitionBacklogItemDtoBuilder WithTargetState(BacklogItemState state)
+    {
+        _targetState = state;
+        return this;
+    }
+
+    public TransitionBacklogItemDto Build() => new(_targetState);
+}
+
 public class CreateTaskDtoBuilder
 {
     private string _title = "Test Task";

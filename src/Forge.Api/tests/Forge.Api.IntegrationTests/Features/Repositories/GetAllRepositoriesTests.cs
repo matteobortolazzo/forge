@@ -107,27 +107,27 @@ public class GetAllRepositoriesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetAllRepositories_IncludesTaskCount()
+    public async Task GetAllRepositories_IncludesBacklogItemCount()
     {
         // Arrange - Create repository
         var createDto = new CreateRepositoryDtoBuilder()
-            .WithName("Repo With Tasks")
+            .WithName("Repo With Backlog Items")
             .WithPath(ForgeWebApplicationFactory.ProjectRoot)
             .Build();
         var repoResponse = await _client.PostAsJsonAsync("/api/repositories", createDto, HttpClientExtensions.JsonOptions);
         var repo = await repoResponse.ReadAsAsync<RepositoryDto>();
 
-        // Create a task in this repository
-        var taskDto = new CreateTaskDtoBuilder()
-            .WithTitle("Test Task")
+        // Create a backlog item in this repository
+        var backlogDto = new CreateBacklogItemDtoBuilder()
+            .WithTitle("Test Backlog Item")
             .Build();
-        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/tasks", taskDto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/backlog", backlogDto, HttpClientExtensions.JsonOptions);
 
         // Act
         var response = await _client.GetAsync("/api/repositories");
 
         // Assert
         var repos = await response.ReadAsAsync<List<RepositoryDto>>();
-        repos![0].TaskCount.Should().Be(1);
+        repos![0].BacklogItemCount.Should().Be(1);
     }
 }

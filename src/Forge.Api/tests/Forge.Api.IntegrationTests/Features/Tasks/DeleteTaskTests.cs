@@ -6,6 +6,7 @@ public class DeleteTaskTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public DeleteTaskTests(ForgeWebApplicationFactory factory)
     {
@@ -16,23 +17,27 @@ public class DeleteTaskTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests
+        // Create a repository and backlog item for all tests
         await using var db = _factory.CreateDbContext();
         var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
         _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
     public async Task DeleteTask_WithValidId_ReturnsNoContent()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Delete", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Delete", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        var response = await _client.DeleteAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -43,7 +48,7 @@ public class DeleteTaskTests : IAsyncLifetime
     {
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}");
+        var response = await _client.DeleteAsync($"{TasksUrl}/{nonExistentId}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -54,10 +59,10 @@ public class DeleteTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Remove", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Remove", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        await _client.DeleteAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
@@ -70,10 +75,10 @@ public class DeleteTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Delete Task", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Delete Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        await _client.DeleteAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskDeletedAsync(entity.Id);
@@ -84,13 +89,13 @@ public class DeleteTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task with Logs", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task with Logs", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         await TestDatabaseHelper.SeedTaskLogAsync(db, entity.Id, LogType.Info, "Log 1");
         await TestDatabaseHelper.SeedTaskLogAsync(db, entity.Id, LogType.ToolUse, "Log 2", "ReadFile");
         await TestDatabaseHelper.SeedTaskLogAsync(db, entity.Id, LogType.Error, "Log 3");
 
         // Act
-        await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        await _client.DeleteAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
@@ -103,11 +108,11 @@ public class DeleteTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var taskToDelete = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Delete", repositoryId: _repositoryId);
-        var taskToKeep = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Keep", repositoryId: _repositoryId);
+        var taskToDelete = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Delete", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var taskToKeep = await TestDatabaseHelper.SeedTaskAsync(db, "Task to Keep", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        await _client.DeleteAsync($"/api/repositories/{_repositoryId}/tasks/{taskToDelete.Id}");
+        await _client.DeleteAsync($"{TasksUrl}/{taskToDelete.Id}");
 
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
@@ -117,16 +122,15 @@ public class DeleteTaskTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeleteTask_WithWrongRepository_ReturnsNotFound()
+    public async Task DeleteTask_WithWrongBacklogItem_ReturnsNotFound()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
+        var otherBacklogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, "Other Backlog Item", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main backlog", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
-        // Act - Try to delete task from wrong repository
-        var response = await _client.DeleteAsync($"/api/repositories/{otherRepo.Id}/tasks/{entity.Id}");
+        // Act - Try to delete task from wrong backlog item
+        var response = await _client.DeleteAsync($"/api/repositories/{_repositoryId}/backlog/{otherBacklogItem.Id}/tasks/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

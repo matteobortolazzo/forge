@@ -19,7 +19,6 @@ public class SchedulerServiceTests : IDisposable
     private readonly ISseService _sseMock;
     private readonly NotificationService _notificationService;
     private readonly SchedulerState _schedulerState;
-    private readonly IParentStateService _parentStateServiceMock;
     private readonly HumanGateService _humanGateService;
     private readonly SchedulerService _sut;
 
@@ -46,8 +45,6 @@ public class SchedulerServiceTests : IDisposable
             ConfidenceThreshold = 0.7m
         });
 
-        _parentStateServiceMock = Substitute.For<IParentStateService>();
-
         var humanGateLoggerMock = Substitute.For<ILogger<HumanGateService>>();
         _humanGateService = new HumanGateService(_db, _sseMock, pipelineConfig, humanGateLoggerMock);
 
@@ -60,7 +57,6 @@ public class SchedulerServiceTests : IDisposable
             _schedulerState,
             schedulerOptions,
             pipelineConfig,
-            _parentStateServiceMock,
             _humanGateService,
             loggerMock);
     }
@@ -164,7 +160,6 @@ public class SchedulerServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(PipelineState.Backlog)]
     [InlineData(PipelineState.PrReady)]
     [InlineData(PipelineState.Done)]
     public async Task GetNextSchedulableTask_ExcludesNonSchedulableStates(PipelineState state)
@@ -230,7 +225,6 @@ public class SchedulerServiceTests : IDisposable
     #region HandleAgentCompletionAsync
 
     [Theory]
-    [InlineData(PipelineState.Split, PipelineState.Research)]
     [InlineData(PipelineState.Research, PipelineState.Planning)]
     [InlineData(PipelineState.Planning, PipelineState.Implementing)]
     [InlineData(PipelineState.Implementing, PipelineState.Simplifying)]
@@ -443,7 +437,7 @@ public class SchedulerServiceTests : IDisposable
         await CreateTaskAsync("Pending 1", Priority.Medium, PipelineState.Planning);
         await CreateTaskAsync("Pending 2", Priority.Medium, PipelineState.Implementing);
         await CreateTaskAsync("Paused", Priority.Medium, PipelineState.Planning, isPaused: true);
-        await CreateTaskAsync("Backlog", Priority.Medium, PipelineState.Backlog); // Not schedulable
+        await CreateTaskAsync("Done", Priority.Medium, PipelineState.Done); // Not schedulable
 
         var agentStatus = new AgentStatusDto(false, null, null);
 
@@ -462,7 +456,7 @@ public class SchedulerServiceTests : IDisposable
     {
         // Arrange
         var taskId = Guid.NewGuid();
-        var agentStatus = new AgentStatusDto(true, taskId, DateTime.UtcNow);
+        var agentStatus = new AgentStatusDto(true, taskId, null, DateTime.UtcNow);
 
         // Act
         var result = await _sut.GetStatusAsync(agentStatus);

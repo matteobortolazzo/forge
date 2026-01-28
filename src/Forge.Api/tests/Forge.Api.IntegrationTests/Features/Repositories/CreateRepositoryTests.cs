@@ -35,7 +35,7 @@ public class CreateRepositoryTests : IAsyncLifetime
         repo.Name.Should().Be("Test Repo");
         repo.Path.Should().Be(ForgeWebApplicationFactory.ProjectRoot);
         repo.IsActive.Should().BeTrue();
-        repo.TaskCount.Should().Be(0);
+        repo.BacklogItemCount.Should().Be(0);
     }
 
     [Fact]

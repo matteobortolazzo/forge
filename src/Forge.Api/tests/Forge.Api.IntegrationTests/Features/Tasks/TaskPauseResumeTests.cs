@@ -1,5 +1,3 @@
-using Forge.Api.Features.Scheduler;
-
 namespace Forge.Api.IntegrationTests.Features.Tasks;
 
 [Collection("Api")]
@@ -8,6 +6,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public TaskPauseResumeTests(ForgeWebApplicationFactory factory)
     {
@@ -18,17 +17,17 @@ public class TaskPauseResumeTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests via HTTP
-        var repoDto = new CreateRepositoryDtoBuilder()
-            .WithName("Test Repository")
-            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .Build();
-        var response = await _client.PostAsJsonAsync("/api/repositories", repoDto, HttpClientExtensions.JsonOptions);
-        var repo = await response.ReadAsAsync<RepositoryDto>();
-        _repositoryId = repo!.Id;
+        // Create a repository and backlog item for all tests
+        await using var db = _factory.CreateDbContext();
+        var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
+        _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     #region Pause Tests
 
@@ -39,8 +38,8 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateTaskAsync();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
-            new PauseTaskDto("Manual pause"), HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{taskId}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("Manual pause"), HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -57,8 +56,8 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateTaskAsync();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
-            new PauseTaskDto("Persisted pause"), HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"{TasksUrl}/{taskId}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("Persisted pause"), HttpClientExtensions.JsonOptions);
 
         // Assert
         await using var db = _factory.CreateDbContext();
@@ -75,8 +74,8 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateTaskAsync();
 
         // Act
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
-            new PauseTaskDto("SSE pause"), HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"{TasksUrl}/{taskId}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("SSE pause"), HttpClientExtensions.JsonOptions);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskPausedAsync(
@@ -87,8 +86,8 @@ public class TaskPauseResumeTests : IAsyncLifetime
     public async Task PauseTask_WithNonExistentTask_ReturnsNotFound()
     {
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{Guid.NewGuid()}/pause",
-            new PauseTaskDto("Test"), HttpClientExtensions.JsonOptions);
+        var response = await _client.PostAsJsonAsync($"{TasksUrl}/{Guid.NewGuid()}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("Test"), HttpClientExtensions.JsonOptions);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -105,7 +104,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateAndPauseTaskAsync();
 
         // Act
-        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/resume", null);
+        var response = await _client.PostAsync($"{TasksUrl}/{taskId}/resume", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -132,7 +131,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
         }
 
         // Act
-        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/resume", null);
+        var response = await _client.PostAsync($"{TasksUrl}/{taskId}/resume", null);
 
         // Assert
         var task = await response.ReadAsAsync<TaskDto>();
@@ -148,7 +147,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateAndPauseTaskAsync();
 
         // Act
-        await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/resume", null);
+        await _client.PostAsync($"{TasksUrl}/{taskId}/resume", null);
 
         // Assert
         await using var db = _factory.CreateDbContext();
@@ -165,7 +164,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
         var taskId = await CreateAndPauseTaskAsync();
 
         // Act
-        await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/resume", null);
+        await _client.PostAsync($"{TasksUrl}/{taskId}/resume", null);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskResumedAsync(
@@ -176,7 +175,7 @@ public class TaskPauseResumeTests : IAsyncLifetime
     public async Task ResumeTask_WithNonExistentTask_ReturnsNotFound()
     {
         // Act
-        var response = await _client.PostAsync($"/api/repositories/{_repositoryId}/tasks/{Guid.NewGuid()}/resume", null);
+        var response = await _client.PostAsync($"{TasksUrl}/{Guid.NewGuid()}/resume", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -188,17 +187,16 @@ public class TaskPauseResumeTests : IAsyncLifetime
 
     private async Task<Guid> CreateTaskAsync()
     {
-        var dto = new CreateTaskDtoBuilder().Build();
-        var response = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks", dto, HttpClientExtensions.JsonOptions);
-        var task = await response.ReadAsAsync<TaskDto>();
-        return task!.Id;
+        await using var db = _factory.CreateDbContext();
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Test Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        return task.Id;
     }
 
     private async Task<Guid> CreateAndPauseTaskAsync()
     {
         var taskId = await CreateTaskAsync();
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
-            new PauseTaskDto("Initial pause"), HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"{TasksUrl}/{taskId}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("Initial pause"), HttpClientExtensions.JsonOptions);
         _factory.SseServiceMock.ClearReceivedCalls(); // Clear for subsequent assertions
         return taskId;
     }

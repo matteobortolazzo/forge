@@ -6,6 +6,7 @@ public class GetAllTasksTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public GetAllTasksTests(ForgeWebApplicationFactory factory)
     {
@@ -16,19 +17,23 @@ public class GetAllTasksTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests
+        // Create a repository and backlog item for all tests
         await using var db = _factory.CreateDbContext();
         var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
         _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
     public async Task GetAllTasks_WithNoTasks_ReturnsEmptyList()
     {
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks");
+        var response = await _client.GetAsync(TasksUrl);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -42,12 +47,12 @@ public class GetAllTasksTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        await TestDatabaseHelper.SeedTaskAsync(db, "Task 1", "Description 1", repositoryId: _repositoryId);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Task 2", "Description 2", repositoryId: _repositoryId);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Task 3", "Description 3", repositoryId: _repositoryId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Task 1", "Description 1", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Task 2", "Description 2", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Task 3", "Description 3", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks");
+        var response = await _client.GetAsync(TasksUrl);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -61,12 +66,12 @@ public class GetAllTasksTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Old Task", repositoryId: _repositoryId);
+        var task1 = await TestDatabaseHelper.SeedTaskAsync(db, "Old Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         await Task.Delay(10); // Ensure different timestamps
-        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "New Task", repositoryId: _repositoryId);
+        var task2 = await TestDatabaseHelper.SeedTaskAsync(db, "New Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks");
+        var response = await _client.GetAsync(TasksUrl);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -81,11 +86,11 @@ public class GetAllTasksTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        await TestDatabaseHelper.SeedTaskAsync(db, "Low Priority", priority: Priority.Low, repositoryId: _repositoryId);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Critical Priority", priority: Priority.Critical, repositoryId: _repositoryId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Low Priority", priority: Priority.Low, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Critical Priority", priority: Priority.Critical, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks");
+        var response = await _client.GetAsync(TasksUrl);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -99,29 +104,39 @@ public class GetAllTasksTests : IAsyncLifetime
     {
         // Act
         var nonExistentRepoId = Guid.NewGuid();
-        var response = await _client.GetAsync($"/api/repositories/{nonExistentRepoId}/tasks");
+        var response = await _client.GetAsync($"/api/repositories/{nonExistentRepoId}/backlog/{_backlogItemId}/tasks");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task GetAllTasks_OnlyReturnsTasksForSpecifiedRepository()
+    public async Task GetAllTasks_WithNonExistentBacklogItem_ReturnsNotFound()
+    {
+        // Act
+        var nonExistentBacklogItemId = Guid.NewGuid();
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/backlog/{nonExistentBacklogItemId}/tasks");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetAllTasks_OnlyReturnsTasksForSpecifiedBacklogItem()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Task in other repo", repositoryId: otherRepo.Id);
+        var otherBacklogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, "Other Backlog Item", repositoryId: _repositoryId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Task in main backlog", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Task in other backlog", repositoryId: _repositoryId, backlogItemId: otherBacklogItem.Id);
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks");
+        var response = await _client.GetAsync(TasksUrl);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var tasks = await response.ReadAsAsync<List<TaskDto>>();
         tasks.Should().HaveCount(1);
-        tasks![0].Title.Should().Be("Task in main repo");
+        tasks![0].Title.Should().Be("Task in main backlog");
     }
 }

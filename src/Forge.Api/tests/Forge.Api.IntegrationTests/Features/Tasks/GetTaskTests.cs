@@ -6,6 +6,7 @@ public class GetTaskTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public GetTaskTests(ForgeWebApplicationFactory factory)
     {
@@ -16,23 +17,27 @@ public class GetTaskTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests
+        // Create a repository and backlog item for all tests
         await using var db = _factory.CreateDbContext();
         var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
         _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
     public async Task GetTask_WithValidId_ReturnsTask()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Test Task", "Test Description", PipelineState.Planning, Priority.High, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Test Task", "Test Description", PipelineState.Planning, Priority.High, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        var response = await _client.GetAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -52,7 +57,7 @@ public class GetTaskTests : IAsyncLifetime
     {
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}");
+        var response = await _client.GetAsync($"{TasksUrl}/{nonExistentId}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -62,7 +67,7 @@ public class GetTaskTests : IAsyncLifetime
     public async Task GetTask_WithInvalidGuid_ReturnsNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/not-a-guid");
+        var response = await _client.GetAsync($"{TasksUrl}/not-a-guid");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -83,6 +88,7 @@ public class GetTaskTests : IAsyncLifetime
             HasError = true,
             ErrorMessage = "Agent crashed",
             RepositoryId = _repositoryId,
+            BacklogItemId = _backlogItemId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -90,7 +96,7 @@ public class GetTaskTests : IAsyncLifetime
         await db.SaveChangesAsync();
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        var response = await _client.GetAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -113,6 +119,7 @@ public class GetTaskTests : IAsyncLifetime
             Priority = Priority.Medium,
             AssignedAgentId = "claude-agent-123",
             RepositoryId = _repositoryId,
+            BacklogItemId = _backlogItemId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -120,7 +127,7 @@ public class GetTaskTests : IAsyncLifetime
         await db.SaveChangesAsync();
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}");
+        var response = await _client.GetAsync($"{TasksUrl}/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -133,27 +140,26 @@ public class GetTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Test Task", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Test Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         var nonExistentRepoId = Guid.NewGuid();
 
         // Act
-        var response = await _client.GetAsync($"/api/repositories/{nonExistentRepoId}/tasks/{entity.Id}");
+        var response = await _client.GetAsync($"/api/repositories/{nonExistentRepoId}/backlog/{_backlogItemId}/tasks/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
-    public async Task GetTask_WithWrongRepository_ReturnsNotFound()
+    public async Task GetTask_WithWrongBacklogItem_ReturnsNotFound()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
+        var otherBacklogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, "Other Backlog Item", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main backlog", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
-        // Act - Try to get task from wrong repository
-        var response = await _client.GetAsync($"/api/repositories/{otherRepo.Id}/tasks/{entity.Id}");
+        // Act - Try to get task from wrong backlog item
+        var response = await _client.GetAsync($"/api/repositories/{_repositoryId}/backlog/{otherBacklogItem.Id}/tasks/{entity.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

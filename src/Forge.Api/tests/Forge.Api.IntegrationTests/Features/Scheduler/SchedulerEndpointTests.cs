@@ -8,6 +8,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public SchedulerEndpointTests(ForgeWebApplicationFactory factory)
     {
@@ -18,17 +19,17 @@ public class SchedulerEndpointTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests via HTTP
-        var repoDto = new CreateRepositoryDtoBuilder()
-            .WithName("Test Repository")
-            .WithPath(ForgeWebApplicationFactory.ProjectRoot)
-            .Build();
-        var response = await _client.PostAsJsonAsync("/api/repositories", repoDto, HttpClientExtensions.JsonOptions);
-        var repo = await response.ReadAsAsync<RepositoryDto>();
-        _repositoryId = repo!.Id;
+        // Create a repository and backlog item for all tests
+        await using var db = _factory.CreateDbContext();
+        var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
+        _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
     public async Task GetStatus_ReturnsSchedulerStatus()
@@ -48,9 +49,10 @@ public class SchedulerEndpointTests : IAsyncLifetime
     public async Task GetStatus_ReturnsPendingTaskCount()
     {
         // Arrange - Create tasks in different states
-        await CreateTaskInStateAsync(PipelineState.Planning);
-        await CreateTaskInStateAsync(PipelineState.Implementing);
-        await CreateTaskInStateAsync(PipelineState.Backlog); // Not schedulable
+        await using var db = _factory.CreateDbContext();
+        await TestDatabaseHelper.SeedTaskAsync(db, "Planning Task", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Implementing Task", state: PipelineState.Implementing, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        await TestDatabaseHelper.SeedTaskAsync(db, "Done Task", state: PipelineState.Done, repositoryId: _repositoryId, backlogItemId: _backlogItemId); // Not schedulable
 
         // Act
         var response = await _client.GetAsync("/api/scheduler/status");
@@ -64,9 +66,11 @@ public class SchedulerEndpointTests : IAsyncLifetime
     public async Task GetStatus_ReturnsPausedTaskCount()
     {
         // Arrange - Create a task and pause it
-        var taskId = await CreateTaskInStateAsync(PipelineState.Planning);
-        await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/pause",
-            new PauseTaskDto("Test pause"), HttpClientExtensions.JsonOptions);
+        await using var db = _factory.CreateDbContext();
+        var task = await TestDatabaseHelper.SeedTaskAsync(db, "Paused Task", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+
+        await _client.PostAsJsonAsync($"{TasksUrl}/{task.Id}/pause",
+            new Forge.Api.Features.Tasks.PauseTaskDto("Test pause"), HttpClientExtensions.JsonOptions);
 
         // Act
         var response = await _client.GetAsync("/api/scheduler/status");
@@ -116,31 +120,6 @@ public class SchedulerEndpointTests : IAsyncLifetime
 
         // Assert
         enabledStatus!.IsEnabled.Should().BeTrue();
-    }
-
-    private async Task<Guid> CreateTaskInStateAsync(PipelineState targetState)
-    {
-        // Create in backlog
-        var createDto = new CreateTaskDtoBuilder().Build();
-        var createResponse = await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks", createDto, HttpClientExtensions.JsonOptions);
-        var task = await createResponse.ReadAsAsync<TaskDto>();
-        var taskId = task!.Id;
-
-        // Transition to target state (if not backlog)
-        var states = new[] { PipelineState.Backlog, PipelineState.Split, PipelineState.Research,
-                           PipelineState.Planning, PipelineState.Implementing, PipelineState.Simplifying,
-                           PipelineState.Verifying, PipelineState.Reviewing, PipelineState.PrReady, PipelineState.Done };
-        var currentIndex = 0;
-        var targetIndex = Array.IndexOf(states, targetState);
-
-        while (currentIndex < targetIndex)
-        {
-            currentIndex++;
-            await _client.PostAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{taskId}/transition",
-                new TransitionTaskDto(states[currentIndex]), HttpClientExtensions.JsonOptions);
-        }
-
-        return taskId;
     }
 
     private record EnabledResult(bool Enabled);

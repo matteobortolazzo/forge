@@ -63,7 +63,7 @@ public class DeleteRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DeleteRepository_WithTasks_ReturnsBadRequest()
+    public async Task DeleteRepository_WithBacklogItems_ReturnsBadRequest()
     {
         // Arrange
         var createDto = new CreateRepositoryDtoBuilder()
@@ -72,11 +72,11 @@ public class DeleteRepositoryTests : IAsyncLifetime
         var createResponse = await _client.PostAsJsonAsync("/api/repositories", createDto, HttpClientExtensions.JsonOptions);
         var repo = await createResponse.ReadAsAsync<RepositoryDto>();
 
-        // Create a task
-        var taskDto = new CreateTaskDtoBuilder()
-            .WithTitle("Test Task")
+        // Create a backlog item
+        var backlogDto = new CreateBacklogItemDtoBuilder()
+            .WithTitle("Test Backlog Item")
             .Build();
-        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/tasks", taskDto, HttpClientExtensions.JsonOptions);
+        await _client.PostAsJsonAsync($"/api/repositories/{repo!.Id}/backlog", backlogDto, HttpClientExtensions.JsonOptions);
 
         // Act
         var response = await _client.DeleteAsync($"/api/repositories/{repo.Id}");

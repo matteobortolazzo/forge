@@ -6,6 +6,7 @@ public class UpdateTaskTests : IAsyncLifetime
     private readonly ForgeWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private Guid _repositoryId;
+    private Guid _backlogItemId;
 
     public UpdateTaskTests(ForgeWebApplicationFactory factory)
     {
@@ -16,20 +17,24 @@ public class UpdateTaskTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _factory.ResetDatabaseAsync();
-        // Create a repository for all tests
+        // Create a repository and backlog item for all tests
         await using var db = _factory.CreateDbContext();
         var repo = await TestDatabaseHelper.SeedRepositoryAsync(db);
         _repositoryId = repo.Id;
+        var backlogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, repositoryId: _repositoryId);
+        _backlogItemId = backlogItem.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
     public async Task UpdateTask_WithFullUpdate_UpdatesAllFields()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Original Title", "Original Description", priority: Priority.Low, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Original Title", "Original Description", priority: Priority.Low, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new UpdateTaskDtoBuilder()
             .WithTitle("Updated Title")
@@ -38,7 +43,7 @@ public class UpdateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        var response = await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -53,14 +58,14 @@ public class UpdateTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Original Title", "Original Description", priority: Priority.Medium, repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Original Title", "Original Description", priority: Priority.Medium, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new UpdateTaskDtoBuilder()
             .WithTitle("Updated Title Only")
             .Build();
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        var response = await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -80,7 +85,7 @@ public class UpdateTaskTests : IAsyncLifetime
 
         // Act
         var nonExistentId = Guid.NewGuid();
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{nonExistentId}", dto);
+        var response = await _client.PatchAsJsonAsync($"{TasksUrl}/{nonExistentId}", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -91,14 +96,14 @@ public class UpdateTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Test Task", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Test Task", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new UpdateTaskDtoBuilder()
             .WithTitle("SSE Updated")
             .Build();
 
         // Act
-        await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskUpdatedAsync(
@@ -110,7 +115,7 @@ public class UpdateTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Test", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Test", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         var originalUpdatedAt = entity.UpdatedAt;
         await Task.Delay(10);
 
@@ -119,7 +124,7 @@ public class UpdateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        var response = await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert
         var task = await response.ReadAsAsync<TaskDto>();
@@ -131,14 +136,14 @@ public class UpdateTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persistence Test", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persistence Test", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new UpdateTaskDtoBuilder()
             .WithTitle("Persisted Update")
             .Build();
 
         // Act
-        await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert - Verify persistence with fresh context
         await using var verifyDb = _factory.CreateDbContext();
@@ -160,6 +165,7 @@ public class UpdateTaskTests : IAsyncLifetime
             Priority = Priority.High,
             AssignedAgentId = "claude-agent",
             RepositoryId = _repositoryId,
+            BacklogItemId = _backlogItemId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -171,7 +177,7 @@ public class UpdateTaskTests : IAsyncLifetime
             .Build();
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/tasks/{entity.Id}", dto);
+        var response = await _client.PatchAsJsonAsync($"{TasksUrl}/{entity.Id}", dto);
 
         // Assert
         var task = await response.ReadAsAsync<TaskDto>();
@@ -180,20 +186,19 @@ public class UpdateTaskTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateTask_WithWrongRepository_ReturnsNotFound()
+    public async Task UpdateTask_WithWrongBacklogItem_ReturnsNotFound()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var otherRepoPath = Path.Combine(Path.GetTempPath(), $"other-repo-{Guid.NewGuid()}");
-        var otherRepo = await TestDatabaseHelper.SeedRepositoryAsync(db, "Other Repo", path: otherRepoPath);
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main repo", repositoryId: _repositoryId);
+        var otherBacklogItem = await TestDatabaseHelper.SeedBacklogItemAsync(db, "Other Backlog Item", repositoryId: _repositoryId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Task in main backlog", repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new UpdateTaskDtoBuilder()
             .WithTitle("Updated Title")
             .Build();
 
-        // Act - Try to update task from wrong repository
-        var response = await _client.PatchAsJsonAsync($"/api/repositories/{otherRepo.Id}/tasks/{entity.Id}", dto);
+        // Act - Try to update task from wrong backlog item
+        var response = await _client.PatchAsJsonAsync($"/api/repositories/{_repositoryId}/backlog/{otherBacklogItem.Id}/tasks/{entity.Id}", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
