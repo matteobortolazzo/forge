@@ -15,9 +15,9 @@ public class RollbackRecordEntity
     public Guid? TaskId { get; set; }
 
     /// <summary>
-    /// The subtask associated with this rollback (if applicable).
+    /// The backlog item associated with this rollback (if applicable).
     /// </summary>
-    public Guid? SubtaskId { get; set; }
+    public Guid? BacklogItemId { get; set; }
 
     /// <summary>
     /// What triggered the rollback.
@@ -56,5 +56,5 @@ public class RollbackRecordEntity
 
     // Navigation properties
     public TaskEntity? Task { get; set; }
-    public SubtaskEntity? Subtask { get; set; }
+    public BacklogItemEntity? BacklogItem { get; set; }
 }

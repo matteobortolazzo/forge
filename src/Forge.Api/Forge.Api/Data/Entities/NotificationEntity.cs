@@ -9,9 +9,11 @@ public class NotificationEntity
     public required string Message { get; set; }
     public NotificationType Type { get; set; }
     public Guid? TaskId { get; set; }
+    public Guid? BacklogItemId { get; set; }
     public bool Read { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    // Navigation property
+    // Navigation properties
     public TaskEntity? Task { get; set; }
+    public BacklogItemEntity? BacklogItem { get; set; }
 }

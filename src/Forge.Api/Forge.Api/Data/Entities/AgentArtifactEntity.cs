@@ -5,16 +5,31 @@ namespace Forge.Api.Data.Entities;
 /// <summary>
 /// Stores structured output (artifacts) from each agent execution.
 /// Artifacts are passed between pipeline stages to provide context.
+/// Can belong to either a BacklogItem (for refining/splitting) or a Task (for implementation).
 /// </summary>
 public class AgentArtifactEntity
 {
     public Guid Id { get; set; }
-    public Guid TaskId { get; set; }
 
     /// <summary>
-    /// The pipeline state in which this artifact was produced.
+    /// The task this artifact belongs to (null for backlog item artifacts).
     /// </summary>
-    public PipelineState ProducedInState { get; set; }
+    public Guid? TaskId { get; set; }
+
+    /// <summary>
+    /// The backlog item this artifact belongs to (null for task artifacts).
+    /// </summary>
+    public Guid? BacklogItemId { get; set; }
+
+    /// <summary>
+    /// The pipeline state in which this artifact was produced (for task artifacts).
+    /// </summary>
+    public PipelineState? ProducedInState { get; set; }
+
+    /// <summary>
+    /// The backlog item state in which this artifact was produced (for backlog item artifacts).
+    /// </summary>
+    public BacklogItemState? ProducedInBacklogState { get; set; }
 
     /// <summary>
     /// The type of artifact (plan, implementation, review, test, general).
@@ -37,11 +52,6 @@ public class AgentArtifactEntity
     public string? AgentId { get; set; }
 
     /// <summary>
-    /// The subtask this artifact belongs to (null for task-level artifacts).
-    /// </summary>
-    public Guid? SubtaskId { get; set; }
-
-    /// <summary>
     /// Agent-reported confidence score for this artifact (0.0-1.0).
     /// </summary>
     public decimal? ConfidenceScore { get; set; }
@@ -58,5 +68,5 @@ public class AgentArtifactEntity
 
     // Navigation properties
     public TaskEntity? Task { get; set; }
-    public SubtaskEntity? Subtask { get; set; }
+    public BacklogItemEntity? BacklogItem { get; set; }
 }

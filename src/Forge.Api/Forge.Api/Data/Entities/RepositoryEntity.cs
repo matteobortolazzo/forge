@@ -17,6 +17,9 @@ public class RepositoryEntity
     public bool IsGitRepository { get; set; }
     public DateTime? LastRefreshedAt { get; set; }
 
+    // Default repository flag
+    public bool IsDefault { get; set; }
+
     // Navigation
-    public ICollection<TaskEntity> Tasks { get; set; } = [];
+    public ICollection<BacklogItemEntity> BacklogItems { get; set; } = [];
 }

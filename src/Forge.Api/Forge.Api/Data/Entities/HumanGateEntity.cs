@@ -5,23 +5,24 @@ namespace Forge.Api.Data.Entities;
 /// <summary>
 /// Tracks human approval gates in the pipeline.
 /// Gates are triggered by low confidence scores or mandatory checkpoints.
+/// Can belong to either a BacklogItem (for refining/splitting) or a Task (for implementation).
 /// </summary>
 public class HumanGateEntity
 {
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The task this gate belongs to.
+    /// The task this gate belongs to (null for backlog item gates).
     /// </summary>
-    public Guid TaskId { get; set; }
+    public Guid? TaskId { get; set; }
 
     /// <summary>
-    /// The subtask this gate belongs to (null for task-level gates).
+    /// The backlog item this gate belongs to (null for task gates).
     /// </summary>
-    public Guid? SubtaskId { get; set; }
+    public Guid? BacklogItemId { get; set; }
 
     /// <summary>
-    /// The type of gate (Split, Planning, PR).
+    /// The type of gate (Refining, Split, Planning, PR).
     /// </summary>
     public HumanGateType GateType { get; set; }
 
@@ -68,5 +69,5 @@ public class HumanGateEntity
 
     // Navigation properties
     public TaskEntity? Task { get; set; }
-    public SubtaskEntity? Subtask { get; set; }
+    public BacklogItemEntity? BacklogItem { get; set; }
 }
