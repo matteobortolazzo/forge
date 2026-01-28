@@ -83,6 +83,10 @@ export class RepositoryStore {
       if (!validSelection && repos.length > 0) {
         // Select first repo (newest, as backend sorts by createdAt desc)
         this.setSelectedRepository(repos[0].id);
+      } else if (repos.length === 0) {
+        // Clear stale selection when no repos exist
+        this._selectedId.set(null);
+        this.clearSelectedIdFromStorage();
       }
     } catch (err) {
       this._error.set(err instanceof Error ? err.message : 'Failed to load repositories');

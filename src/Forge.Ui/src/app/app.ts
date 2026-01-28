@@ -65,9 +65,15 @@ export class App implements OnInit, OnDestroy {
   readonly isSettingsDialogOpen = signal(false);
   readonly settingsRepository = signal<Repository | null>(null);
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     // Load repositories on app start
-    this.repositoryStore.loadRepositories();
+    await this.repositoryStore.loadRepositories();
+
+    // Auto-open add dialog if no repositories exist (first-run experience)
+    if (!this.repositoryStore.hasRepositories()) {
+      this.isAddDialogOpen.set(true);
+    }
+
     // Connect to SSE for real-time updates
     this.sseEventDispatcher.connect();
   }

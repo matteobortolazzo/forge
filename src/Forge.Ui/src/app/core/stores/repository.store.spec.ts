@@ -138,6 +138,21 @@ describe('RepositoryStore', () => {
 
       expect(store.selectedId()).toBe('repo-2');
     });
+
+    it('should clear stale selection when repos load empty', async () => {
+      // First load with repos
+      repositoryServiceMock.getAll.mockReturnValue(of([mockRepository]));
+      await store.loadRepositories();
+      expect(store.selectedId()).toBe('repo-1');
+      expect(localStorage.getItem('forge:selectedRepositoryId')).toBe('repo-1');
+
+      // Now load with empty repos (simulating database reset)
+      repositoryServiceMock.getAll.mockReturnValue(of([]));
+      await store.loadRepositories();
+
+      expect(store.selectedId()).toBeNull();
+      expect(localStorage.getItem('forge:selectedRepositoryId')).toBeNull();
+    });
   });
 
   describe('setSelectedRepository', () => {
