@@ -65,7 +65,8 @@ forge/
 │           │   ├── backlog/        # Backlog item list, detail, create dialog
 │           │   ├── queue/          # Task queue view (table with filtering/sorting)
 │           │   ├── task-detail/    # Task detail view with logs
-│           │   └── notifications/  # Notification panel
+│           │   ├── notifications/  # Notification panel
+│           │   └── pending-input/  # Human gates & agent questions UI
 │           ├── core/               # Stores, Services, Mocks
 │           ├── shared/             # Reusable components, models
 │           │   └── components/

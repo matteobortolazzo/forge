@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { NotificationPanelComponent } from '../../../features/notifications/notification-panel.component';
+import { PendingInputPanelComponent } from '../../../features/pending-input/pending-input-panel.component';
 import { SchedulerStatusComponent } from '../scheduler-status.component';
 import { RepositoryInfoComponent } from '../repository-info.component';
 import { AgentWorkingIndicatorComponent } from '../agent-working-indicator/agent-working-indicator.component';
@@ -9,6 +10,7 @@ import { AgentWorkingIndicatorComponent } from '../agent-working-indicator/agent
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     NotificationPanelComponent,
+    PendingInputPanelComponent,
     SchedulerStatusComponent,
     RepositoryInfoComponent,
     AgentWorkingIndicatorComponent,
@@ -41,6 +43,7 @@ import { AgentWorkingIndicatorComponent } from '../agent-working-indicator/agent
         <!-- Slot for view-specific action buttons -->
         <ng-content />
 
+        <app-pending-input-panel />
         <app-notification-panel />
       </div>
     </header>

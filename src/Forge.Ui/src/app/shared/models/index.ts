@@ -204,6 +204,10 @@ export type ServerEventType =
   | 'artifact:created'
   | 'humanGate:requested'
   | 'humanGate:resolved'
+  | 'agentQuestion:requested'
+  | 'agentQuestion:answered'
+  | 'agentQuestion:timeout'
+  | 'agentQuestion:cancelled'
   | 'repository:created'
   | 'repository:updated'
   | 'repository:deleted';
@@ -262,3 +266,82 @@ export interface UpdateRepositoryDto {
 
 // Legacy alias for backward compatibility
 export type RepositoryInfo = Repository;
+
+// Human Gate Types
+export const HUMAN_GATE_TYPES = ['refining', 'split', 'planning', 'pr'] as const;
+export type HumanGateType = (typeof HUMAN_GATE_TYPES)[number];
+
+// Human Gate Status
+export const HUMAN_GATE_STATUSES = ['pending', 'approved', 'rejected', 'skipped'] as const;
+export type HumanGateStatus = (typeof HUMAN_GATE_STATUSES)[number];
+
+// Human Gate Interface
+export interface HumanGate {
+  id: string;
+  taskId?: string;
+  backlogItemId?: string;
+  gateType: HumanGateType;
+  status: HumanGateStatus;
+  confidenceScore: number;
+  reason: string;
+  requestedAt: Date;
+  resolvedAt?: Date;
+  resolvedBy?: string;
+  resolution?: string;
+}
+
+// DTO for resolving a human gate
+export interface ResolveGateDto {
+  status: HumanGateStatus;
+  resolution?: string;
+  resolvedBy?: string;
+}
+
+// Agent Question Status
+export const AGENT_QUESTION_STATUSES = ['pending', 'answered', 'timeout', 'cancelled'] as const;
+export type AgentQuestionStatus = (typeof AGENT_QUESTION_STATUSES)[number];
+
+// Agent Question Option
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+// Agent Question Item (one question in a set)
+export interface AgentQuestionItem {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+}
+
+// User's answer for a single question
+export interface QuestionAnswer {
+  questionIndex: number;
+  selectedOptionIndices: number[];
+  customAnswer?: string;
+}
+
+// Agent Question Interface
+export interface AgentQuestion {
+  id: string;
+  taskId?: string;
+  backlogItemId?: string;
+  toolUseId: string;
+  questions: AgentQuestionItem[];
+  status: AgentQuestionStatus;
+  requestedAt: Date;
+  timeoutAt: Date;
+  answers?: QuestionAnswer[];
+  answeredAt?: Date;
+}
+
+// DTO for submitting an answer to an agent question
+export interface SubmitAnswerDto {
+  answers: QuestionAnswer[];
+}
+
+// Discriminated union for pending input items
+export type PendingInputItem =
+  | { type: 'gate'; data: HumanGate }
+  | { type: 'question'; data: AgentQuestion };

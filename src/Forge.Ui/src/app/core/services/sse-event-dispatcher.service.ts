@@ -8,6 +8,7 @@ import { NotificationStore } from '../stores/notification.store';
 import { SchedulerStore } from '../stores/scheduler.store';
 import { RepositoryStore } from '../stores/repository.store';
 import { ArtifactStore } from '../stores/artifact.store';
+import { PendingInputStore } from '../stores/pending-input.store';
 import {
   ServerEvent,
   Task,
@@ -17,6 +18,8 @@ import {
   AgentStatus,
   Repository,
   Artifact,
+  HumanGate,
+  AgentQuestion,
 } from '../../shared/models';
 
 /**
@@ -43,6 +46,7 @@ export class SseEventDispatcher implements OnDestroy {
   private readonly schedulerStore = inject(SchedulerStore);
   private readonly repositoryStore = inject(RepositoryStore);
   private readonly artifactStore = inject(ArtifactStore);
+  private readonly pendingInputStore = inject(PendingInputStore);
 
   private subscription?: Subscription;
   private reconnectAttempts = 0;
@@ -208,6 +212,32 @@ export class SseEventDispatcher implements OnDestroy {
       // Artifact events
       case 'artifact:created':
         this.artifactStore.addArtifactFromEvent(event.payload as Artifact);
+        break;
+
+      // Human gate events
+      case 'humanGate:requested':
+        this.pendingInputStore.handleGateRequested(event.payload as HumanGate);
+        break;
+
+      case 'humanGate:resolved':
+        this.pendingInputStore.handleGateResolved(event.payload as HumanGate);
+        break;
+
+      // Agent question events
+      case 'agentQuestion:requested':
+        this.pendingInputStore.handleQuestionRequested(event.payload as AgentQuestion);
+        break;
+
+      case 'agentQuestion:answered':
+        this.pendingInputStore.handleQuestionAnswered(event.payload as AgentQuestion);
+        break;
+
+      case 'agentQuestion:timeout':
+        this.pendingInputStore.handleQuestionTimeout(event.payload as AgentQuestion);
+        break;
+
+      case 'agentQuestion:cancelled':
+        this.pendingInputStore.handleQuestionCancelled(event.payload as { id: string });
         break;
 
       default:

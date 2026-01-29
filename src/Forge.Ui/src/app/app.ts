@@ -4,6 +4,7 @@ import { RepositorySidebarComponent } from './shared/components/repository-sideb
 import { AddRepositoryDialogComponent } from './shared/components/add-repository-dialog/add-repository-dialog.component';
 import { RepositorySettingsDialogComponent } from './shared/components/repository-settings-dialog/repository-settings-dialog.component';
 import { RepositoryStore } from './core/stores/repository.store';
+import { PendingInputStore } from './core/stores/pending-input.store';
 import { SseEventDispatcher } from './core/services/sse-event-dispatcher.service';
 import { CreateRepositoryDto, Repository } from './shared/models';
 
@@ -56,6 +57,7 @@ import { CreateRepositoryDto, Repository } from './shared/models';
 })
 export class App implements OnInit, OnDestroy {
   private readonly repositoryStore = inject(RepositoryStore);
+  private readonly pendingInputStore = inject(PendingInputStore);
   private readonly sseEventDispatcher = inject(SseEventDispatcher);
 
   readonly addDialogRef = viewChild<AddRepositoryDialogComponent>('addDialog');
@@ -73,6 +75,9 @@ export class App implements OnInit, OnDestroy {
     if (!this.repositoryStore.hasRepositories()) {
       this.isAddDialogOpen.set(true);
     }
+
+    // Load pending input (human gates and agent questions) on app start
+    await this.pendingInputStore.loadAll();
 
     // Connect to SSE for real-time updates
     this.sseEventDispatcher.connect();

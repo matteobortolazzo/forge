@@ -14,8 +14,12 @@ src/app/
 │   ├── task-detail/               # Task detail feature
 │   │   ├── task-detail.component.ts     # Task detail view
 │   │   └── agent-output.component.ts    # Agent log viewer
-│   └── notifications/             # Notifications feature
-│       └── notification-panel.component.ts  # Notification dropdown
+│   ├── notifications/             # Notifications feature
+│   │   └── notification-panel.component.ts  # Notification dropdown
+│   └── pending-input/             # Human gates & agent questions
+│       ├── pending-input-panel.component.ts  # Dropdown panel for pending input
+│       ├── gate-resolution.component.ts      # Human gate approval UI
+│       └── question-answer.component.ts      # Agent question answer form
 ├── core/                          # Singleton services and stores
 │   ├── stores/                    # Signal-based state stores
 │   │   ├── task.store.ts                # Task state management
@@ -23,13 +27,15 @@ src/app/
 │   │   ├── log.store.ts                 # Task log management
 │   │   ├── notification.store.ts        # Notification management
 │   │   ├── scheduler.store.ts           # Scheduler state management
-│   │   └── artifact.store.ts            # Artifact management
+│   │   ├── artifact.store.ts            # Artifact management
+│   │   └── pending-input.store.ts       # Human gates & agent questions
 │   ├── services/                  # API and infrastructure services
 │   │   ├── task.service.ts              # Task API operations
 │   │   ├── agent.service.ts             # Agent status API
 │   │   ├── sse.service.ts               # Server-sent events
 │   │   ├── scheduler.service.ts         # Scheduler API
-│   │   └── artifact.service.ts          # Artifact API
+│   │   ├── artifact.service.ts          # Artifact API
+│   │   └── pending-input.service.ts     # Human gates & agent questions API
 │   └── mocks/                     # Development mock data
 │       └── mock-data.ts                 # Tasks, logs, notifications
 ├── shared/                        # Reusable components and models
@@ -66,6 +72,9 @@ src/app/
 | `TaskDetailComponent` | `features/task-detail/` | Task detail view with metadata, actions, and agent output |
 | `AgentOutputComponent` | `features/task-detail/` | Real-time agent log viewer with color-coded entries |
 | `NotificationPanelComponent` | `features/notifications/` | Dropdown panel showing recent notifications |
+| `PendingInputPanelComponent` | `features/pending-input/` | Dropdown panel for human gates and agent questions |
+| `GateResolutionComponent` | `features/pending-input/` | Human gate approval/reject/skip UI |
+| `QuestionAnswerComponent` | `features/pending-input/` | Agent question form with countdown timer |
 
 ### Shared Components
 
@@ -191,6 +200,31 @@ All stores use Angular signals and are provided at root level.
 - `removeNotification(id)` - Remove notification
 - `clearAll()` - Clear all notifications
 
+### PendingInputStore (`core/stores/pending-input.store.ts`)
+
+Manages human gates (approval checkpoints) and agent questions (interactive clarifications).
+
+**Signals:**
+- `gates: Signal<HumanGate[]>` - All pending human gates
+- `question: Signal<AgentQuestion | null>` - Current pending question
+- `isLoading: Signal<boolean>` - Loading state
+- `errorMessage: Signal<string | null>` - Error message
+- `pendingCount: Signal<number>` - Total count (gates + question)
+- `allPendingItems: Signal<PendingInputItem[]>` - Unified sorted list (question first)
+- `hasUrgentInput: Signal<boolean>` - True if question exists (agent blocked)
+- `questionTimeRemaining: Signal<number | null>` - Seconds until timeout
+
+**Actions:**
+- `loadAll()` - Load gates and question from API
+- `resolveGate(id, dto)` - Approve/reject/skip a human gate
+- `answerQuestion(id, dto)` - Submit answer to question
+- `handleGateRequested(gate)` - SSE event handler
+- `handleGateResolved(gate)` - SSE event handler
+- `handleQuestionRequested(question)` - SSE event handler
+- `handleQuestionAnswered(question)` - SSE event handler
+- `handleQuestionTimeout(question)` - SSE event handler
+- `handleQuestionCancelled(payload)` - SSE event handler
+
 ### RepositoryStore (`core/stores/repository.store.ts`)
 
 **Signals:**
@@ -308,6 +342,18 @@ HTTP service for notification operations.
 - `markAllAsRead(): Observable<{ markedCount: number }>` - Mark all as read
 - `getUnreadCount(): Observable<{ count: number }>` - Get unread count
 
+### PendingInputService (`core/services/pending-input.service.ts`)
+
+HTTP service for human gates and agent questions.
+
+**Mock Mode:** Controlled by `useMocks` flag.
+
+**Methods:**
+- `getPendingGates(): Observable<HumanGate[]>` - Get all pending gates (cross-repo)
+- `resolveGate(id, dto): Observable<HumanGate>` - Resolve a gate (approve/reject/skip)
+- `getPendingQuestion(): Observable<AgentQuestion | null>` - Get current pending question
+- `answerQuestion(id, dto): Observable<AgentQuestion>` - Submit answer to question
+
 ## Routes
 
 Defined in `app.routes.ts`:
@@ -340,7 +386,7 @@ const LOG_TYPES = ['info', 'toolUse', 'toolResult', 'error', 'thinking'] as cons
 type LogType = (typeof LOG_TYPES)[number];
 ```
 
-**Interfaces:** `Task`, `TaskLog`, `Notification`, `Artifact`, `CreateTaskDto`, `UpdateTaskDto`, `TransitionTaskDto`, `ServerEvent`, `AgentStatus`, `SchedulerStatus`
+**Interfaces:** `Task`, `TaskLog`, `Notification`, `Artifact`, `CreateTaskDto`, `UpdateTaskDto`, `TransitionTaskDto`, `ServerEvent`, `AgentStatus`, `SchedulerStatus`, `HumanGate`, `AgentQuestion`, `AgentQuestionItem`, `QuestionOption`, `QuestionAnswer`, `PendingInputItem`
 
 ## Development Commands
 

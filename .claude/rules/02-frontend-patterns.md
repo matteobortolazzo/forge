@@ -78,15 +78,16 @@ export class SseService {
 - **Backlog**: BacklogListComponent, BacklogItemDetailComponent, CreateBacklogItemDialogComponent
 - **Tasks**: QueueComponent, TaskDetailComponent, AgentOutputComponent
 - **Notifications**: NotificationPanelComponent
+- **Pending Input**: PendingInputPanelComponent, GateResolutionComponent, QuestionAnswerComponent
 
 ### Shared Components
 StateBadge, BacklogStateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo, RepositorySidebar, AddRepositoryDialog, RepositorySettingsDialog
 
 ### Signal Stores
-BacklogStore, TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore
+BacklogStore, TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore, PendingInputStore
 
 ### Services
-BacklogService, TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService, NotificationService (all with mock mode)
+BacklogService, TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService, NotificationService, PendingInputService (all with mock mode)
 
 ## Multi-Repository Support
 
