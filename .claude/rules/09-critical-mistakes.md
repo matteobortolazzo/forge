@@ -79,19 +79,28 @@ await _sseService.SendEventAsync("task:updated", TaskDto.FromEntity(task));
 
 ## Human Gate Handling
 
-**WRONG: Transitioning task without checking pending gate**
+**WRONG: Transitioning backlog item or task without checking pending gate**
 ```csharp
 // DO NOT skip gate check
-task.State = PipelineState.Research;
+backlogItem.State = BacklogItemState.Ready;
+task.State = PipelineState.Planning;
 ```
 
 **CORRECT: Check HasPendingGate before transition**
 ```csharp
+// For backlog items
+if (backlogItem.HasPendingGate)
+{
+    throw new InvalidOperationException("Backlog item has pending human gate");
+}
+backlogItem.State = BacklogItemState.Ready;
+
+// For tasks
 if (task.HasPendingGate)
 {
     throw new InvalidOperationException("Task has pending human gate");
 }
-task.State = PipelineState.Research;
+task.State = PipelineState.Planning;
 ```
 
 ## JSON Serialization in Tests

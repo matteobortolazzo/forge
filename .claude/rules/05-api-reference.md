@@ -11,6 +11,22 @@ POST   /api/repositories/{id}/refresh       # Refresh cached git info
 POST   /api/repositories/{id}/set-default   # Set as default repository
 ```
 
+## Backlog Items (scoped under repository)
+```
+GET    /api/repositories/{repoId}/backlog                   # List all backlog items
+GET    /api/repositories/{repoId}/backlog/{id}              # Get backlog item details
+POST   /api/repositories/{repoId}/backlog                   # Create new backlog item
+PATCH  /api/repositories/{repoId}/backlog/{id}              # Update backlog item
+DELETE /api/repositories/{repoId}/backlog/{id}              # Delete backlog item
+POST   /api/repositories/{repoId}/backlog/{id}/transition   # Manually transition state
+POST   /api/repositories/{repoId}/backlog/{id}/start-agent  # Start refining or splitting agent
+POST   /api/repositories/{repoId}/backlog/{id}/abort        # Abort assigned agent
+POST   /api/repositories/{repoId}/backlog/{id}/pause        # Pause backlog item
+POST   /api/repositories/{repoId}/backlog/{id}/resume       # Resume paused backlog item
+GET    /api/repositories/{repoId}/backlog/{id}/logs         # Get logs from agents
+GET    /api/repositories/{repoId}/backlog/{id}/artifacts    # Get artifacts (refined specs, task splits)
+```
+
 ## Tasks (scoped under repository)
 ```
 GET    /api/repositories/{repoId}/tasks                   # List tasks for repository
@@ -34,20 +50,12 @@ GET    /api/repositories/{repoId}/tasks/{id}/artifacts/latest       # Get most r
 GET    /api/repositories/{repoId}/tasks/{id}/artifacts/by-state/{state}  # Filter artifacts by pipeline state
 ```
 
-## Subtasks
-```
-GET    /api/repositories/{repoId}/tasks/{id}/subtasks               # List all subtasks for a task
-GET    /api/repositories/{repoId}/tasks/{id}/subtasks/{sid}         # Get specific subtask
-POST   /api/repositories/{repoId}/tasks/{id}/subtasks               # Create subtask
-PATCH  /api/repositories/{repoId}/tasks/{id}/subtasks/{sid}/status  # Update subtask status
-DELETE /api/repositories/{repoId}/tasks/{id}/subtasks/{sid}         # Delete subtask
-```
-
 ## Human Gates
 ```
 GET    /api/gates/pending                                 # Get all pending human gates (cross-repo)
 GET    /api/gates/{id}                                    # Get specific gate
 POST   /api/gates/{id}/resolve                            # Resolve gate (approve/reject)
+GET    /api/repositories/{repoId}/backlog/{id}/gates      # Get all gates for a backlog item
 GET    /api/repositories/{repoId}/tasks/{id}/gates        # Get all gates for a task
 ```
 

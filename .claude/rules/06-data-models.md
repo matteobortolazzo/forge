@@ -1,15 +1,30 @@
 # Data Models
 
-## Task States (PipelineState)
+## Backlog Item States (BacklogItemState)
 ```
-Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+New → Refining → Ready → Splitting → Executing → Done
 ```
 
 **State Descriptions:**
 | State | Description | Agent |
 |-------|-------------|-------|
-| Backlog | Waiting to be started | None |
-| Split | Task decomposition into subtasks | Split agent |
+| New | Initial state when created | None |
+| Refining | Specification refinement and clarification | Refining agent |
+| Ready | Spec approved, ready to decompose | None |
+| Splitting | Task decomposition into PR-sized units | Split agent |
+| Executing | Tasks in progress (auto-derived from tasks) | None |
+| Done | All tasks completed (auto-transition) | None |
+
+**Key Constraint:** Refining state can loop back to itself (for iterative refinement) or advance to Ready.
+
+## Task States (PipelineState)
+```
+Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+```
+
+**State Descriptions:**
+| State | Description | Agent |
+|-------|-------------|-------|
 | Research | Codebase analysis and pattern discovery | Research agent |
 | Planning | Test-first implementation design | Planning agent |
 | Implementing | Code generation (tests first, then code) | Implementing agent |
@@ -26,17 +41,16 @@ Low | Medium | High | Critical
 
 ## Artifact Types
 ```
-task_split | research_findings | plan | implementation | simplification_review | verification_report | review | test | general
+refined_spec | task_split | research_findings | plan | implementation | simplification_review | verification_report | review | test | general
 ```
 
 ## Human Gate Types
 ```
-split (conditional) | planning (conditional) | pr (mandatory)
-```
+# Backlog item gates
+refining (conditional) | split (conditional)
 
-## Subtask Status
-```
-pending | in_progress | completed | failed | skipped
+# Task gates
+planning (conditional) | pr (mandatory)
 ```
 
 ## Agent Question Status
@@ -64,20 +78,87 @@ public bool IsGitRepository { get; set; }
 public DateTime? LastRefreshedAt { get; set; }
 
 // Navigation
+public ICollection<BacklogItemEntity> BacklogItems { get; set; } = [];
 public ICollection<TaskEntity> Tasks { get; set; } = [];
 ```
 
-## TaskEntity Fields (Agent Context)
+## BacklogItemEntity Fields
 
 ```csharp
+public Guid Id { get; set; }
+public required string Title { get; set; }
+public string? Description { get; set; }
+public BacklogItemState State { get; set; }
+public Priority Priority { get; set; }
+public string? AcceptanceCriteria { get; set; }
+
 // Repository association (required)
 public Guid RepositoryId { get; set; }
 public RepositoryEntity Repository { get; set; } = null!;
 
-// Auto-detected or user-specified context
+// Agent context
+public string? DetectedLanguage { get; set; }    // e.g., "csharp", "typescript"
+public string? DetectedFramework { get; set; }   // e.g., "angular", "dotnet"
+public Guid? AssignedAgentId { get; set; }       // Currently running agent
+
+// Scheduling
+public bool IsPaused { get; set; }
+public string? PauseReason { get; set; }
+public DateTime? PausedAt { get; set; }
+public int RetryCount { get; set; }
+public int MaxRetries { get; set; } = 3;
+
+// Confidence and human gates
+public decimal? ConfidenceScore { get; set; }    // Agent-reported confidence (0.0-1.0)
+public bool HumanInputRequested { get; set; }    // Agent explicitly requested human input
+public string? HumanInputReason { get; set; }    // Reason for human input request
+public bool HasPendingGate { get; set; }         // Blocked by pending human gate
+
+// Refinement loop
+public int RefiningIterations { get; set; }      // Number of refinement iterations
+
+// Task progress (denormalized for efficiency)
+public int TaskCount { get; set; }               // Number of tasks created from split
+public int CompletedTaskCount { get; set; }      // Number of tasks in Done state
+
+// Navigation
+public ICollection<TaskEntity> Tasks { get; set; } = [];
+public ICollection<AgentArtifactEntity> Artifacts { get; set; } = [];
+public ICollection<HumanGateEntity> HumanGates { get; set; } = [];
+public ICollection<AgentLogEntity> Logs { get; set; } = [];
+```
+
+## TaskEntity Fields
+
+```csharp
+public Guid Id { get; set; }
+public required string Title { get; set; }
+public string? Description { get; set; }
+public PipelineState State { get; set; }
+public Priority Priority { get; set; }
+public string? AcceptanceCriteria { get; set; }
+
+// Repository association (required)
+public Guid RepositoryId { get; set; }
+public RepositoryEntity Repository { get; set; } = null!;
+
+// Backlog item association (required)
+public Guid BacklogItemId { get; set; }          // Parent backlog item
+public BacklogItemEntity BacklogItem { get; set; } = null!;
+public int ExecutionOrder { get; set; }          // 1-based order within backlog item
+
+// Agent context
 public string? DetectedLanguage { get; set; }    // e.g., "csharp", "typescript"
 public string? DetectedFramework { get; set; }   // e.g., "angular", "dotnet"
 public PipelineState? RecommendedNextState { get; set; }  // Agent's recommendation
+public Guid? AssignedAgentId { get; set; }       // Currently running agent
+
+// Scheduling
+public bool IsPaused { get; set; }
+public string? PauseReason { get; set; }
+public DateTime? PausedAt { get; set; }
+public int RetryCount { get; set; }
+public int MaxRetries { get; set; } = 3;
 
 // Confidence and human gates
 public decimal? ConfidenceScore { get; set; }    // Agent-reported confidence (0.0-1.0)
@@ -85,13 +166,14 @@ public bool HumanInputRequested { get; set; }    // Agent explicitly requested h
 public string? HumanInputReason { get; set; }    // Reason for human input request
 public bool HasPendingGate { get; set; }         // Task blocked by pending human gate
 
-// Simplification loop
-public int SimplificationIterations { get; set; }  // Number of simplification loops
+// Pipeline iteration
+public int ImplementationRetries { get; set; }   // Number of implementation retries
+public int SimplificationIterations { get; set; } // Number of simplification loops
 
-// Task hierarchy
-public Guid? ParentId { get; set; }              // Parent task (for subtasks)
-public int ChildCount { get; set; }              // Number of child subtasks
-public PipelineState? DerivedState { get; set; } // Computed from children's states
+// Navigation
+public ICollection<AgentLogEntity> Logs { get; set; } = [];
+public ICollection<AgentArtifactEntity> Artifacts { get; set; } = [];
+public ICollection<HumanGateEntity> HumanGates { get; set; } = [];
 ```
 
 ## Human Gate Configuration
@@ -103,21 +185,26 @@ Configuration in `appsettings.json`:
     "MaxImplementationRetries": 3,
     "MaxSimplificationIterations": 2,
     "ConfidenceThreshold": 0.7,
-    "WorktreeIsolation": true,
-    "SequentialSubtasks": true,
     "HumanGates": {
-      "Split": "conditional",
-      "Planning": "conditional",
-      "Pr": "mandatory"
+      "IsRefiningMandatory": false,
+      "IsSplitMandatory": false,
+      "IsPlanningMandatory": false,
+      "IsPrMandatory": true
     }
   }
 }
 ```
 
+**Backlog Item Gates:**
 | Gate Type | Trigger | Behavior |
 |-----------|---------|----------|
-| Split | Confidence < threshold OR mandatory config | Approval required before Research |
-| Planning | Confidence < threshold OR high-risk OR mandatory config | Approval required before Implementing |
+| Refining | Confidence < threshold OR mandatory config | Approval required before Ready |
+| Split | Confidence < threshold OR mandatory config | Approval required before task creation |
+
+**Task Gates:**
+| Gate Type | Trigger | Behavior |
+|-----------|---------|----------|
+| Planning | Confidence < threshold OR mandatory config | Approval required before Implementing |
 | PR | Always mandatory | Approval required before merge |
 
 ## AgentQuestionEntity Fields

@@ -42,18 +42,18 @@ Features/
 │   ├── RepositoryEndpoints.cs  # 7 endpoints (list, get, create, update, delete, refresh, set-default)
 │   ├── RepositoryService.cs    # Repository CRUD with git info caching (scoped)
 │   └── RepositoryModels.cs     # DTOs: RepositoryDto, CreateRepositoryDto, UpdateRepositoryDto
+├── Backlog/
+│   ├── BacklogEndpoints.cs     # 10 endpoints (CRUD, transition, start-agent, abort, pause, resume, logs, artifacts)
+│   ├── BacklogService.cs       # Backlog item CRUD, refinement, task creation from split (scoped)
+│   └── BacklogModels.cs        # DTOs: BacklogItemDto, CreateBacklogItemDto, etc.
 ├── Tasks/
-│   ├── TaskEndpoints.cs        # 13 endpoints (CRUD, transition, logs, abort, start-agent, pause, resume, split)
+│   ├── TaskEndpoints.cs        # 10 endpoints (CRUD, transition, logs, abort, start-agent, pause, resume)
 │   ├── TaskArtifactEndpoints.cs # 4 endpoints (list, get, latest, by-state)
 │   ├── TaskArtifactModels.cs   # DTOs: ArtifactDto
-│   ├── TaskService.cs          # Business logic (scoped)
+│   ├── TaskService.cs          # Task CRUD and state management (scoped)
 │   └── TaskModels.cs           # DTOs: TaskDto, CreateTaskDto, UpdateTaskDto, etc.
-├── Subtasks/
-│   ├── SubtaskEndpoints.cs     # 5 endpoints (list, get, create, update-status, delete)
-│   ├── SubtaskService.cs       # Subtask lifecycle management (scoped)
-│   └── SubtaskModels.cs        # DTOs: SubtaskDto, CreateSubtaskDto, etc.
 ├── HumanGates/
-│   ├── HumanGateEndpoints.cs   # 4 endpoints (pending, get, resolve, by-task)
+│   ├── HumanGateEndpoints.cs   # 5 endpoints (pending, get, resolve, by-backlog-item, by-task)
 │   ├── HumanGateService.cs     # Gate management and resolution (scoped)
 │   └── HumanGateModels.cs      # DTOs: HumanGateDto, ResolveHumanGateDto
 ├── Agents/
@@ -69,22 +69,20 @@ Features/
 │   └── AgentModels.cs          # AgentStatusDto
 ├── Scheduler/
 │   ├── SchedulerEndpoints.cs   # 3 endpoints (status, enable, disable)
-│   ├── SchedulerService.cs     # Task selection, human gates, simplification loops (scoped)
+│   ├── SchedulerService.cs     # Backlog/task selection, human gates, simplification loops (scoped)
 │   ├── TaskSchedulerService.cs # Background service for automatic scheduling (hosted)
 │   ├── SchedulerState.cs       # Scheduler enabled/disabled state (singleton)
 │   ├── SchedulerOptions.cs     # Configuration options
 │   └── SchedulerModels.cs      # DTOs: SchedulerStatusDto, PauseTaskDto, AgentCompletionResult
 ├── Worktree/
-│   └── WorktreeService.cs      # Git worktree creation/removal for subtasks (singleton)
-├── Rollback/
-│   └── RollbackService.cs      # Subtask and task rollback procedures (scoped)
+│   └── WorktreeService.cs      # Git worktree creation/removal for task isolation (singleton)
 ├── Notifications/
 │   ├── NotificationEndpoints.cs  # 4 endpoints (list, mark read, mark all read, unread count)
-│   ├── NotificationService.cs    # Notification CRUD and task event helpers (scoped)
+│   ├── NotificationService.cs    # Notification CRUD and event helpers (scoped)
 │   └── NotificationModels.cs     # DTOs: NotificationDto, CreateNotificationDto
 ├── Events/
 │   ├── EventEndpoints.cs       # GET /events (SSE)
-│   ├── EventDtos.cs            # DTOs for SSE events (HumanGateDto, SubtaskDto, etc.)
+│   ├── EventDtos.cs            # DTOs for SSE events (BacklogItemDto, TaskDto, HumanGateDto, etc.)
 │   └── SseService.cs           # Channel-based event broadcasting (singleton)
 ├── AgentQuestions/
 │   ├── AgentQuestionEndpoints.cs     # 3 endpoints (pending, get, answer)
@@ -98,7 +96,7 @@ Features/
 
 ## Service Organization
 
-- **Scoped Services**: DbContext-dependent (TaskService, SubtaskService, HumanGateService, RepositoryService)
+- **Scoped Services**: DbContext-dependent (BacklogService, TaskService, HumanGateService, RepositoryService)
 - **Singleton Services**: Stateless or managing global state (SseService, AgentRunnerService, OrchestratorService)
 - **Hosted Services**: Background processing (TaskSchedulerService)
 

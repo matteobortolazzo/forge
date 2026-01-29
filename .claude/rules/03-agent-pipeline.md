@@ -1,6 +1,11 @@
 # Agent Pipeline Architecture
 
-The agent pipeline uses state-specific agents with YAML configuration. Each pipeline state has a dedicated agent with specialized prompts and optional framework-specific variants.
+The agent pipeline uses a **two-tier architecture** with state-specific agents:
+
+1. **Backlog Item Agents**: Handle specification refinement and task decomposition
+2. **Task Agents**: Handle implementation through research, planning, coding, and review
+
+Each state has a dedicated agent with specialized prompts and optional framework-specific variants.
 
 ## YAML Configuration Schema
 
@@ -91,9 +96,9 @@ Backlog agents use `backlog_state` instead of `state` in their YAML configuratio
 | `{backlogItem.acceptanceCriteria}` | Backlog item acceptance criteria |
 | `{backlogItem.refiningIterations}` | Number of refinement iterations |
 
-## Template Variables
+## Task Template Variables
 
-Available placeholders in prompts:
+Available placeholders in task agent prompts:
 
 | Variable | Description |
 |----------|-------------|
@@ -102,9 +107,9 @@ Available placeholders in prompts:
 | `{task.state}` | Current pipeline state |
 | `{task.priority}` | Task priority |
 | `{task.acceptanceCriteria}` | Task acceptance criteria |
-| `{subtask.title}` | Current subtask title |
-| `{subtask.description}` | Current subtask description |
-| `{subtask.acceptanceCriteria}` | Subtask acceptance criteria |
+| `{task.executionOrder}` | Task's order within backlog item |
+| `{backlogItem.title}` | Parent backlog item title |
+| `{backlogItem.description}` | Parent backlog item description |
 | `{context.language}` | Detected repository language |
 | `{context.framework}` | Detected framework |
 | `{context.repoPath}` | Repository path |
@@ -139,7 +144,7 @@ The `ContextDetector` service automatically identifies:
 - **Language**: Analyzes file extensions in repository (e.g., `.ts` → `typescript`, `.cs` → `csharp`)
 - **Framework**: Checks for framework markers (`angular.json` → `angular`, `*.csproj` → `dotnet`)
 
-Detection results are cached on the task entity and used for variant selection.
+Detection results are cached on both backlog item and task entities. Tasks inherit context from their parent backlog item when created during the split phase.
 
 ## Creating New Agents
 
@@ -155,12 +160,12 @@ Detection results are cached on the task entity and used for variant selection.
 | `IOrchestratorService` | Agent selection, prompt assembly, artifact management, confidence tracking |
 | `IAgentConfigLoader` | Loads and caches YAML configurations |
 | `IContextDetector` | Repository language/framework detection |
-| `IPromptBuilder` | Template variable substitution with subtask and artifact context |
+| `IPromptBuilder` | Template variable substitution with backlog/task and artifact context |
 | `IArtifactParser` | Extracts structured content, confidence scores, human input requests, verdicts |
-| `IWorktreeService` | Git worktree creation/removal for subtask isolation |
-| `IRollbackService` | Subtask and task rollback with artifact preservation |
+| `IWorktreeService` | Git worktree creation/removal for task isolation |
+| `BacklogService` | Backlog item CRUD and state management |
+| `TaskService` | Task CRUD and state management |
 | `HumanGateService` | Human gate CRUD and resolution |
-| `SubtaskService` | Subtask lifecycle management |
 | `AgentConfig` | YAML configuration model |
 | `ResolvedAgentConfig` | Fully resolved config with assembled prompt |
 | `PipelineConfiguration` | Retry limits, confidence thresholds, gate configuration |

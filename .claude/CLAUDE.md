@@ -4,7 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents powered by Claude Code CLI. The system implements a pipeline where tasks flow through stages (Backlog → Split → Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done), with agents executed via stdin/stdout communication with the Claude Code process. The pipeline supports human-in-the-loop oversight through conditional and mandatory approval gates, confidence-based escalation, and git worktree isolation for subtasks.
+Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents powered by Claude Code CLI. The system implements a **two-tier pipeline** with separate lifecycles for backlog items and tasks:
+
+**Backlog Item Pipeline** (specification refinement and decomposition):
+```
+New → Refining → Ready → Splitting → Executing → Done
+```
+
+**Task Pipeline** (implementation of individual work units):
+```
+Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+```
+
+Backlog items represent high-level features or changes. During **Refining**, Claude asks clarifying questions and improves specifications. Once **Ready**, the **Splitting** agent decomposes items into PR-sized tasks. Tasks then flow through their own pipeline with agents for research, planning, implementation, and review.
+
+The system supports human-in-the-loop oversight through conditional and mandatory approval gates, confidence-based escalation, and git worktree isolation for parallel task execution.
 
 ## Repository Structure
 
@@ -28,15 +42,14 @@ forge/
 ├── src/
 │   ├── Forge.Api/                  # .NET 10 API Solution
 │   │   ├── Forge.Api/              # Main API project
-│   │   │   ├── Features/           # Task, Agent, Events, Scheduler endpoints
+│   │   │   ├── Features/           # Backlog, Task, Agent, Events, Scheduler endpoints
+│   │   │   │   ├── Backlog/        # Backlog item CRUD, refinement, splitting, logs
 │   │   │   │   ├── Tasks/          # Task CRUD, transitions, logs, agent start, pause/resume, artifacts
 │   │   │   │   ├── Agents/         # Agent orchestration, config loading, context detection
 │   │   │   │   ├── Agent/          # Agent status, runner service
-│   │   │   │   ├── Scheduler/      # Automatic task scheduling with human gates
-│   │   │   │   ├── Subtasks/       # Subtask CRUD and lifecycle management
+│   │   │   │   ├── Scheduler/      # Automatic backlog/task scheduling with human gates
 │   │   │   │   ├── HumanGates/     # Human gate management and resolution
-│   │   │   │   ├── Rollback/       # Rollback procedures and audit records
-│   │   │   │   ├── Worktree/       # Git worktree isolation for subtasks
+│   │   │   │   ├── Worktree/       # Git worktree isolation for tasks
 │   │   │   │   ├── Events/         # SSE endpoint
 │   │   │   │   └── Mock/           # Mock control endpoints (E2E only)
 │   │   │   ├── Data/               # EF Core DbContext, Entities
@@ -49,6 +62,7 @@ forge/
 │       ├── e2e/                    # Playwright E2E tests
 │       └── src/app/
 │           ├── features/           # Feature folders
+│           │   ├── backlog/        # Backlog item list, detail, create dialog
 │           │   ├── queue/          # Task queue view (table with filtering/sorting)
 │           │   ├── task-detail/    # Task detail view with logs
 │           │   └── notifications/  # Notification panel
@@ -128,7 +142,7 @@ Detailed documentation is organized into rule files that load on-demand:
 - **Zoneless**: Application runs in zoneless mode
 
 ### Backend Service Lifetimes
-- **Scoped**: DbContext-dependent services (TaskService, SubtaskService)
+- **Scoped**: DbContext-dependent services (BacklogService, TaskService, HumanGateService)
 - **Singleton**: Stateless or global state services (SseService, AgentRunnerService)
 - **Hosted**: Background processing (TaskSchedulerService)
 - Never inject scoped into singleton directly; use IServiceScopeFactory
@@ -139,9 +153,10 @@ Detailed documentation is organized into rule files that load on-demand:
 - See `rules/07-sse-events.md` for event types
 
 ### Human Gates
-- Check `HasPendingGate` before task transitions
+- Check `HasPendingGate` before backlog item or task transitions
 - Gates triggered by confidence < 0.7 or mandatory config
-- Three gate types: split (conditional), planning (conditional), pr (mandatory)
+- Backlog gates: refining (conditional), split (conditional)
+- Task gates: planning (conditional), pr (mandatory)
 
 ## Claude.CodeSdk
 
@@ -184,11 +199,11 @@ AGENTS_PATH="./agents"          # Optional: custom path to agents directory
 Forge supports managing multiple repositories. Key concepts:
 
 - **Repository Entity**: Each repository has a name, path, and cached git info (branch, commit, dirty state)
-- **Task Association**: All tasks belong to a repository (required `RepositoryId`)
-- **API Structure**: Task endpoints are scoped under `/api/repositories/{repoId}/tasks`
+- **Backlog & Task Association**: All backlog items and tasks belong to a repository (required `RepositoryId`)
+- **API Structure**: Endpoints scoped under `/api/repositories/{repoId}/backlog` and `/api/repositories/{repoId}/tasks`
 - **UI Selection**: Frontend persists selected repository in localStorage (`forge:selectedRepositoryId`)
 - **First-Run**: UI prompts to add a repository if none exist
-- **Default Repository**: One repository can be marked as default for new task creation
+- **Default Repository**: One repository can be marked as default for new backlog items
 
 ### UI Components
 

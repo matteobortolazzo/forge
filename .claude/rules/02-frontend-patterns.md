@@ -9,7 +9,9 @@ Standalone components with lazy loading:
 ```typescript
 // app.routes.ts
 export const routes: Routes = [
-  { path: '', loadComponent: () => import('./features/board/board.component').then(m => m.BoardComponent) },
+  { path: '', loadComponent: () => import('./features/backlog/backlog-list.component').then(m => m.BacklogListComponent) },
+  { path: 'backlog/:id', loadComponent: () => import('./features/backlog/backlog-item-detail.component').then(m => m.BacklogItemDetailComponent) },
+  { path: 'tasks', loadComponent: () => import('./features/queue/queue.component').then(m => m.QueueComponent) },
   { path: 'tasks/:id', loadComponent: () => import('./features/task-detail/task-detail.component').then(m => m.TaskDetailComponent) },
 ];
 ```
@@ -72,15 +74,25 @@ export class SseService {
 
 ## Quick Reference
 
-- **7 feature components**: BoardComponent, TaskColumnComponent, TaskCardComponent, CreateTaskDialogComponent, TaskDetailComponent, AgentOutputComponent, NotificationPanelComponent
-- **13 shared components**: StateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo, RepositorySidebar, AddRepositoryDialog, RepositorySettingsDialog
-- **7 signal stores**: TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore
-- **7 services**: TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService, NotificationService (all with mock mode)
+### Feature Components
+- **Backlog**: BacklogListComponent, BacklogItemDetailComponent, CreateBacklogItemDialogComponent
+- **Tasks**: QueueComponent, TaskDetailComponent, AgentOutputComponent
+- **Notifications**: NotificationPanelComponent
+
+### Shared Components
+StateBadge, BacklogStateBadge, PriorityBadge, AgentIndicator, ErrorAlert, LoadingSpinner, PausedBadge, SchedulerStatus, ArtifactTypeBadge, ArtifactPanel, RepositoryInfo, RepositorySidebar, AddRepositoryDialog, RepositorySettingsDialog
+
+### Signal Stores
+BacklogStore, TaskStore, AgentStore, LogStore, NotificationStore, SchedulerStore, ArtifactStore, RepositoryStore
+
+### Services
+BacklogService, TaskService, AgentService, SseService, SchedulerService, ArtifactService, RepositoryService, NotificationService (all with mock mode)
 
 ## Multi-Repository Support
 
 - **RepositoryStore**: Manages list of repositories with selected repository state
 - **localStorage**: Selected repository ID persisted in `forge:selectedRepositoryId`
+- **BacklogService**: All methods require repositoryId parameter, URLs use `/api/repositories/{repoId}/backlog`
 - **TaskService**: All methods require repositoryId parameter, URLs use `/api/repositories/{repoId}/tasks`
 - **RepositoryInfo component**: Shows current repository with dropdown selector for multiple repos
 - **RepositorySidebarComponent**: Discord-style vertical sidebar with initials-based repository selection
