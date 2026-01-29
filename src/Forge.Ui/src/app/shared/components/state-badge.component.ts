@@ -13,15 +13,11 @@ const STATE_VARIANTS: Record<StateType, BadgeVariant> = {
   Ready: 'cyan',
   Splitting: 'indigo',
   Executing: 'blue',
+  Done: 'green',
   // Task (Pipeline) states
-  Research: 'slate',
   Planning: 'purple',
   Implementing: 'blue',
-  Simplifying: 'cyan',
-  Verifying: 'indigo',
-  Reviewing: 'amber',
-  PrReady: 'orange',
-  Done: 'green',
+  PrReady: 'green',
 };
 
 @Component({

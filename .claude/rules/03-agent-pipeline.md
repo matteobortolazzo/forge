@@ -3,9 +3,13 @@
 The agent pipeline uses a **two-tier architecture** with state-specific agents:
 
 1. **Backlog Item Agents**: Handle specification refinement and task decomposition
-2. **Task Agents**: Handle implementation through research, planning, coding, and review
+2. **Task Agents**: Handle implementation through planning and implementing phases
 
 Each state has a dedicated agent with specialized prompts and optional framework-specific variants.
+
+**Simplified Task Pipeline:**
+- **Planning Agent**: Combines codebase research with test-first implementation design
+- **Implementing Agent**: Combines tests, code, verification, YAGNI check, and documentation
 
 ## YAML Configuration Schema
 
@@ -115,26 +119,17 @@ Available placeholders in task agent prompts:
 | `{context.repoPath}` | Repository path |
 | `{artifacts}` | Formatted list of previous artifacts |
 | `{artifacts.split}` | Most recent task split artifact content |
-| `{artifacts.research}` | Most recent research findings content |
 | `{artifacts.plan}` | Most recent plan artifact content |
 | `{artifacts.implementation}` | Most recent implementation artifact content |
-| `{artifacts.simplification}` | Most recent simplification review content |
-| `{artifacts.verification}` | Most recent verification report content |
-| `{artifacts.review}` | Most recent review artifact content |
 
 ## Artifact Types
 
 | Type | Produced By | Contains |
 |------|-------------|----------|
-| `refined_spec` | Refining agent | Clarifying questions, suggested improvements, scope assessment |
 | `task_split` | Split agent | Task decomposition, execution order, acceptance criteria |
-| `research_findings` | Research agent | Existing code, patterns, affected files, external references |
-| `plan` | Planning agent | Test specifications, implementation steps, verification commands |
-| `implementation` | Implementing agent | Files changed, test results, verification log |
-| `simplification_review` | Simplifying agent | Verdict, findings, scope assessment |
-| `verification_report` | Verifying agent | Full test suite results, build status, regression check |
-| `review` | Reviewing agent | Review findings, suggested changes, approval status |
-| `documentation_update` | Documenting agent | Files modified, files reviewed, recommendations |
+| `plan` | Planning agent | Research findings + test specifications + implementation steps |
+| `implementation` | Implementing agent | Files changed, test results, verification log, simplification notes |
+| `test` | Any agent | Test-specific output |
 | `general` | Any agent | Unstructured output |
 
 ## Context Detection
@@ -161,7 +156,7 @@ Detection results are cached on both backlog item and task entities. Tasks inher
 | `IAgentConfigLoader` | Loads and caches YAML configurations |
 | `IContextDetector` | Repository language/framework detection |
 | `IPromptBuilder` | Template variable substitution with backlog/task and artifact context |
-| `IArtifactParser` | Extracts structured content, confidence scores, human input requests, verdicts |
+| `IArtifactParser` | Extracts structured content, confidence scores, human input requests |
 | `IWorktreeService` | Git worktree creation/removal for task isolation |
 | `BacklogService` | Backlog item CRUD and state management |
 | `TaskService` | Task CRUD and state management |

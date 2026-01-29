@@ -88,9 +88,8 @@ public class SchedulerServiceTests : IDisposable
     public async Task GetNextSchedulableTask_WithSamePriority_OrdersByState_PlanningFirst()
     {
         // Arrange
-        await CreateTaskAsync("Testing task", Priority.High, PipelineState.Verifying);
-        await CreateTaskAsync("Planning task", Priority.High, PipelineState.Planning);
         await CreateTaskAsync("Implementing task", Priority.High, PipelineState.Implementing);
+        await CreateTaskAsync("Planning task", Priority.High, PipelineState.Planning);
 
         // Act
         var result = await _sut.GetNextSchedulableTaskAsync();
@@ -161,7 +160,6 @@ public class SchedulerServiceTests : IDisposable
 
     [Theory]
     [InlineData(PipelineState.PrReady)]
-    [InlineData(PipelineState.Done)]
     public async Task GetNextSchedulableTask_ExcludesNonSchedulableStates(PipelineState state)
     {
         // Arrange
@@ -179,8 +177,6 @@ public class SchedulerServiceTests : IDisposable
     [Theory]
     [InlineData(PipelineState.Planning)]
     [InlineData(PipelineState.Implementing)]
-    [InlineData(PipelineState.Reviewing)]
-    [InlineData(PipelineState.Verifying)]
     public async Task GetNextSchedulableTask_IncludesSchedulableStates(PipelineState state)
     {
         // Arrange
@@ -225,12 +221,8 @@ public class SchedulerServiceTests : IDisposable
     #region HandleAgentCompletionAsync
 
     [Theory]
-    [InlineData(PipelineState.Research, PipelineState.Planning)]
     [InlineData(PipelineState.Planning, PipelineState.Implementing)]
-    [InlineData(PipelineState.Implementing, PipelineState.Simplifying)]
-    [InlineData(PipelineState.Simplifying, PipelineState.Verifying)]
-    [InlineData(PipelineState.Verifying, PipelineState.Reviewing)]
-    // Note: Reviewing -> PrReady triggers mandatory human gate, tested separately
+    [InlineData(PipelineState.Implementing, PipelineState.PrReady)]
     public async Task HandleAgentCompletion_OnSuccess_TransitionsToCorrectNextState(PipelineState from, PipelineState to)
     {
         // Arrange
@@ -437,7 +429,7 @@ public class SchedulerServiceTests : IDisposable
         await CreateTaskAsync("Pending 1", Priority.Medium, PipelineState.Planning);
         await CreateTaskAsync("Pending 2", Priority.Medium, PipelineState.Implementing);
         await CreateTaskAsync("Paused", Priority.Medium, PipelineState.Planning, isPaused: true);
-        await CreateTaskAsync("Done", Priority.Medium, PipelineState.Done); // Not schedulable
+        await CreateTaskAsync("PrReady", Priority.Medium, PipelineState.PrReady); // Not schedulable
 
         var agentStatus = new AgentStatusDto(false, null, null);
 

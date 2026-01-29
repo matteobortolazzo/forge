@@ -12,7 +12,7 @@ public class TaskEntity
     public Guid Id { get; set; }
     public required string Title { get; set; }
     public required string Description { get; set; }
-    public PipelineState State { get; set; } = PipelineState.Research;
+    public PipelineState State { get; set; } = PipelineState.Planning;
     public Priority Priority { get; set; } = Priority.Medium;
     public string? AssignedAgentId { get; set; }
     public bool HasError { get; set; }
@@ -51,7 +51,6 @@ public class TaskEntity
 
     // Pipeline iteration tracking
     public int ImplementationRetries { get; set; }      // Current implementation retry count
-    public int SimplificationIterations { get; set; }   // Current simplification iteration count
 
     // Navigation properties
     public ICollection<TaskLogEntity> Logs { get; set; } = [];

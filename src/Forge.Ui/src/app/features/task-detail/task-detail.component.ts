@@ -219,7 +219,7 @@ import { formatDateTime } from '../../shared/utils/date-utils';
               </div>
 
               <!-- Start Agent Button -->
-              @if (!task()!.assignedAgentId && !task()!.isPaused && task()!.state !== 'Done') {
+              @if (!task()!.assignedAgentId && !task()!.isPaused && task()!.state !== 'PrReady') {
                 <button
                   type="button"
                   class="w-full rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
@@ -251,7 +251,7 @@ import { formatDateTime } from '../../shared/utils/date-utils';
               }
 
               <!-- Pause/Resume Button -->
-              @if (!task()!.assignedAgentId && task()!.state !== 'Done') {
+              @if (!task()!.assignedAgentId && task()!.state !== 'PrReady') {
                 @if (task()!.isPaused) {
                   <button
                     type="button"

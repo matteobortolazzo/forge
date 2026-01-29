@@ -358,14 +358,9 @@ export class TaskQueueComponent implements OnInit {
       low: 1,
     };
     const stateOrder: Record<PipelineState, number> = {
-      Research: 0,
-      Planning: 1,
-      Implementing: 2,
-      Simplifying: 3,
-      Verifying: 4,
-      Reviewing: 5,
-      PrReady: 6,
-      Done: 7,
+      Planning: 0,
+      Implementing: 1,
+      PrReady: 2,
     };
 
     tasks = [...tasks].sort((a, b) => {

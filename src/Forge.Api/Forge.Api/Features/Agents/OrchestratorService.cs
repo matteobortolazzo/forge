@@ -540,12 +540,8 @@ public class OrchestratorService : IOrchestratorService
             return config.Output.Type.ToLowerInvariant() switch
             {
                 "task_split" => ArtifactType.TaskSplit,
-                "research_findings" => ArtifactType.ResearchFindings,
                 "plan" => ArtifactType.Plan,
                 "implementation" => ArtifactType.Implementation,
-                "simplification_review" => ArtifactType.SimplificationReview,
-                "verification_report" => ArtifactType.VerificationReport,
-                "review" => ArtifactType.Review,
                 "test" => ArtifactType.Test,
                 _ => ArtifactType.General
             };
@@ -553,12 +549,8 @@ public class OrchestratorService : IOrchestratorService
 
         return config.TaskState switch
         {
-            PipelineState.Research => ArtifactType.ResearchFindings,
             PipelineState.Planning => ArtifactType.Plan,
             PipelineState.Implementing => ArtifactType.Implementation,
-            PipelineState.Simplifying => ArtifactType.SimplificationReview,
-            PipelineState.Verifying => ArtifactType.VerificationReport,
-            PipelineState.Reviewing => ArtifactType.Review,
             _ => ArtifactType.General
         };
     }

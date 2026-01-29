@@ -38,10 +38,6 @@ public interface IArtifactParser
     /// </summary>
     (bool Requested, string? Reason) ParseHumanInputRequest(string agentOutput);
 
-    /// <summary>
-    /// Extracts the verdict from a simplification review.
-    /// </summary>
-    string? ParseSimplificationVerdict(string agentOutput);
 }
 
 /// <summary>
@@ -78,13 +74,7 @@ public partial class ArtifactParser : IArtifactParser
     [
         "# Implementation Plan",
         "# Implementation Summary",
-        "# Code Review",
-        "# Angular Code Review",
-        "# Testing Report",
-        "# Research Findings",
         "# Task Split",
-        "# Simplification Review",
-        "# Verification Report",
         "# Refined Specification",
     ];
 
@@ -250,23 +240,6 @@ public partial class ArtifactParser : IArtifactParser
         return (false, null);
     }
 
-    public string? ParseSimplificationVerdict(string agentOutput)
-    {
-        if (string.IsNullOrWhiteSpace(agentOutput))
-            return null;
-
-        // Look for verdict in YAML format
-        var match = VerdictRegex().Match(agentOutput);
-        if (match.Success)
-        {
-            var verdict = match.Groups[1].Value.Trim().Trim('"');
-            _logger.LogDebug("Parsed verdict: {Verdict}", verdict);
-            return verdict;
-        }
-
-        return null;
-    }
-
     private static ArtifactType GetTaskArtifactType(AgentConfig config)
     {
         // First check explicit output type in config
@@ -275,12 +248,8 @@ public partial class ArtifactParser : IArtifactParser
             return config.Output.Type.ToLowerInvariant() switch
             {
                 "task_split" => ArtifactType.TaskSplit,
-                "research_findings" => ArtifactType.ResearchFindings,
                 "plan" => ArtifactType.Plan,
                 "implementation" => ArtifactType.Implementation,
-                "simplification_review" => ArtifactType.SimplificationReview,
-                "verification_report" => ArtifactType.VerificationReport,
-                "review" => ArtifactType.Review,
                 "test" => ArtifactType.Test,
                 _ => ArtifactType.General
             };
@@ -289,12 +258,8 @@ public partial class ArtifactParser : IArtifactParser
         // Fall back to inferring from task state
         return config.TaskState switch
         {
-            PipelineState.Research => ArtifactType.ResearchFindings,
             PipelineState.Planning => ArtifactType.Plan,
             PipelineState.Implementing => ArtifactType.Implementation,
-            PipelineState.Simplifying => ArtifactType.SimplificationReview,
-            PipelineState.Verifying => ArtifactType.VerificationReport,
-            PipelineState.Reviewing => ArtifactType.Review,
             _ => ArtifactType.General
         };
     }
@@ -373,7 +338,4 @@ public partial class ArtifactParser : IArtifactParser
 
     [GeneratedRegex(@"human_input_reason:\s*[""']?([^""'\n]+)[""']?", RegexOptions.IgnoreCase)]
     private static partial Regex HumanInputReasonRegex();
-
-    [GeneratedRegex(@"verdict:\s*[""']?(\w+)[""']?", RegexOptions.IgnoreCase)]
-    private static partial Regex VerdictRegex();
 }

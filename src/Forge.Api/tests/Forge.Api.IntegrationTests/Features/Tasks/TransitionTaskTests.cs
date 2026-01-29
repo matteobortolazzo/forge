@@ -30,14 +30,14 @@ public class TransitionTaskTests : IAsyncLifetime
     private string TasksUrl => $"/api/repositories/{_repositoryId}/backlog/{_backlogItemId}/tasks";
 
     [Fact]
-    public async Task TransitionTask_FromResearchToPlanning_Succeeds()
+    public async Task TransitionTask_FromPlanningToImplementing_Succeeds()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Transition Test", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Transition Test", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Implementing)
             .Build();
 
         // Act
@@ -46,7 +46,7 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Planning);
+        task!.State.Should().Be(PipelineState.Implementing);
     }
 
     [Fact]
@@ -54,18 +54,13 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Full Workflow", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Full Workflow", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
-        // New pipeline state flow (no more Backlog or Split)
+        // Simplified pipeline: Planning → Implementing → PrReady
         var states = new[]
         {
-            PipelineState.Planning,
             PipelineState.Implementing,
-            PipelineState.Simplifying,
-            PipelineState.Verifying,
-            PipelineState.Reviewing,
-            PipelineState.PrReady,
-            PipelineState.Done
+            PipelineState.PrReady
         };
 
         // Act & Assert
@@ -84,10 +79,10 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Backward Test", state: PipelineState.Implementing, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Research)
+            .WithTargetState(PipelineState.Planning)
             .Build();
 
         // Act
@@ -96,7 +91,7 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var task = await response.ReadAsAsync<TaskDto>();
-        task!.State.Should().Be(PipelineState.Research);
+        task!.State.Should().Be(PipelineState.Planning);
     }
 
     [Fact]
@@ -104,10 +99,10 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Skip Test", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Skip Test", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Implementing) // Skipping Planning
+            .WithTargetState(PipelineState.PrReady) // Skipping Implementing
             .Build();
 
         // Act
@@ -156,10 +151,10 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "SSE Transition", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Implementing)
             .Build();
 
         // Act
@@ -167,7 +162,7 @@ public class TransitionTaskTests : IAsyncLifetime
 
         // Assert
         await _factory.SseServiceMock.Received(1).EmitTaskUpdatedAsync(
-            Arg.Is<TaskDto>(t => t.State == PipelineState.Planning));
+            Arg.Is<TaskDto>(t => t.State == PipelineState.Implementing));
     }
 
     [Fact]
@@ -175,12 +170,12 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Timestamp Transition", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         var originalUpdatedAt = entity.UpdatedAt;
         await Task.Delay(10);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Implementing)
             .Build();
 
         // Act
@@ -196,10 +191,10 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persist Transition", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Persist Transition", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Implementing)
             .Build();
 
         // Act
@@ -208,18 +203,18 @@ public class TransitionTaskTests : IAsyncLifetime
         // Assert
         await using var verifyDb = _factory.CreateDbContext();
         var updated = await verifyDb.Tasks.FindAsync(entity.Id);
-        updated!.State.Should().Be(PipelineState.Planning);
+        updated!.State.Should().Be(PipelineState.Implementing);
     }
 
     [Fact]
-    public async Task TransitionTask_FromDoneToResearch_ReturnsBadRequest()
+    public async Task TransitionTask_FromPrReadyToPlanning_ReturnsBadRequest()
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Done Task", state: PipelineState.Done, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "PrReady Task", state: PipelineState.PrReady, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Research) // Multiple states away
+            .WithTargetState(PipelineState.Planning) // Multiple states away
             .Build();
 
         // Act
@@ -234,11 +229,11 @@ public class TransitionTaskTests : IAsyncLifetime
     {
         // Arrange
         await using var db = _factory.CreateDbContext();
-        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Wrong Backlog Task", state: PipelineState.Research, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
+        var entity = await TestDatabaseHelper.SeedTaskAsync(db, "Wrong Backlog Task", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         var wrongBacklogItemId = Guid.NewGuid();
 
         var dto = new TransitionTaskDtoBuilder()
-            .WithTargetState(PipelineState.Planning)
+            .WithTargetState(PipelineState.Implementing)
             .Build();
 
         // Act

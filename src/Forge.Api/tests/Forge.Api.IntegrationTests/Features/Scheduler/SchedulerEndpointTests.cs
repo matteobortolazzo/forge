@@ -52,7 +52,7 @@ public class SchedulerEndpointTests : IAsyncLifetime
         await using var db = _factory.CreateDbContext();
         await TestDatabaseHelper.SeedTaskAsync(db, "Planning Task", state: PipelineState.Planning, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
         await TestDatabaseHelper.SeedTaskAsync(db, "Implementing Task", state: PipelineState.Implementing, repositoryId: _repositoryId, backlogItemId: _backlogItemId);
-        await TestDatabaseHelper.SeedTaskAsync(db, "Done Task", state: PipelineState.Done, repositoryId: _repositoryId, backlogItemId: _backlogItemId); // Not schedulable
+        await TestDatabaseHelper.SeedTaskAsync(db, "PrReady Task", state: PipelineState.PrReady, repositoryId: _repositoryId, backlogItemId: _backlogItemId); // Not schedulable
 
         // Act
         var response = await _client.GetAsync("/api/scheduler/status");

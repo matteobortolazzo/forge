@@ -102,8 +102,8 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         await sse.EmitTaskUpdatedAsync(result);
         await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.BacklogItemId, entity.Title, previousState, dto.TargetState);
 
-        // Update backlog item if task is now Done
-        if (dto.TargetState == PipelineState.Done)
+        // Update backlog item if task reached PrReady (final state)
+        if (dto.TargetState == PipelineState.PrReady)
         {
             await UpdateBacklogItemTaskCountAsync(entity.BacklogItemId);
         }
@@ -248,9 +248,10 @@ public class TaskService(ForgeDbContext db, ISseService sse, NotificationService
         if (backlogItem is null) return;
 
         backlogItem.TaskCount = backlogItem.Tasks.Count;
-        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.Done);
+        // PrReady is the final task state
+        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.PrReady);
 
-        // If all tasks are done, transition backlog item to Done
+        // If all tasks have reached PrReady, transition backlog item to Done
         if (backlogItem.TaskCount > 0 &&
             backlogItem.CompletedTaskCount == backlogItem.TaskCount &&
             backlogItem.State == BacklogItemState.Executing)

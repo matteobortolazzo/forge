@@ -27,7 +27,7 @@ describe('TaskStore', () => {
     id: 'task-1',
     title: 'Test Task',
     description: 'Test description',
-    state: 'Research' as PipelineState,
+    state: 'Planning' as PipelineState,
     priority: 'medium',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -165,12 +165,12 @@ describe('TaskStore', () => {
     });
 
     it('should transition a task to a new state', async () => {
-      const transitionedTask = { ...mockTask, state: 'Research' as PipelineState };
+      const transitionedTask = { ...mockTask, state: 'Implementing' as PipelineState };
       taskServiceMock.transitionTask.mockReturnValue(of(transitionedTask));
 
-      const result = await store.transitionTask('task-1', 'Research');
+      const result = await store.transitionTask('task-1', 'Implementing');
 
-      expect(result?.state).toBe('Research');
+      expect(result?.state).toBe('Implementing');
     });
   });
 
@@ -250,7 +250,7 @@ describe('TaskStore', () => {
 
     it('should compute tasksByState', () => {
       const byState = store.tasksByState();
-      expect(byState['Research']).toHaveLength(1);
+      expect(byState['Planning']).toHaveLength(1);
     });
   });
 

@@ -210,12 +210,13 @@ public class BacklogService(ForgeDbContext db, ISseService sse, NotificationServ
         if (entity is null) return;
 
         var taskCount = entity.Tasks.Count;
-        var completedCount = entity.Tasks.Count(t => t.State == PipelineState.Done);
+        // PrReady is the final task state
+        var completedCount = entity.Tasks.Count(t => t.State == PipelineState.PrReady);
 
         entity.TaskCount = taskCount;
         entity.CompletedTaskCount = completedCount;
 
-        // If all tasks are done, move to Done state
+        // If all tasks have reached PrReady, move to Done state
         if (taskCount > 0 && completedCount == taskCount && entity.State == BacklogItemState.Executing)
         {
             entity.State = BacklogItemState.Done;
@@ -268,7 +269,7 @@ public class BacklogService(ForgeDbContext db, ISseService sse, NotificationServ
                 Title = dto.Title,
                 Description = dto.Description,
                 Priority = dto.Priority,
-                State = PipelineState.Research,
+                State = PipelineState.Planning,
                 BacklogItemId = backlogItemId,
                 RepositoryId = entity.RepositoryId,
                 ExecutionOrder = order++,

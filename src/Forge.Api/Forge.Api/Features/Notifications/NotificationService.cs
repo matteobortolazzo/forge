@@ -66,10 +66,11 @@ public class NotificationService(ForgeDbContext db, ISseService sse)
 
     public async Task NotifyTaskStateChangedAsync(Guid taskId, Guid backlogItemId, string taskTitle, PipelineState fromState, PipelineState toState)
     {
-        var type = toState == PipelineState.Done ? NotificationType.Success : NotificationType.Info;
-        var title = toState == PipelineState.Done ? "Task Completed" : "Task State Changed";
-        var message = toState == PipelineState.Done
-            ? $"\"{taskTitle}\" completed"
+        // PrReady is the final task state
+        var type = toState == PipelineState.PrReady ? NotificationType.Success : NotificationType.Info;
+        var title = toState == PipelineState.PrReady ? "Task Completed" : "Task State Changed";
+        var message = toState == PipelineState.PrReady
+            ? $"\"{taskTitle}\" is ready for PR"
             : $"\"{taskTitle}\" moved to {toState}";
 
         await CreateAsync(new CreateNotificationDto(title, message, type, taskId, backlogItemId));

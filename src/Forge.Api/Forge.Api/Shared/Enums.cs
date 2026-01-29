@@ -19,20 +19,16 @@ public enum BacklogItemState
 
 /// <summary>
 /// Pipeline states for task workflow. Serialized as PascalCase.
-/// Flow: Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+/// Flow: Planning → Implementing → PrReady
 /// Note: Tasks are leaf units created from BacklogItem splitting.
+/// Planning includes research phase. Implementing includes verification and simplification.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PipelineState
 {
-    Research,     // Codebase analysis and pattern discovery
-    Planning,     // Test-first implementation design
-    Implementing, // Code generation (tests first, then implementation)
-    Simplifying,  // Over-engineering review
-    Verifying,    // Comprehensive verification (replaces Testing)
-    Reviewing,    // Human code review
-    PrReady,      // Ready for PR creation
-    Done
+    Planning,     // Research + test-first implementation design
+    Implementing, // Code generation, verification, YAGNI check, docs
+    PrReady       // Ready for PR creation (final state)
 }
 
 /// <summary>
@@ -93,20 +89,10 @@ public enum ArtifactType
 {
     [JsonStringEnumMemberName("task_split")]
     TaskSplit,
-    [JsonStringEnumMemberName("research_findings")]
-    ResearchFindings,
     [JsonStringEnumMemberName("plan")]
     Plan,
     [JsonStringEnumMemberName("implementation")]
     Implementation,
-    [JsonStringEnumMemberName("simplification_review")]
-    SimplificationReview,
-    [JsonStringEnumMemberName("verification_report")]
-    VerificationReport,
-    [JsonStringEnumMemberName("review")]
-    Review,
-    [JsonStringEnumMemberName("documentation_update")]
-    DocumentationUpdate,
     [JsonStringEnumMemberName("test")]
     Test,
     [JsonStringEnumMemberName("general")]
@@ -124,9 +110,7 @@ public enum HumanGateType
     [JsonStringEnumMemberName("split")]
     Split,       // Conditional - triggered when confidence < threshold during BacklogItem splitting
     [JsonStringEnumMemberName("planning")]
-    Planning,    // Conditional - triggered when confidence < threshold or high-risk
-    [JsonStringEnumMemberName("pr")]
-    Pr           // Mandatory - always requires human approval
+    Planning     // Conditional - triggered when confidence < threshold or high-risk
 }
 
 /// <summary>

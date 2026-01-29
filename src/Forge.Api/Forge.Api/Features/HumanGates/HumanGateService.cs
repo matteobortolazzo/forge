@@ -34,12 +34,8 @@ public class HumanGateService
     /// </summary>
     public async Task<HumanGateEntity> CreateGateForTaskAsync(TaskEntity entity)
     {
-        var gateType = entity.State switch
-        {
-            PipelineState.Planning => HumanGateType.Planning,
-            PipelineState.Reviewing => HumanGateType.Pr,
-            _ => HumanGateType.Planning
-        };
+        // Only Planning gate is supported for tasks
+        var gateType = HumanGateType.Planning;
 
         var reason = entity.HumanInputRequested
             ? entity.HumanInputReason ?? "Agent requested human input"

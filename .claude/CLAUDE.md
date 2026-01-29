@@ -11,12 +11,15 @@ Forge is an AI Agent Dashboard for orchestrating and monitoring AI coding agents
 New → Refining → Ready → Splitting → Executing → Done
 ```
 
-**Task Pipeline** (implementation of individual work units):
+**Task Pipeline** (simplified implementation lifecycle):
 ```
-Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+Planning → Implementing → PrReady
 ```
 
-Backlog items represent high-level features or changes. During **Refining**, Claude asks clarifying questions and improves specifications. Once **Ready**, the **Splitting** agent decomposes items into PR-sized tasks. Tasks then flow through their own pipeline with agents for research, planning, implementation, and review.
+Backlog items represent high-level features or changes. During **Refining**, Claude asks clarifying questions and improves specifications. Once **Ready**, the **Splitting** agent decomposes items into PR-sized tasks. Tasks flow through a simplified pipeline:
+- **Planning**: Research codebase patterns AND design test-first implementation plan
+- **Implementing**: Write tests first, implement code, verify, simplify, update documentation
+- **PrReady**: Final state - task is ready for PR creation (user reviews on git provider)
 
 The system supports human-in-the-loop oversight through conditional and mandatory approval gates, confidence-based escalation, and git worktree isolation for parallel task execution.
 
@@ -28,17 +31,11 @@ forge/
 │   ├── defaults/                   # Default agents for each pipeline state
 │   │   ├── refining.yml            # Refining agent (backlog item specification refinement)
 │   │   ├── split.yml               # Split agent (backlog item decomposition into tasks)
-│   │   ├── research.yml            # Research agent (codebase analysis)
-│   │   ├── planning.yml            # Planning agent (test-first design)
-│   │   ├── implementing.yml        # Implementation agent (code generation)
-│   │   ├── simplifying.yml         # Simplifying agent (over-engineering review)
-│   │   ├── verifying.yml           # Verifying agent (comprehensive verification)
-│   │   ├── reviewing.yml           # Review agent (code review)
-│   │   └── documenting.yml         # Documentation maintenance agent
+│   │   ├── planning.yml            # Planning agent (research + test-first design)
+│   │   └── implementing.yml        # Implementation agent (tests, code, verify, simplify, docs)
 │   └── variants/                   # Framework-specific variants
 │       ├── implementing.angular.yml
-│       ├── implementing.dotnet.yml
-│       └── reviewing.angular.yml
+│       └── implementing.dotnet.yml
 ├── src/
 │   ├── Forge.Api/                  # .NET 10 API Solution
 │   │   ├── Forge.Api/              # Main API project
@@ -157,7 +154,7 @@ Detailed documentation is organized into rule files that load on-demand:
 - Check `HasPendingGate` before backlog item or task transitions
 - Gates triggered by confidence < 0.7 or mandatory config
 - Backlog gates: refining (conditional), split (conditional)
-- Task gates: planning (conditional), pr (mandatory)
+- Task gates: planning (conditional only)
 
 ## Claude.CodeSdk
 

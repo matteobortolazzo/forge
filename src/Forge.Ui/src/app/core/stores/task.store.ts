@@ -80,11 +80,11 @@ export class TaskStore {
   // Computed: paused tasks
   readonly pausedTasks = computed(() => this.backlogItemTasks().filter(t => t.isPaused));
 
-  // Computed: completed tasks
-  readonly completedTasks = computed(() => this.backlogItemTasks().filter(t => t.state === 'Done'));
+  // Computed: completed tasks (PrReady is the final task state)
+  readonly completedTasks = computed(() => this.backlogItemTasks().filter(t => t.state === 'PrReady'));
 
-  // Computed: active tasks (not done)
-  readonly activeTasks = computed(() => this.backlogItemTasks().filter(t => t.state !== 'Done'));
+  // Computed: active tasks (not yet at PrReady)
+  readonly activeTasks = computed(() => this.backlogItemTasks().filter(t => t.state !== 'PrReady'));
 
   // Computed: tasks grouped by backlog item ID
   readonly tasksByBacklogItem = computed(() => {

@@ -75,7 +75,7 @@ public static class TestDatabaseHelper
         ForgeDbContext db,
         string title = "Test Task",
         string description = "Test Description",
-        PipelineState state = PipelineState.Research,
+        PipelineState state = PipelineState.Planning,
         Priority priority = Priority.Medium,
         Guid? repositoryId = null,
         Guid? backlogItemId = null)

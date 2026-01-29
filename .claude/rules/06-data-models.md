@@ -19,20 +19,15 @@ New → Refining → Ready → Splitting → Executing → Done
 
 ## Task States (PipelineState)
 ```
-Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+Planning → Implementing → PrReady
 ```
 
 **State Descriptions:**
 | State | Description | Agent |
 |-------|-------------|-------|
-| Research | Codebase analysis and pattern discovery | Research agent |
-| Planning | Test-first implementation design | Planning agent |
-| Implementing | Code generation (tests first, then code) | Implementing agent |
-| Simplifying | Over-engineering review (YAGNI check) | Simplifying agent |
-| Verifying | Comprehensive verification and regression testing | Verifying agent |
-| Reviewing | Human code review | Review agent |
-| PrReady | Ready for PR creation | None |
-| Done | Completed | None |
+| Planning | Research codebase + test-first implementation design | Planning agent |
+| Implementing | Tests first, code, verify, YAGNI check, docs | Implementing agent |
+| PrReady | Ready for PR creation (final state) | None |
 
 ## Priority Levels
 ```
@@ -41,7 +36,7 @@ Low | Medium | High | Critical
 
 ## Artifact Types
 ```
-refined_spec | task_split | research_findings | plan | implementation | simplification_review | verification_report | review | test | general
+task_split | plan | implementation | test | general
 ```
 
 ## Human Gate Types
@@ -50,7 +45,7 @@ refined_spec | task_split | research_findings | plan | implementation | simplifi
 refining (conditional) | split (conditional)
 
 # Task gates
-planning (conditional) | pr (mandatory)
+planning (conditional)
 ```
 
 ## Agent Question Status
@@ -119,7 +114,7 @@ public int RefiningIterations { get; set; }      // Number of refinement iterati
 
 // Task progress (denormalized for efficiency)
 public int TaskCount { get; set; }               // Number of tasks created from split
-public int CompletedTaskCount { get; set; }      // Number of tasks in Done state
+public int CompletedTaskCount { get; set; }      // Number of tasks at PrReady state
 
 // Navigation
 public ICollection<TaskEntity> Tasks { get; set; } = [];
@@ -168,7 +163,6 @@ public bool HasPendingGate { get; set; }         // Task blocked by pending huma
 
 // Pipeline iteration
 public int ImplementationRetries { get; set; }   // Number of implementation retries
-public int SimplificationIterations { get; set; } // Number of simplification loops
 
 // Navigation
 public ICollection<AgentLogEntity> Logs { get; set; } = [];
@@ -183,13 +177,11 @@ Configuration in `appsettings.json`:
 {
   "Pipeline": {
     "MaxImplementationRetries": 3,
-    "MaxSimplificationIterations": 2,
     "ConfidenceThreshold": 0.7,
     "HumanGates": {
       "IsRefiningMandatory": false,
       "IsSplitMandatory": false,
-      "IsPlanningMandatory": false,
-      "IsPrMandatory": true
+      "IsPlanningMandatory": false
     }
   }
 }
@@ -205,7 +197,6 @@ Configuration in `appsettings.json`:
 | Gate Type | Trigger | Behavior |
 |-----------|---------|----------|
 | Planning | Confidence < threshold OR mandatory config | Approval required before Implementing |
-| PR | Always mandatory | Approval required before merge |
 
 ## AgentQuestionEntity Fields
 

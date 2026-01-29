@@ -132,7 +132,6 @@ public class RollbackService : IRollbackService
         if (targetStage <= PipelineState.Implementing)
         {
             task.ImplementationRetries = 0;
-            task.SimplificationIterations = 0;
         }
 
         await _db.SaveChangesAsync(ct);

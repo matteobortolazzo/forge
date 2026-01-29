@@ -129,20 +129,12 @@ describe('GateResolutionComponent', () => {
       expect(component.formatGateType('planning')).toBe('Planning');
     });
 
-    it('should format pr type', () => {
-      expect(component.formatGateType('pr')).toBe('PR');
+    it('should return raw type for unknown gate types', () => {
+      expect(component.formatGateType('unknown')).toBe('unknown');
     });
   });
 
   describe('gate type badge colors', () => {
-    it('should apply purple classes for PR gate', () => {
-      fixture.componentRef.setInput('gate', { ...mockGate, gateType: 'pr' });
-      fixture.detectChanges();
-
-      const classes = component.getGateTypeBadgeClasses();
-      expect(classes).toContain('bg-purple-100');
-    });
-
     it('should apply blue classes for planning gate', () => {
       const classes = component.getGateTypeBadgeClasses();
       expect(classes).toContain('bg-blue-100');

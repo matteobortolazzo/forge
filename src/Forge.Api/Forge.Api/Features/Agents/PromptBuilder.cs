@@ -171,15 +171,8 @@ public partial class PromptBuilder : IPromptBuilder
             result = ArtifactsSplitRegex().Replace(result, "*No task split available.*");
         }
 
-        // {artifacts.research}
-        if (latestByType.TryGetValue(Shared.ArtifactType.ResearchFindings, out var research))
-        {
-            result = ArtifactsResearchRegex().Replace(result, research.Content.Trim());
-        }
-        else
-        {
-            result = ArtifactsResearchRegex().Replace(result, "*No research findings available.*");
-        }
+        // {artifacts.research} - kept for backwards compatibility but no longer produced
+        result = ArtifactsResearchRegex().Replace(result, "*Research is now part of Planning phase.*");
 
         // {artifacts.plan}
         if (latestByType.TryGetValue(Shared.ArtifactType.Plan, out var plan))
@@ -201,35 +194,14 @@ public partial class PromptBuilder : IPromptBuilder
             result = ArtifactsImplementationRegex().Replace(result, "*No implementation available.*");
         }
 
-        // {artifacts.simplification}
-        if (latestByType.TryGetValue(Shared.ArtifactType.SimplificationReview, out var simplification))
-        {
-            result = ArtifactsSimplificationRegex().Replace(result, simplification.Content.Trim());
-        }
-        else
-        {
-            result = ArtifactsSimplificationRegex().Replace(result, "*No simplification review available.*");
-        }
+        // {artifacts.simplification} - kept for backwards compatibility but no longer produced
+        result = ArtifactsSimplificationRegex().Replace(result, "*Simplification is now part of Implementing phase.*");
 
-        // {artifacts.verification}
-        if (latestByType.TryGetValue(Shared.ArtifactType.VerificationReport, out var verification))
-        {
-            result = ArtifactsVerificationRegex().Replace(result, verification.Content.Trim());
-        }
-        else
-        {
-            result = ArtifactsVerificationRegex().Replace(result, "*No verification report available.*");
-        }
+        // {artifacts.verification} - kept for backwards compatibility but no longer produced
+        result = ArtifactsVerificationRegex().Replace(result, "*Verification is now part of Implementing phase.*");
 
-        // {artifacts.review}
-        if (latestByType.TryGetValue(Shared.ArtifactType.Review, out var review))
-        {
-            result = ArtifactsReviewRegex().Replace(result, review.Content.Trim());
-        }
-        else
-        {
-            result = ArtifactsReviewRegex().Replace(result, "*No code review available.*");
-        }
+        // {artifacts.review} - kept for backwards compatibility but no longer produced
+        result = ArtifactsReviewRegex().Replace(result, "*Review is now done by user on git provider.*");
 
         return result;
     }
@@ -270,12 +242,8 @@ public partial class PromptBuilder : IPromptBuilder
         return type switch
         {
             Shared.ArtifactType.TaskSplit => "Task Split",
-            Shared.ArtifactType.ResearchFindings => "Research Findings",
             Shared.ArtifactType.Plan => "Implementation Plan",
             Shared.ArtifactType.Implementation => "Implementation Summary",
-            Shared.ArtifactType.SimplificationReview => "Simplification Review",
-            Shared.ArtifactType.VerificationReport => "Verification Report",
-            Shared.ArtifactType.Review => "Code Review",
             Shared.ArtifactType.Test => "Testing Report",
             Shared.ArtifactType.General => "Notes",
             _ => type.ToString()

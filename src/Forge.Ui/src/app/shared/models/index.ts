@@ -11,15 +11,11 @@ export const BACKLOG_ITEM_STATES = [
 export type BacklogItemState = (typeof BACKLOG_ITEM_STATES)[number];
 
 // Pipeline States - ordered from start to finish (for tasks)
+// Flow: Planning → Implementing → PrReady
 export const PIPELINE_STATES = [
-  'Research',
   'Planning',
   'Implementing',
-  'Simplifying',
-  'Verifying',
-  'Reviewing',
   'PrReady',
-  'Done',
 ] as const;
 
 export type PipelineState = (typeof PIPELINE_STATES)[number];
@@ -35,13 +31,8 @@ export type LogType = (typeof LOG_TYPES)[number];
 // Artifact Types produced by agents
 export const ARTIFACT_TYPES = [
   'task_split',
-  'research_findings',
   'plan',
   'implementation',
-  'simplification_review',
-  'verification_report',
-  'review',
-  'documentation_update',
   'test',
   'general',
 ] as const;
@@ -268,7 +259,7 @@ export interface UpdateRepositoryDto {
 export type RepositoryInfo = Repository;
 
 // Human Gate Types
-export const HUMAN_GATE_TYPES = ['refining', 'split', 'planning', 'pr'] as const;
+export const HUMAN_GATE_TYPES = ['refining', 'split', 'planning'] as const;
 export type HumanGateType = (typeof HUMAN_GATE_TYPES)[number];
 
 // Human Gate Status

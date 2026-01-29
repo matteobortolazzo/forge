@@ -13,13 +13,17 @@ The system implements a **two-tier pipeline** separating backlog items (specific
 New → Refining → Ready → Splitting → Executing → Done
 ```
 
-**Task Pipeline** (implementation of individual work units):
+**Task Pipeline** (simplified implementation lifecycle):
 ```
-Research → Planning → Implementing → Simplifying → Verifying → Reviewing → PrReady → Done
+Planning → Implementing → PrReady
 ```
 
+- **Planning**: Research codebase patterns AND design test-first implementation plan
+- **Implementing**: Write tests first, implement code, verify, YAGNI check, update docs
+- **PrReady**: Final state - task is ready for PR creation (user reviews on git provider)
+
 Agents are executed via stdin/stdout communication with the Claude Code process. The pipeline supports:
-- **Human-in-the-loop oversight** through conditional and mandatory approval gates
+- **Human-in-the-loop oversight** through conditional approval gates (planning only for tasks)
 - **Confidence-based escalation** when agent confidence falls below threshold
 - **Git worktree isolation** for parallel task execution
 
@@ -54,14 +58,10 @@ Agents are executed via stdin/stdout communication with the Claude Code process.
 
 ### Task Flow (per task created from split)
 ```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  1. RESEARCH │───▶│   2. PLAN    │───▶│ 3. IMPLEMENT │───▶│ 4. SIMPLIFY  │
-│              │    │   (± Human)  │    │  (retry loop)│    │              │
-└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
-                                                                    │
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐            │
-│   7. DONE    │◀───│  6. PR_READY │◀───│  5. VERIFY   │◀───────────┘
-│              │    │   (Human)    │    │   + REVIEW   │
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  1. PLANNING │───▶│ 2. IMPLEMENT │───▶│  3. PR_READY │
+│ Research +   │    │ Tests, Code, │    │   (Final)    │
+│   (± Human)  │    │ Verify, Docs │    │              │
 └──────────────┘    └──────────────┘    └──────────────┘
 ```
 
@@ -74,9 +74,9 @@ Agents are executed via stdin/stdout communication with the Claude Code process.
 4. **Ready state** → User confirms spec is complete
 5. **Splitting phase** → Split agent decomposes into PR-sized tasks with execution order
 6. **Human gate (optional)** → If confidence < threshold, await approval on task breakdown
-7. **Tasks created** → Each task starts in Research state
+7. **Tasks created** → Each task starts in Planning state
 8. **Executing state** → Backlog item tracks task progress
-9. **Done** → Auto-transitions when all tasks complete
+9. **Done** → Auto-transitions when all tasks reach PrReady
 
 ### Task Processing
 1. **Task enters schedulable state** → Scheduler picks highest-priority task (respects execution order)

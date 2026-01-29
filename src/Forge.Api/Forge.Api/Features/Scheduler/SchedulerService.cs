@@ -108,8 +108,8 @@ public class SchedulerService(
                 break;
         }
 
-        // Update parent backlog item state if task completed
-        if (entity.State == PipelineState.Done)
+        // Update parent backlog item state if task completed (PrReady is the final state)
+        if (entity.State == PipelineState.PrReady)
         {
             await UpdateBacklogItemFromTaskCompletionAsync(entity.BacklogItemId);
         }
@@ -169,12 +169,6 @@ public class SchedulerService(
     /// </summary>
     private Task<bool> ShouldTriggerTaskHumanGateAsync(TaskEntity entity)
     {
-        // PR gate is always mandatory
-        if (entity.State == PipelineState.Reviewing)
-        {
-            return Task.FromResult(true);
-        }
-
         // Check confidence threshold for conditional gates
         var confidenceThreshold = _pipelineConfig.ConfidenceThreshold;
 
@@ -193,75 +187,6 @@ public class SchedulerService(
         }
 
         return Task.FromResult(false);
-    }
-
-    /// <summary>
-    /// Handles simplification review verdict and potentially loops back to Implementation.
-    /// </summary>
-    public async Task<TaskDto?> HandleSimplificationVerdictAsync(Guid taskId, string verdict)
-    {
-        var entity = await db.Tasks.FindAsync(taskId);
-        if (entity == null || entity.State != PipelineState.Simplifying)
-        {
-            return null;
-        }
-
-        if (verdict.Equals("approved", StringComparison.OrdinalIgnoreCase))
-        {
-            // Continue to Verifying
-            return await HandleTaskSuccessAsync(entity);
-        }
-
-        if (verdict.Equals("changes_requested", StringComparison.OrdinalIgnoreCase))
-        {
-            entity.SimplificationIterations++;
-
-            if (entity.SimplificationIterations >= _pipelineConfig.MaxSimplificationIterations)
-            {
-                // Escalate to human after max iterations
-                entity.HasPendingGate = true;
-                entity.HumanInputRequested = true;
-                entity.HumanInputReason = $"Simplification review still requesting changes after {entity.SimplificationIterations} iterations";
-                entity.UpdatedAt = DateTime.UtcNow;
-                await db.SaveChangesAsync();
-
-                await humanGateService.CreateGateForTaskAsync(entity);
-
-                logger.LogWarning("Task {TaskId} escalated to human after {Iterations} simplification iterations",
-                    taskId, entity.SimplificationIterations);
-
-                var escalatedDto = TaskDto.FromEntity(entity);
-                await sse.EmitTaskUpdatedAsync(escalatedDto);
-                return escalatedDto;
-            }
-
-            // Loop back to Implementing
-            var previousState = entity.State;
-            entity.State = PipelineState.Implementing;
-            entity.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-
-            logger.LogInformation("Task {TaskId} looping back to Implementing (simplification iteration {Iteration})",
-                taskId, entity.SimplificationIterations);
-
-            var dto = TaskDto.FromEntity(entity);
-            await sse.EmitTaskUpdatedAsync(dto);
-            await notifications.NotifyTaskStateChangedAsync(entity.Id, entity.BacklogItemId, entity.Title, previousState, entity.State);
-            return dto;
-        }
-
-        // escalate_to_human verdict
-        entity.HasPendingGate = true;
-        entity.HumanInputRequested = true;
-        entity.HumanInputReason = "Simplification review requested human escalation";
-        entity.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-
-        await humanGateService.CreateGateForTaskAsync(entity);
-
-        var escalatedDto2 = TaskDto.FromEntity(entity);
-        await sse.EmitTaskUpdatedAsync(escalatedDto2);
-        return escalatedDto2;
     }
 
     private async Task<TaskDto> HandleTaskErrorAsync(TaskEntity entity)
@@ -564,7 +489,7 @@ public class SchedulerService(
 
     /// <summary>
     /// Updates a backlog item state based on task completion.
-    /// When all tasks are done, transitions backlog item to Done.
+    /// When all tasks reach PrReady, transitions backlog item to Done.
     /// </summary>
     private async Task UpdateBacklogItemFromTaskCompletionAsync(Guid backlogItemId)
     {
@@ -574,15 +499,15 @@ public class SchedulerService(
 
         if (backlogItem is null) return;
 
-        // Update completed count
-        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.Done);
+        // Update completed count (PrReady is the final task state)
+        backlogItem.CompletedTaskCount = backlogItem.Tasks.Count(t => t.State == PipelineState.PrReady);
         backlogItem.UpdatedAt = DateTime.UtcNow;
 
-        // Check if all tasks are done
-        if (backlogItem.Tasks.Count > 0 && backlogItem.Tasks.All(t => t.State == PipelineState.Done))
+        // Check if all tasks have reached PrReady
+        if (backlogItem.Tasks.Count > 0 && backlogItem.Tasks.All(t => t.State == PipelineState.PrReady))
         {
             backlogItem.State = BacklogItemState.Done;
-            logger.LogInformation("BacklogItem {BacklogItemId} completed - all {TaskCount} tasks done",
+            logger.LogInformation("BacklogItem {BacklogItemId} completed - all {TaskCount} tasks at PrReady",
                 backlogItemId, backlogItem.Tasks.Count);
         }
 

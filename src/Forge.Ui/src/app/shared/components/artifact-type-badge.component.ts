@@ -5,13 +5,8 @@ import { BaseBadgeComponent, BadgeVariant } from './base-badge.component';
 /** Mapping of artifact types to badge variants */
 const ARTIFACT_VARIANTS: Record<ArtifactType, BadgeVariant> = {
   task_split: 'purple',
-  research_findings: 'blue',
   plan: 'blue',
   implementation: 'green',
-  simplification_review: 'amber',
-  verification_report: 'green',
-  review: 'purple',
-  documentation_update: 'gray',
   test: 'amber',
   general: 'gray',
 };
@@ -19,13 +14,8 @@ const ARTIFACT_VARIANTS: Record<ArtifactType, BadgeVariant> = {
 /** Mapping of artifact types to display labels */
 const ARTIFACT_LABELS: Record<ArtifactType, string> = {
   task_split: 'Task Split',
-  research_findings: 'Research',
   plan: 'Plan',
   implementation: 'Implementation',
-  simplification_review: 'Simplification',
-  verification_report: 'Verification',
-  review: 'Review',
-  documentation_update: 'Docs',
   test: 'Test',
   general: 'General',
 };

@@ -8,17 +8,13 @@ public static class PipelineConstants
     /// <summary>
     /// Ordered list of all pipeline states for tasks.
     /// Tasks are leaf units that progress through the implementation pipeline.
+    /// Flow: Planning → Implementing → PrReady
     /// </summary>
     public static readonly PipelineState[] StateOrder =
     [
-        PipelineState.Research,
         PipelineState.Planning,
         PipelineState.Implementing,
-        PipelineState.Simplifying,
-        PipelineState.Verifying,
-        PipelineState.Reviewing,
-        PipelineState.PrReady,
-        PipelineState.Done
+        PipelineState.PrReady
     ];
 
     /// <summary>
@@ -26,12 +22,8 @@ public static class PipelineConstants
     /// </summary>
     public static readonly PipelineState[] SchedulableStates =
     [
-        PipelineState.Research,
         PipelineState.Planning,
-        PipelineState.Implementing,
-        PipelineState.Simplifying,
-        PipelineState.Verifying,
-        PipelineState.Reviewing
+        PipelineState.Implementing
     ];
 
     /// <summary>
@@ -40,12 +32,8 @@ public static class PipelineConstants
     public static readonly IReadOnlyDictionary<PipelineState, PipelineState> StateTransitions =
         new Dictionary<PipelineState, PipelineState>
         {
-            { PipelineState.Research, PipelineState.Planning },
             { PipelineState.Planning, PipelineState.Implementing },
-            { PipelineState.Implementing, PipelineState.Simplifying },
-            { PipelineState.Simplifying, PipelineState.Verifying },
-            { PipelineState.Verifying, PipelineState.Reviewing },
-            { PipelineState.Reviewing, PipelineState.PrReady }
+            { PipelineState.Implementing, PipelineState.PrReady }
         };
 
     /// <summary>
