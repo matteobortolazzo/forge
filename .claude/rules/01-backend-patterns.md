@@ -86,6 +86,12 @@ Features/
 │   ├── EventEndpoints.cs       # GET /events (SSE)
 │   ├── EventDtos.cs            # DTOs for SSE events (HumanGateDto, SubtaskDto, etc.)
 │   └── SseService.cs           # Channel-based event broadcasting (singleton)
+├── AgentQuestions/
+│   ├── AgentQuestionEndpoints.cs     # 3 endpoints (pending, get, answer)
+│   ├── AgentQuestionService.cs       # Question lifecycle management (scoped)
+│   ├── AgentQuestionWaiter.cs        # In-memory signaling (singleton)
+│   ├── AgentQuestionModels.cs        # DTOs and strongly-typed models
+│   └── AgentQuestionEntity.cs        # Database entity (in Data/Entities/)
 └── Mock/
     └── MockEndpoints.cs        # 5 endpoints (status, scenarios, set, remove, reset) - E2E only
 ```

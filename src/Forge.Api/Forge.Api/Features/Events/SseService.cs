@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using Forge.Api.Features.Agent;
+using Forge.Api.Features.AgentQuestions;
 using Forge.Api.Features.Backlog;
 using Forge.Api.Features.Notifications;
 using Forge.Api.Features.Repositories;
@@ -53,6 +54,12 @@ public interface ISseService
     Task EmitRepositoryCreatedAsync(RepositoryDto repository);
     Task EmitRepositoryUpdatedAsync(RepositoryDto repository);
     Task EmitRepositoryDeletedAsync(Guid repositoryId);
+
+    // Agent question events
+    Task EmitAgentQuestionRequestedAsync(AgentQuestionDto question);
+    Task EmitAgentQuestionAnsweredAsync(AgentQuestionDto question);
+    Task EmitAgentQuestionTimeoutAsync(AgentQuestionDto question);
+    Task EmitAgentQuestionCancelledAsync(Guid questionId);
 
     IAsyncEnumerable<string> GetEventsAsync(CancellationToken ct);
 }
@@ -207,6 +214,31 @@ public sealed class SseService : ISseService
     public Task EmitRepositoryDeletedAsync(Guid repositoryId)
     {
         var evt = new ServerEvent("repository:deleted", new { id = repositoryId }, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    // Agent question events
+    public Task EmitAgentQuestionRequestedAsync(AgentQuestionDto question)
+    {
+        var evt = new ServerEvent("agentQuestion:requested", question, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitAgentQuestionAnsweredAsync(AgentQuestionDto question)
+    {
+        var evt = new ServerEvent("agentQuestion:answered", question, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitAgentQuestionTimeoutAsync(AgentQuestionDto question)
+    {
+        var evt = new ServerEvent("agentQuestion:timeout", question, DateTime.UtcNow);
+        return _channel.Writer.WriteAsync(evt).AsTask();
+    }
+
+    public Task EmitAgentQuestionCancelledAsync(Guid questionId)
+    {
+        var evt = new ServerEvent("agentQuestion:cancelled", new { id = questionId }, DateTime.UtcNow);
         return _channel.Writer.WriteAsync(evt).AsTask();
     }
 

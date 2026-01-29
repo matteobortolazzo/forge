@@ -31,6 +31,10 @@
 | `repository:created` | `RepositoryDto` | Repository added |
 | `repository:updated` | `RepositoryDto` | Repository modified (name, git info refresh) |
 | `repository:deleted` | `{ id: Guid }` | Repository soft-deleted |
+| `agentQuestion:requested` | `AgentQuestionDto` | Agent uses AskUserQuestion tool |
+| `agentQuestion:answered` | `AgentQuestionDto` | User submits answer |
+| `agentQuestion:timeout` | `AgentQuestionDto` | Question times out |
+| `agentQuestion:cancelled` | `{ id: Guid }` | Task aborted while waiting |
 
 ## Backend Emission Points
 
@@ -46,6 +50,7 @@
 | `TaskSchedulerService` | `scheduler:taskScheduled` |
 | `NotificationService` | `notification:new` |
 | `RepositoryService` | `repository:created`, `repository:updated`, `repository:deleted` |
+| `AgentQuestionService` | `agentQuestion:*` events |
 
 ## Frontend Consumption
 

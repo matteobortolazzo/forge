@@ -14,6 +14,7 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
     public DbSet<AgentArtifactEntity> AgentArtifacts => Set<AgentArtifactEntity>();
     public DbSet<HumanGateEntity> HumanGates => Set<HumanGateEntity>();
     public DbSet<RollbackRecordEntity> RollbackRecords => Set<RollbackRecordEntity>();
+    public DbSet<AgentQuestionEntity> AgentQuestions => Set<AgentQuestionEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -260,6 +261,38 @@ public class ForgeDbContext(DbContextOptions<ForgeDbContext> options) : DbContex
                 .WithMany()
                 .HasForeignKey(e => e.TaskId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AgentQuestionEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ToolUseId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.QuestionsJson).IsRequired();
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
+            // Index for finding pending questions by task
+            entity.HasIndex(e => new { e.TaskId, e.Status })
+                .HasDatabaseName("IX_AgentQuestions_Task_Status");
+
+            // Index for finding pending questions by backlog item
+            entity.HasIndex(e => new { e.BacklogItemId, e.Status })
+                .HasDatabaseName("IX_AgentQuestions_BacklogItem_Status");
+
+            // Index for finding questions by timestamp (ordering)
+            entity.HasIndex(e => new { e.TaskId, e.RequestedAt })
+                .HasDatabaseName("IX_AgentQuestions_Task_RequestedAt");
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.BacklogItem)
+                .WithMany()
+                .HasForeignKey(e => e.BacklogItemId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

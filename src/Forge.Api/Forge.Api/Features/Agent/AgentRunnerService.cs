@@ -1,16 +1,20 @@
 using System.Text;
+using System.Text.Json;
 using Claude.CodeSdk;
 using Claude.CodeSdk.ContentBlocks;
 using Claude.CodeSdk.Messages;
+using Claude.CodeSdk.Permissions;
 using Forge.Api.Data;
 using Forge.Api.Data.Entities;
 using Forge.Api.Features.Agents;
+using Forge.Api.Features.AgentQuestions;
 using Forge.Api.Features.Backlog;
 using Forge.Api.Features.Events;
 using Forge.Api.Features.Scheduler;
 using Forge.Api.Features.Tasks;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Forge.Api.Features.Agent;
 
@@ -21,8 +25,15 @@ public class AgentRunnerService(
     IClaudeAgentClientFactory clientFactory,
     IOrchestratorService orchestrator,
     IArtifactParser artifactParser,
+    AgentQuestionWaiter questionWaiter,
+    IOptions<AgentQuestionsOptions> questionOptions,
     ILogger<AgentRunnerService> logger) : IAgentRunnerService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private readonly Lock _lock = new();
     private CancellationTokenSource? _cts;
     private Guid? _currentTaskId;
@@ -104,6 +115,8 @@ public class AgentRunnerService(
     public async Task<bool> AbortAsync()
     {
         CancellationTokenSource? cts;
+        Guid? taskIdToCancel = null;
+        Guid? backlogItemIdToCancel = null;
 
         lock (_lock)
         {
@@ -113,9 +126,26 @@ public class AgentRunnerService(
             }
 
             cts = _cts;
+            taskIdToCancel = _currentTaskId;
+            backlogItemIdToCancel = _currentBacklogItemId;
         }
 
         logger.LogInformation("Aborting agent");
+
+        // Cancel any pending questions
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var questionService = scope.ServiceProvider.GetRequiredService<AgentQuestionService>();
+
+            if (taskIdToCancel.HasValue)
+            {
+                await questionService.CancelAllForTaskAsync(taskIdToCancel.Value, questionWaiter);
+            }
+            else if (backlogItemIdToCancel.HasValue)
+            {
+                await questionService.CancelAllForBacklogItemAsync(backlogItemIdToCancel.Value, questionWaiter);
+            }
+        }
 
         // Cancel the token
         await cts.CancelAsync();
@@ -168,6 +198,8 @@ public class AgentRunnerService(
                 WorkingDirectory = workingDirectory,
                 CliPath = cliPath,
                 DangerouslySkipPermissions = true,
+                ToolPermissionHandler = CreateToolPermissionHandler(taskId, null, ct),
+                ToolPermissionTimeoutMs = questionOptions.Value.TimeoutSeconds * 1000,
                 MaxTurns = resolvedConfig.MaxTurns
             };
 
@@ -271,6 +303,8 @@ public class AgentRunnerService(
                 WorkingDirectory = workingDirectory,
                 CliPath = cliPath,
                 DangerouslySkipPermissions = true,
+                ToolPermissionHandler = CreateToolPermissionHandler(null, backlogItemId, ct),
+                ToolPermissionTimeoutMs = questionOptions.Value.TimeoutSeconds * 1000,
                 MaxTurns = resolvedConfig.MaxTurns
             };
 
@@ -568,5 +602,152 @@ public class AgentRunnerService(
     {
         if (content.Length <= maxLength) return content;
         return content[..maxLength] + "...";
+    }
+
+    /// <summary>
+    /// Creates a tool permission handler that intercepts AskUserQuestion tool calls.
+    /// When AskUserQuestion is invoked, it stores the question in the database,
+    /// emits an SSE event, waits for the user's answer, and returns it to the agent.
+    /// </summary>
+    private ToolPermissionHandler CreateToolPermissionHandler(
+        Guid? taskId,
+        Guid? backlogItemId,
+        CancellationToken agentCt)
+    {
+        return async (context, handlerCt) =>
+        {
+            // Only intercept AskUserQuestion tool
+            if (context.ToolName != "AskUserQuestion")
+            {
+                return PermissionResult.Allow();
+            }
+
+            logger.LogInformation(
+                "AskUserQuestion tool invoked for {EntityType} {EntityId}",
+                taskId.HasValue ? "task" : "backlog item",
+                taskId ?? backlogItemId);
+
+            try
+            {
+                // Parse questions from tool input
+                var questions = ParseQuestionsFromInput(context.Input);
+
+                if (questions.Count == 0)
+                {
+                    logger.LogWarning("AskUserQuestion called with no questions");
+                    return PermissionResult.Allow();
+                }
+
+                // Create question in database and emit SSE event
+                AgentQuestionEntity questionEntity;
+                using (var scope = scopeFactory.CreateScope())
+                {
+                    var questionService = scope.ServiceProvider.GetRequiredService<AgentQuestionService>();
+                    questionEntity = await questionService.CreateQuestionAsync(
+                        taskId,
+                        backlogItemId,
+                        context.ToolUseId,
+                        questions,
+                        handlerCt);
+                }
+
+                // Create waiter for user answer
+                var tcs = questionWaiter.CreateWaiter(questionEntity.Id);
+
+                // Combine cancellation tokens
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(agentCt, handlerCt);
+
+                SubmitAnswerDto answer;
+                try
+                {
+                    // Wait for user to answer (or timeout/cancellation)
+                    answer = await tcs.Task.WaitAsync(linkedCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    logger.LogInformation("Question {QuestionId} was cancelled", questionEntity.Id);
+
+                    // Mark as cancelled in database if it was due to abort
+                    using var scope = scopeFactory.CreateScope();
+                    var questionService = scope.ServiceProvider.GetRequiredService<AgentQuestionService>();
+                    await questionService.MarkCancelledAsync(questionEntity.Id, CancellationToken.None);
+
+                    throw;
+                }
+
+                // Build response JSON for Claude
+                var responseJson = BuildAnswerJson(questions, answer.Answers);
+
+                logger.LogInformation(
+                    "Question {QuestionId} answered, returning response to agent",
+                    questionEntity.Id);
+
+                return PermissionResult.Allow(responseJson);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error handling AskUserQuestion tool");
+                return PermissionResult.Deny($"Error handling question: {ex.Message}");
+            }
+        };
+    }
+
+    /// <summary>
+    /// Parses the questions from the tool input JSON.
+    /// </summary>
+    private static List<AgentQuestionItem> ParseQuestionsFromInput(JsonElement input)
+    {
+        if (!input.TryGetProperty("questions", out var questionsElement))
+        {
+            return [];
+        }
+
+        return JsonSerializer.Deserialize<List<AgentQuestionItem>>(questionsElement.GetRawText(), JsonOptions) ?? [];
+    }
+
+    /// <summary>
+    /// Builds the answer JSON to send back to Claude.
+    /// Claude expects: { "answers": { "0": "selected answer text", ... } }
+    /// </summary>
+    private static JsonElement BuildAnswerJson(
+        IReadOnlyList<AgentQuestionItem> questions,
+        IReadOnlyList<QuestionAnswer> answers)
+    {
+        var answersDict = new Dictionary<string, string>();
+
+        foreach (var answer in answers)
+        {
+            if (answer.QuestionIndex < 0 || answer.QuestionIndex >= questions.Count)
+                continue;
+
+            var question = questions[answer.QuestionIndex];
+
+            // Use custom answer if provided, otherwise build from selected options
+            string answerText;
+            if (!string.IsNullOrEmpty(answer.CustomAnswer))
+            {
+                answerText = answer.CustomAnswer;
+            }
+            else
+            {
+                var selectedLabels = answer.SelectedOptionIndices
+                    .Where(i => i >= 0 && i < question.Options.Count)
+                    .Select(i => question.Options[i].Label)
+                    .ToList();
+
+                answerText = selectedLabels.Count > 0
+                    ? string.Join(", ", selectedLabels)
+                    : "No selection";
+            }
+
+            answersDict[answer.QuestionIndex.ToString()] = answerText;
+        }
+
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(new { answers = answersDict }, JsonOptions));
+        return doc.RootElement.Clone();
     }
 }

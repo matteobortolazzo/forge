@@ -160,3 +160,19 @@ public enum RollbackTrigger
     [JsonStringEnumMemberName("manual_abort")]
     ManualAbort
 }
+
+/// <summary>
+/// Status of an agent question awaiting human response.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AgentQuestionStatus>))]
+public enum AgentQuestionStatus
+{
+    [JsonStringEnumMemberName("pending")]
+    Pending,
+    [JsonStringEnumMemberName("answered")]
+    Answered,
+    [JsonStringEnumMemberName("timeout")]
+    Timeout,
+    [JsonStringEnumMemberName("cancelled")]
+    Cancelled
+}

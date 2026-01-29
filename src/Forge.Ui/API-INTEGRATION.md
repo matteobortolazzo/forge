@@ -534,6 +534,69 @@ GET /api/agent/status
 
 ---
 
+### Agent Questions
+
+Agent questions are triggered when Claude Code uses the `AskUserQuestion` tool during execution.
+
+#### Get Pending Question
+
+```
+GET /api/agent/questions/pending
+```
+
+**Response:** `200 OK`
+```typescript
+AgentQuestionDto | null
+```
+
+---
+
+#### Get Question by ID
+
+```
+GET /api/agent/questions/{id}
+```
+
+**Parameters:**
+- `id` (path, GUID) - Question identifier
+
+**Response:** `200 OK`
+```typescript
+AgentQuestionDto
+```
+
+**Errors:**
+- `404 Not Found` - Question does not exist
+
+---
+
+#### Submit Answer
+
+```
+POST /api/agent/questions/{id}/answer
+```
+
+**Parameters:**
+- `id` (path, GUID) - Question identifier
+
+**Request Body:**
+```typescript
+{
+  answers: QuestionAnswer[];
+}
+```
+
+**Response:** `200 OK`
+```typescript
+AgentQuestionDto
+```
+
+**Errors:**
+- `404 Not Found` - Question does not exist
+- `400 Bad Request` - Question is not pending (already answered, timed out, or cancelled)
+
+---
+
 ### Scheduler
 
 #### Get Scheduler Status
@@ -674,6 +737,10 @@ data: {"type":"<event-type>","payload":<payload>,"timestamp":"<ISO-8601>"}
 | `repository:created` | `RepositoryDto` | Repository added |
 | `repository:updated` | `RepositoryDto` | Repository modified |
 | `repository:deleted` | `{ id: string }` | Repository soft-deleted |
+| `agentQuestion:requested` | `AgentQuestionDto` | Agent uses AskUserQuestion tool |
+| `agentQuestion:answered` | `AgentQuestionDto` | User submits answer |
+| `agentQuestion:timeout` | `AgentQuestionDto` | Question times out |
+| `agentQuestion:cancelled` | `{ id: string }` | Task aborted while waiting |
 
 ### Example Events
 
@@ -921,6 +988,43 @@ interface SchedulerStatusDto {
   pendingTaskCount: number;
   pausedTaskCount: number;
 }
+```
+
+### AgentQuestionDto
+
+```typescript
+interface AgentQuestionDto {
+  id: string;                          // GUID
+  taskId?: string;                     // GUID - null for backlog item questions
+  backlogItemId?: string;              // GUID - null for task questions
+  toolUseId: string;                   // Tool use ID from Claude Code CLI
+  questions: AgentQuestionItem[];      // List of questions from the agent
+  status: AgentQuestionStatus;
+  requestedAt: string;                 // ISO 8601
+  timeoutAt: string;                   // ISO 8601
+  answers?: QuestionAnswer[];          // Populated after answered
+  answeredAt?: string;                 // ISO 8601
+}
+
+interface AgentQuestionItem {
+  question: string;                    // The complete question text
+  header: string;                      // Short label for chip/tag (max 12 chars)
+  options: QuestionOption[];           // 2-4 available choices
+  multiSelect: boolean;                // Whether multiple answers allowed
+}
+
+interface QuestionOption {
+  label: string;                       // Display text (1-5 words)
+  description: string;                 // Explanation of what this option means
+}
+
+interface QuestionAnswer {
+  questionIndex: number;               // Which question this answers (0-based)
+  selectedOptionIndices: number[];     // Indices of selected options
+  customAnswer?: string;               // "Other" text if provided
+}
+
+type AgentQuestionStatus = 'pending' | 'answered' | 'timeout' | 'cancelled';
 ```
 
 ### Enums

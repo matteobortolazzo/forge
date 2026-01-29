@@ -56,6 +56,13 @@ GET    /api/repositories/{repoId}/tasks/{id}/gates        # Get all gates for a 
 GET    /api/agent/status          # Get current agent status
 ```
 
+## Agent Questions
+```
+GET    /api/agent/questions/pending       # Get current pending question (if any)
+GET    /api/agent/questions/{id}          # Get specific question by ID
+POST   /api/agent/questions/{id}/answer   # Submit answer to question
+```
+
 ## Scheduler
 ```
 GET    /api/scheduler/status      # Get scheduler status (enabled, agent running, pending/paused counts)

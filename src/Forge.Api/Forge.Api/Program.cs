@@ -15,6 +15,7 @@ using Forge.Api.Features.Worktree;
 using Forge.Api.Features.Rollback;
 using Forge.Api.Features.Backlog;
 using Forge.Api.Features.HumanGates;
+using Forge.Api.Features.AgentQuestions;
 using Forge.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,6 +74,11 @@ builder.Services.AddSingleton<IWorktreeService, WorktreeService>();
 builder.Services.AddScoped<IRollbackService, RollbackService>();
 builder.Services.AddScoped<HumanGateService>();
 
+// Agent questions services
+builder.Services.Configure<AgentQuestionsOptions>(builder.Configuration.GetSection(AgentQuestionsOptions.SectionName));
+builder.Services.AddSingleton<AgentQuestionWaiter>();
+builder.Services.AddScoped<AgentQuestionService>();
+
 // CORS for Angular dev server
 builder.Services.AddCors(options =>
 {
@@ -115,6 +121,7 @@ app.MapEventEndpoints();
 app.MapNotificationEndpoints();
 app.MapSchedulerEndpoints();
 app.MapHumanGateEndpoints();
+app.MapAgentQuestionEndpoints();
 
 // Mock control endpoints (only in mock mode)
 if (useMockMode)

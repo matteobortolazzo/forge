@@ -39,6 +39,11 @@ split (conditional) | planning (conditional) | pr (mandatory)
 pending | in_progress | completed | failed | skipped
 ```
 
+## Agent Question Status
+```
+pending | answered | timeout | cancelled
+```
+
 ## RepositoryEntity Fields
 
 ```csharp
@@ -114,3 +119,29 @@ Configuration in `appsettings.json`:
 | Split | Confidence < threshold OR mandatory config | Approval required before Research |
 | Planning | Confidence < threshold OR high-risk OR mandatory config | Approval required before Implementing |
 | PR | Always mandatory | Approval required before merge |
+
+## AgentQuestionEntity Fields
+
+```csharp
+public Guid Id { get; set; }
+public Guid? TaskId { get; set; }              // Task this question belongs to (null for backlog item)
+public Guid? BacklogItemId { get; set; }       // Backlog item this question belongs to (null for task)
+public required string ToolUseId { get; set; } // Tool use ID from Claude Code CLI
+public required string QuestionsJson { get; set; } // Serialized List<AgentQuestionItem>
+public AgentQuestionStatus Status { get; set; } = AgentQuestionStatus.Pending;
+public DateTime RequestedAt { get; set; }       // When question was requested
+public DateTime TimeoutAt { get; set; }         // When question will timeout
+public string? AnswersJson { get; set; }        // Serialized List<QuestionAnswer>
+public DateTime? AnsweredAt { get; set; }       // When question was answered
+```
+
+## Agent Question Configuration
+
+Configuration in `appsettings.json`:
+```json
+{
+  "AgentQuestions": {
+    "TimeoutSeconds": 300
+  }
+}
+```
